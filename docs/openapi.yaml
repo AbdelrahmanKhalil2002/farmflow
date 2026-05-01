@@ -1,0 +1,2430 @@
+openapi: 3.0.3
+info:
+  title: FarmFlow API
+  description: |
+    Egyptian livestock marketplace API.
+    All monetary values are in EGP (Egyptian Pound).
+    All dates are ISO 8601 strings.
+    Image paths are relative to the server root (e.g. `/uploads/filename.jpg`).
+
+    **Authentication:** Pass a JWT token in the `Authorization: Bearer <token>` header.
+
+    **Roles:**
+    - `buyer` — can browse, order, review, manage favorites
+    - `seller` — can manage listings, animals, dairy, supplies, finances
+    - `admin` — full access including approval workflows
+
+    **⚠️ Mobile app endpoint notes:**
+    - `GET /api/listings/my` is a dedicated route (seller/admin JWT required) — returns own listings (all statuses)
+    - `GET /api/orders/my` is handled by `GET /api/orders` (buyer JWT → own orders only)
+    - `PATCH /api/listings/:id/status` does not exist — use `PUT /api/listings/:id` with a `status` body field
+    - `PATCH /api/admin/users/:id` does not exist — use `PATCH /api/admin/users/:id/toggle`
+  version: 1.0.0
+  contact:
+    email: a.khalil@soar.inc
+
+servers:
+  - url: http://localhost:5001/api
+    description: Local development
+  - url: https://api.farmflow.app/api
+    description: Production
+
+tags:
+  - name: Auth
+    description: Registration, login, profile, password
+  - name: Sellers
+    description: Public seller/farm directory
+  - name: Listings
+    description: Livestock listings
+  - name: Orders
+    description: Order placement and management
+  - name: Animals
+    description: Herd management (seller/admin)
+  - name: Finance
+    description: Expenses, income, and summary
+  - name: Statements
+    description: Monthly P&L statements
+  - name: Dairy
+    description: Dairy product listings
+  - name: Supplies
+    description: Farm supply marketplace
+  - name: Reviews
+    description: Seller ratings and reviews
+  - name: Notifications
+    description: In-app notifications
+  - name: Favorites
+    description: Buyer saved farms
+  - name: Market Prices
+    description: Public price benchmarks by animal type
+  - name: Eid
+    description: Eid Al-Adha mode configuration and listings
+  - name: Admin
+    description: Admin-only management endpoints
+  - name: Budget
+    description: Monthly budget planning (seller)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ── Common ──────────────────────────────────────────────────────────────────
+    MongoId:
+      type: string
+      pattern: '^[a-fA-F0-9]{24}$'
+      example: 64f1a2b3c4d5e6f7a8b9c0d1
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Unauthorized
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              msg:   { type: string }
+              param: { type: string }
+              value: {}
+
+    # ── Auth ────────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        _id:           { $ref: '#/components/schemas/MongoId' }
+        name:          { type: string }
+        email:         { type: string, format: email }
+        phone:         { type: string }
+        role:          { type: string, enum: [buyer, seller, admin] }
+        isActive:      { type: boolean }
+        # Seller-only
+        farmName:      { type: string }
+        farmPhone:     { type: string }
+        personalPhone: { type: string }
+        governorate:   { type: string }
+        farmDescription: { type: string }
+        farmBanner:    { type: string, description: '/uploads/...' }
+        farmLocation:
+          type: object
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+            address: { type: string }
+        farmCertificates:
+          type: array
+          items: { type: string }
+        averageRating:  { type: number }
+        reviewCount:    { type: integer }
+        fcmToken:       { type: string, nullable: true, description: Firebase Cloud Messaging device token (set by Flutter app) }
+        createdAt:      { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user:  { $ref: '#/components/schemas/User' }
+
+    # ── Listings ────────────────────────────────────────────────────────────────
+    Listing:
+      type: object
+      properties:
+        _id:        { $ref: '#/components/schemas/MongoId' }
+        seller:     { $ref: '#/components/schemas/MongoId' }
+        type:
+          type: string
+          enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other]
+        breed:      { type: string }
+        age:        { type: number, description: Age in months }
+        weight:     { type: number, description: Weight in kg }
+        price:      { type: number, description: Total price in EGP }
+        pricePerKg: { type: number }
+        deliveryType:
+          type: string
+          enum: [none, farm, admin]
+        deliveryCost:      { type: number }
+        description:       { type: string }
+        images:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [pending, approved, rejected, sold]
+        rejectionReason:   { type: string }
+        eidAvailable:      { type: boolean }
+        slaughterService:  { type: boolean }
+        slaughterCost:     { type: number }
+        qurbaniShares:
+          type: array
+          items:
+            type: object
+            properties:
+              shareType:   { type: string, enum: [seventh, quarter, half] }
+              pricePerShare: { type: number }
+              totalShares:   { type: integer }
+              bookedShares:  { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    # ── Orders ──────────────────────────────────────────────────────────────────
+    Order:
+      type: object
+      properties:
+        _id:          { $ref: '#/components/schemas/MongoId' }
+        buyer:        { $ref: '#/components/schemas/MongoId' }
+        seller:       { $ref: '#/components/schemas/MongoId' }
+        listing:      { $ref: '#/components/schemas/MongoId' }
+        totalAmount:  { type: number }
+        paymentType:  { type: string, enum: [deposit, cod, instapay] }
+        depositAmount: { type: number }
+        status:       { type: string, enum: [pending, confirmed, completed, cancelled] }
+        notes:        { type: string }
+        deliveryType: { type: string, enum: [none, farm, admin] }
+        deliveryCost: { type: number }
+        deliveryStatus: { type: string, enum: [pending, in_transit, delivered] }
+        deliveryLocation:
+          type: object
+          properties:
+            lat:     { type: number }
+            lng:     { type: number }
+            address: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    # ── Animals ─────────────────────────────────────────────────────────────────
+    Animal:
+      type: object
+      properties:
+        _id:    { $ref: '#/components/schemas/MongoId' }
+        seller: { $ref: '#/components/schemas/MongoId' }
+        tagId:  { type: string }
+        type:   { type: string, enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other] }
+        breed:  { type: string }
+        gender: { type: string, enum: [male, female, unknown] }
+        dob:    { type: string, format: date }
+        color:  { type: string }
+        currentWeight: { type: number }
+        targetWeight:  { type: number }
+        nextWeighingDate: { type: string, format: date }
+        healthStatus: { type: string, enum: [healthy, sick, quarantine, deceased] }
+        status:       { type: string, enum: [active, sold, deceased] }
+        notes:        { type: string }
+        images:       { type: array, items: { type: string } }
+        pregnancyStatus: { type: string, enum: [none, pregnant, recently_gave_birth] }
+        pregnancyDate:   { type: string, format: date }
+        expectedBirthDate: { type: string, format: date }
+        birthCount:      { type: integer }
+        weightLog:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:      { $ref: '#/components/schemas/MongoId' }
+              weightKg: { type: number }
+              date:     { type: string, format: date-time }
+              notes:    { type: string }
+        vaccinationLog:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:         { $ref: '#/components/schemas/MongoId' }
+              vaccine:     { type: string }
+              date:        { type: string, format: date-time }
+              nextDueDate: { type: string, format: date-time }
+              vet:         { type: string }
+              notes:       { type: string }
+        createdAt: { type: string, format: date-time }
+
+    AnimalSummary:
+      type: object
+      properties:
+        total:        { type: integer }
+        byType:       { type: object, additionalProperties: { type: integer } }
+        avgAgeMonths: { type: number, nullable: true }
+        avgWeightKg:  { type: number, nullable: true }
+
+    WeightEntry:
+      type: object
+      properties:
+        _id:      { $ref: '#/components/schemas/MongoId' }
+        weightKg: { type: number }
+        date:     { type: string, format: date-time }
+        notes:    { type: string }
+
+    VaccinationEntry:
+      type: object
+      properties:
+        _id:         { $ref: '#/components/schemas/MongoId' }
+        vaccine:     { type: string }
+        date:        { type: string, format: date-time }
+        nextDueDate: { type: string, format: date-time }
+        vet:         { type: string }
+        notes:       { type: string }
+
+    MedicalRecord:
+      type: object
+      properties:
+        _id:          { $ref: '#/components/schemas/MongoId' }
+        animal:       { $ref: '#/components/schemas/MongoId' }
+        seller:       { $ref: '#/components/schemas/MongoId' }
+        date:         { type: string, format: date-time }
+        diagnosis:    { type: string }
+        treatment:    { type: string }
+        medication:   { type: string }
+        vet:          { type: string }
+        cost:         { type: number }
+        followUpDate: { type: string, format: date }
+        notes:        { type: string }
+        resolved:     { type: boolean }
+        createdAt:    { type: string, format: date-time }
+
+    # ── Finance ─────────────────────────────────────────────────────────────────
+    Expense:
+      type: object
+      properties:
+        _id:      { $ref: '#/components/schemas/MongoId' }
+        seller:   { $ref: '#/components/schemas/MongoId' }
+        category:
+          type: string
+          enum: [feed, doctor, transport, electricity, salary, rent, water, maintenance, other]
+        amount:   { type: number }
+        date:     { type: string, format: date-time }
+        note:     { type: string }
+        listing:  { $ref: '#/components/schemas/MongoId' }
+        createdAt: { type: string, format: date-time }
+
+    Income:
+      type: object
+      properties:
+        _id:     { $ref: '#/components/schemas/MongoId' }
+        seller:  { $ref: '#/components/schemas/MongoId' }
+        type:    { type: string, enum: [sale, deposit] }
+        amount:  { type: number }
+        date:    { type: string, format: date-time }
+        note:    { type: string }
+        listing: { $ref: '#/components/schemas/MongoId' }
+        order:   { $ref: '#/components/schemas/MongoId' }
+        createdAt: { type: string, format: date-time }
+
+    FinanceSummary:
+      type: object
+      properties:
+        totalIncome:   { type: number }
+        totalExpenses: { type: number }
+        netProfit:     { type: number }
+        monthlyData:
+          type: array
+          items:
+            type: object
+            properties:
+              month:    { type: string }
+              income:   { type: number }
+              expenses: { type: number }
+
+    # ── Dairy ───────────────────────────────────────────────────────────────────
+    DairyProduct:
+      type: object
+      properties:
+        _id:         { $ref: '#/components/schemas/MongoId' }
+        seller:      { $ref: '#/components/schemas/MongoId' }
+        name:        { type: string }
+        type:        { type: string, enum: [milk, cheese, yogurt, butter, cream, ghee, other] }
+        quantity:    { type: number }
+        unit:        { type: string, enum: [kg, liter, piece, pack, dozen] }
+        pricePerUnit: { type: number }
+        availableFrom: { type: string, format: date }
+        availableTo:   { type: string, format: date }
+        deliveryAvailable: { type: boolean }
+        deliveryCost:  { type: number }
+        description:   { type: string }
+        images:        { type: array, items: { type: string } }
+        status:        { type: string, enum: [pending, approved, rejected] }
+        rejectionReason: { type: string }
+        minStockAlert: { type: number }
+        stockLog:
+          type: array
+          items:
+            type: object
+            properties:
+              change: { type: number }
+              note:   { type: string }
+              date:   { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    # ── Supplies ────────────────────────────────────────────────────────────────
+    Supply:
+      type: object
+      properties:
+        _id:       { $ref: '#/components/schemas/MongoId' }
+        seller:    { $ref: '#/components/schemas/MongoId' }
+        name:      { type: string }
+        category:  { type: string, enum: [feed, veterinary, equipment, seeds, other] }
+        description: { type: string }
+        quantity:  { type: number }
+        unit:      { type: string }
+        pricePerUnit: { type: number }
+        minOrderQty:  { type: number }
+        location:  { type: string }
+        deliveryAvailable: { type: boolean }
+        deliveryCost: { type: number }
+        images:    { type: array, items: { type: string } }
+        status:    { type: string, enum: [pending, approved, rejected, sold_out] }
+        rejectionReason: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    # ── Reviews ─────────────────────────────────────────────────────────────────
+    Review:
+      type: object
+      properties:
+        _id:     { $ref: '#/components/schemas/MongoId' }
+        buyer:   { $ref: '#/components/schemas/MongoId' }
+        seller:  { $ref: '#/components/schemas/MongoId' }
+        order:   { $ref: '#/components/schemas/MongoId' }
+        rating:  { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    # ── Notifications ────────────────────────────────────────────────────────────
+    Notification:
+      type: object
+      properties:
+        _id:     { $ref: '#/components/schemas/MongoId' }
+        user:    { $ref: '#/components/schemas/MongoId' }
+        type:    { type: string }
+        title:   { type: string }
+        message: { type: string }
+        read:    { type: boolean }
+        link:    { type: string }
+        createdAt: { type: string, format: date-time }
+
+    # ── Budget ──────────────────────────────────────────────────────────────────
+    Budget:
+      type: object
+      properties:
+        _id:      { $ref: '#/components/schemas/MongoId' }
+        seller:   { $ref: '#/components/schemas/MongoId' }
+        year:     { type: integer }
+        month:    { type: integer, minimum: 1, maximum: 12 }
+        category: { type: string }
+        amount:   { type: number }
+
+    # ── AppConfig (Eid) ──────────────────────────────────────────────────────────
+    EidConfig:
+      type: object
+      properties:
+        eidMode: { type: boolean }
+        eidDate: { type: string, format: date }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATHS
+# ═══════════════════════════════════════════════════════════════════════════════
+paths:
+
+  # ── AUTH ─────────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, password, role]
+              properties:
+                role:          { type: string, enum: [buyer, seller] }
+                name:          { type: string }
+                email:         { type: string, format: email, description: Required for buyer }
+                phone:         { type: string }
+                password:      { type: string, minLength: 6 }
+                nationalId:    { type: string, description: 14-digit Egyptian national ID }
+                # Seller-only
+                farmName:      { type: string }
+                farmPhone:     { type: string }
+                personalPhone: { type: string }
+                governorate:   { type: string }
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400':
+          description: Validation error or duplicate field
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+        '409':
+          description: Email / phone / national ID already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email/phone and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password]
+              properties:
+                identifier: { type: string, description: Email or phone number }
+                password:   { type: string }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get authenticated user profile
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/profile:
+    put:
+      tags: [Auth]
+      summary: Update user profile (supports multipart for farmBanner image)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:            { type: string }
+                phone:           { type: string }
+                governorate:     { type: string }
+                farmName:        { type: string }
+                farmPhone:       { type: string }
+                personalPhone:   { type: string }
+                farmDescription: { type: string }
+                farmBanner:      { type: string, format: binary }
+                farmLocation:    { type: string, description: 'JSON string of {lat, lng, address}' }
+                farmCertificates: { type: array, items: { type: string } }
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:          { type: string }
+                phone:         { type: string }
+                governorate:   { type: string }
+                farmName:      { type: string }
+                farmPhone:     { type: string }
+                personalPhone: { type: string }
+                farmDescription: { type: string }
+                farmLocation:
+                  type: object
+                  properties:
+                    lat: { type: number }
+                    lng: { type: number }
+                    address: { type: string }
+                farmCertificates: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { description: Unauthorized }
+        '409':
+          description: Phone / email already used
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/password:
+    put:
+      tags: [Auth]
+      summary: Change password (requires current password verification)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword:     { type: string, minLength: 6 }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: Password updated successfully }
+        '400':
+          description: Current password incorrect or validation failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/fcm-token:
+    patch:
+      tags: [Auth]
+      summary: Register or refresh Firebase Cloud Messaging token (Flutter app)
+      description: Called by the Flutter app after FCM permission granted. Saves the device token to the authenticated user's profile for server-side push notifications.
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, description: FCM device token from FirebaseMessaging.instance.getToken() }
+      responses:
+        '200':
+          description: Token saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+        '400':
+          description: Token field missing
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/verify-id:
+    post:
+      tags: [Auth]
+      summary: Validate Egyptian national ID format and extract info
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nationalId]
+              properties:
+                nationalId: { type: string, description: 14-digit national ID }
+      responses:
+        '200':
+          description: ID is structurally valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:       { type: boolean }
+                  birthDate:   { type: string, format: date }
+                  age:         { type: integer }
+                  governorate: { type: string }
+        '400':
+          description: Invalid format
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ── SELLERS ──────────────────────────────────────────────────────────────────
+
+  /sellers:
+    get:
+      tags: [Sellers]
+      summary: List all sellers with listing/dairy summary (public)
+      parameters:
+        - in: query
+          name: governorate
+          schema: { type: string }
+          description: Filter by governorate
+        - in: query
+          name: type
+          schema: { type: string }
+          description: Filter by animal type
+      responses:
+        '200':
+          description: Array of seller summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /sellers/{id}:
+    get:
+      tags: [Sellers]
+      summary: Get seller profile with listings and dairy (public)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Seller profile with listings, dairy, reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seller:   { $ref: '#/components/schemas/User' }
+                  listings: { type: array, items: { $ref: '#/components/schemas/Listing' } }
+                  dairy:    { type: array, items: { $ref: '#/components/schemas/DairyProduct' } }
+                  supplies: { type: array, items: { $ref: '#/components/schemas/Supply' } }
+        '404':
+          description: Seller not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ── LISTINGS ─────────────────────────────────────────────────────────────────
+
+  /listings:
+    get:
+      tags: [Listings]
+      summary: Get listings (public — approved only; seller JWT → own listings)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, approved, rejected, sold] }
+          description: Admin or seller can filter by status
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+          description: Page number for server-side pagination (requires `limit`). When omitted, returns full array (backwards-compatible).
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          description: Items per page. When `page` is also provided, enables paginated response format.
+      responses:
+        '200':
+          description: Array of listings (plain array when no `page` param; paginated object when `page` is present)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/Listing' }
+                  - type: object
+                    properties:
+                      items:   { type: array, items: { $ref: '#/components/schemas/Listing' } }
+                      total:   { type: integer }
+                      page:    { type: integer }
+                      pages:   { type: integer }
+                      hasMore: { type: boolean }
+
+    post:
+      tags: [Listings]
+      summary: Create listing (seller only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, weight, price]
+              properties:
+                type:             { type: string, enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other] }
+                breed:            { type: string }
+                age:              { type: number, description: Age in months }
+                weight:           { type: number }
+                price:            { type: number }
+                pricePerKg:       { type: number }
+                deliveryType:     { type: string, enum: [none, farm, admin], default: none }
+                deliveryCost:     { type: number }
+                description:      { type: string }
+                eidAvailable:     { type: boolean }
+                slaughterService: { type: boolean }
+                slaughterCost:    { type: number }
+                qurbaniShares:    { type: string, description: JSON-encoded array of share objects }
+                images:           { type: array, items: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Listing created (status = pending — awaiting admin approval)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden — not a seller }
+
+  /listings/my:
+    get:
+      tags: [Listings]
+      summary: Get seller's own listings (all statuses — seller or admin only)
+      description: Dedicated route that must appear before `/:id` in the router. Returns the same result as `GET /listings` with a seller JWT but requires authentication explicitly.
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of the seller's own listings (all statuses)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Listing' }
+        '401': { description: Unauthorized }
+        '403': { description: Forbidden — seller or admin role required }
+
+  /listings/{id}:
+    get:
+      tags: [Listings]
+      summary: Get listing by ID (public)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Listing detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '404':
+          description: Listing not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    put:
+      tags: [Listings]
+      summary: Update listing (seller owns it; admin can update status/rejectionReason)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                type:             { type: string, enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other] }
+                breed:            { type: string }
+                age:              { type: number }
+                weight:           { type: number }
+                price:            { type: number }
+                pricePerKg:       { type: number }
+                deliveryType:     { type: string, enum: [none, farm, admin] }
+                deliveryCost:     { type: number }
+                description:      { type: string }
+                status:           { type: string, enum: [pending, approved, rejected, sold], description: Admin use to approve/reject }
+                rejectionReason:  { type: string }
+                eidAvailable:     { type: boolean }
+                slaughterService: { type: boolean }
+                slaughterCost:    { type: number }
+                qurbaniShares:    { type: string, description: JSON-encoded array }
+                keepImages:       { type: string, description: JSON array of existing image paths to keep }
+                images:           { type: array, items: { type: string, format: binary } }
+      responses:
+        '200':
+          description: Updated listing
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Listing' }
+        '403': { description: Forbidden }
+        '404':
+          description: Listing not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    delete:
+      tags: [Listings]
+      summary: Delete listing (seller owns it or admin)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ── ORDERS ───────────────────────────────────────────────────────────────────
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Place an order (buyer only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingId, paymentType]
+              properties:
+                listingId:    { $ref: '#/components/schemas/MongoId' }
+                paymentType:  { type: string, enum: [deposit, cod, instapay] }
+                depositAmount: { type: number, description: Required when paymentType=deposit }
+                notes:        { type: string }
+                deliveryLocation:
+                  type: object
+                  properties:
+                    lat:     { type: number }
+                    lng:     { type: number }
+                    address: { type: string }
+      responses:
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400':
+          description: Validation error or listing unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403': { description: Forbidden — buyer role required }
+
+    get:
+      tags: [Orders]
+      summary: List orders (buyer sees own; seller sees own; admin sees all)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, confirmed, completed, cancelled] }
+      responses:
+        '200':
+          description: Array of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by ID
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Order detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /orders/{id}/status:
+    put:
+      tags: [Orders]
+      summary: Update order status (seller or admin)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [pending, confirmed, completed, cancelled] }
+      responses:
+        '200':
+          description: Updated order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /orders/{id}/delivery:
+    patch:
+      tags: [Orders]
+      summary: Set delivery cost and status for admin-handled orders (admin only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deliveryCost:   { type: number }
+                deliveryStatus: { type: string, enum: [pending, in_transit, delivered] }
+      responses:
+        '200':
+          description: Updated order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { description: Forbidden — admin only }
+
+  # ── ANIMALS ──────────────────────────────────────────────────────────────────
+
+  /animals:
+    get:
+      tags: [Animals]
+      summary: Get animals (seller sees own; admin sees all)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string }
+          description: Filter by animal type
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+          description: Page number for server-side pagination (requires `limit`). When omitted, returns full array (backwards-compatible).
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100 }
+          description: Items per page. When `page` is also provided, enables paginated response format.
+      responses:
+        '200':
+          description: Array of animals (plain array when no `page` param; paginated object when `page` is present)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: { $ref: '#/components/schemas/Animal' }
+                  - type: object
+                    properties:
+                      items:   { type: array, items: { $ref: '#/components/schemas/Animal' } }
+                      total:   { type: integer }
+                      page:    { type: integer }
+                      pages:   { type: integer }
+                      hasMore: { type: boolean }
+
+    post:
+      tags: [Animals]
+      summary: Add animal to herd (seller or admin)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:          { type: string, enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other] }
+                breed:         { type: string }
+                tagId:         { type: string, description: Unique tag/ear number per seller }
+                gender:        { type: string, enum: [male, female, unknown] }
+                dob:           { type: string, format: date }
+                color:         { type: string }
+                currentWeight: { type: number }
+                healthStatus:  { type: string, enum: [healthy, sick, quarantine, deceased] }
+                notes:         { type: string }
+                images:        { type: array, items: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Animal created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Animal' }
+        '409':
+          description: Tag ID already used for another animal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /animals/summary:
+    get:
+      tags: [Animals]
+      summary: Get herd statistics summary
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Herd summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnimalSummary' }
+
+  /animals/follow-ups-due:
+    get:
+      tags: [Animals]
+      summary: Get medical records with follow-up date due within 7 days
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of medical records (with animal populated)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MedicalRecord' }
+
+  /animals/weighing-due:
+    get:
+      tags: [Animals]
+      summary: Get active animals with weighing date due within 7 days
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of animals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Animal' }
+
+  /animals/{id}:
+    get:
+      tags: [Animals]
+      summary: Get animal by ID
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Animal detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Animal' }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    put:
+      tags: [Animals]
+      summary: Update animal (seller owns it or admin)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                type:            { type: string, enum: [cattle, buffalo, sheep, goat, camel, horse, poultry, rabbit, other] }
+                breed:           { type: string }
+                gender:          { type: string, enum: [male, female, unknown] }
+                color:           { type: string }
+                currentWeight:   { type: number }
+                targetWeight:    { type: number }
+                nextWeighingDate: { type: string, format: date }
+                healthStatus:    { type: string, enum: [healthy, sick, quarantine, deceased] }
+                status:          { type: string, enum: [active, sold, deceased] }
+                notes:           { type: string }
+                pregnancyStatus: { type: string, enum: [none, pregnant, recently_gave_birth] }
+                pregnancyDate:   { type: string, format: date }
+                expectedBirthDate: { type: string, format: date }
+                birthCount:      { type: integer }
+                keepImages:      { type: string, description: JSON array of existing paths to keep }
+                images:          { type: array, items: { type: string, format: binary } }
+      responses:
+        '200':
+          description: Updated animal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Animal' }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    delete:
+      tags: [Animals]
+      summary: Delete animal
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+        '403': { description: Forbidden }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /animals/{id}/weight:
+    post:
+      tags: [Animals]
+      summary: Add weight entry (updates currentWeight automatically)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [weightKg]
+              properties:
+                weightKg: { type: number, minimum: 0.1 }
+                date:     { type: string, format: date-time }
+                notes:    { type: string }
+      responses:
+        '201':
+          description: Weight entry created; milestone notification sent if target reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeightEntry' }
+
+  /animals/{id}/weight/{entryId}:
+    delete:
+      tags: [Animals]
+      summary: Delete weight entry
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: path
+          name: entryId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /animals/{id}/vaccination:
+    post:
+      tags: [Animals]
+      summary: Add vaccination record
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vaccine]
+              properties:
+                vaccine:     { type: string }
+                date:        { type: string, format: date-time }
+                nextDueDate: { type: string, format: date-time }
+                vet:         { type: string }
+                notes:       { type: string }
+      responses:
+        '201':
+          description: Vaccination entry created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaccinationEntry' }
+
+  /animals/{id}/vaccination/{entryId}:
+    delete:
+      tags: [Animals]
+      summary: Delete vaccination record
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: path
+          name: entryId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /animals/{id}/medical:
+    post:
+      tags: [Animals]
+      summary: Add medical record (auto-creates doctor expense when cost > 0)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:         { type: string, format: date-time }
+                diagnosis:    { type: string }
+                treatment:    { type: string }
+                medication:   { type: string }
+                vet:          { type: string }
+                cost:         { type: number, minimum: 0 }
+                followUpDate: { type: string, format: date }
+                notes:        { type: string }
+                resolved:     { type: boolean }
+      responses:
+        '201':
+          description: Medical record created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+
+    get:
+      tags: [Animals]
+      summary: List medical records for an animal
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Array of medical records (sorted by date desc)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MedicalRecord' }
+
+  /animals/{id}/medical/{recordId}:
+    patch:
+      tags: [Animals]
+      summary: Update medical record (e.g. mark resolved)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: path
+          name: recordId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolved:     { type: boolean }
+                followUpDate: { type: string, format: date }
+                notes:        { type: string }
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    delete:
+      tags: [Animals]
+      summary: Delete medical record
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: path
+          name: recordId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  # ── FINANCE ──────────────────────────────────────────────────────────────────
+
+  /finance/expenses:
+    post:
+      tags: [Finance]
+      summary: Add expense (seller only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, amount]
+              properties:
+                category: { type: string, enum: [feed, doctor, transport, electricity, salary, rent, water, maintenance, other] }
+                amount:   { type: number, minimum: 0.01 }
+                date:     { type: string, format: date-time }
+                note:     { type: string }
+                listing:  { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '201':
+          description: Expense created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Expense' }
+
+    get:
+      tags: [Finance]
+      summary: List expenses (seller sees own; admin can specify sellerId)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: category
+          schema: { type: string, enum: [feed, doctor, transport, electricity, salary, rent, water, maintenance, other] }
+        - in: query
+          name: listingId
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: query
+          name: sellerId
+          schema: { $ref: '#/components/schemas/MongoId' }
+          description: Admin only
+      responses:
+        '200':
+          description: Array of expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Expense' }
+
+  /finance/expenses/{id}:
+    put:
+      tags: [Finance]
+      summary: Update expense
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category: { type: string, enum: [feed, doctor, transport, electricity, salary, rent, water, maintenance, other] }
+                amount:   { type: number }
+                date:     { type: string, format: date-time }
+                note:     { type: string }
+      responses:
+        '200':
+          description: Updated expense
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Expense' }
+
+    delete:
+      tags: [Finance]
+      summary: Delete expense
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /finance/income:
+    post:
+      tags: [Finance]
+      summary: Add income entry (seller only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, amount]
+              properties:
+                type:    { type: string, enum: [sale, deposit] }
+                amount:  { type: number, minimum: 0.01 }
+                date:    { type: string, format: date-time }
+                note:    { type: string }
+                listing: { $ref: '#/components/schemas/MongoId' }
+                order:   { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '201':
+          description: Income entry created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Income' }
+
+    get:
+      tags: [Finance]
+      summary: List income entries
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: type
+          schema: { type: string, enum: [sale, deposit] }
+        - in: query
+          name: listingId
+          schema: { $ref: '#/components/schemas/MongoId' }
+        - in: query
+          name: sellerId
+          schema: { $ref: '#/components/schemas/MongoId' }
+          description: Admin only
+      responses:
+        '200':
+          description: Array of income entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Income' }
+
+  /finance/income/{id}:
+    put:
+      tags: [Finance]
+      summary: Update income entry
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:   { type: string, enum: [sale, deposit] }
+                amount: { type: number }
+                date:   { type: string, format: date-time }
+                note:   { type: string }
+      responses:
+        '200':
+          description: Updated income entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Income' }
+
+    delete:
+      tags: [Finance]
+      summary: Delete income entry
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /finance/summary:
+    get:
+      tags: [Finance]
+      summary: Get financial summary (total income, expenses, net profit, monthly chart)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: sellerId
+          schema: { $ref: '#/components/schemas/MongoId' }
+          description: Admin only
+      responses:
+        '200':
+          description: Finance summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinanceSummary' }
+
+  # ── STATEMENTS ───────────────────────────────────────────────────────────────
+
+  /statements:
+    get:
+      tags: [Statements]
+      summary: Monthly P&L statement table
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer, example: 2025 }
+        - in: query
+          name: quarter
+          schema: { type: integer, enum: [1, 2, 3, 4] }
+          description: Filter to a specific quarter (client-side; all months returned if omitted)
+        - in: query
+          name: sellerId
+          schema: { $ref: '#/components/schemas/MongoId' }
+          description: Admin only
+      responses:
+        '200':
+          description: P&L rows by category per month
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Category-keyed rows with per-month amounts
+
+  /statements/transactions:
+    get:
+      tags: [Statements]
+      summary: Drill-down — individual transactions for a given month and category
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: month
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 12 }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: sellerId
+          schema: { $ref: '#/components/schemas/MongoId' }
+          description: Admin only
+      responses:
+        '200':
+          description: Individual expense/income records for that period
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:   { type: string, format: date-time }
+                    label:  { type: string }
+                    amount: { type: number }
+                    type:   { type: string, enum: [income, expense] }
+
+  # ── DAIRY ────────────────────────────────────────────────────────────────────
+
+  /dairy:
+    get:
+      tags: [Dairy]
+      summary: Get approved dairy products (public; seller JWT → own products)
+      responses:
+        '200':
+          description: Array of dairy products
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DairyProduct' }
+
+    post:
+      tags: [Dairy]
+      summary: Create dairy product (seller only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, type, quantity, unit, pricePerUnit]
+              properties:
+                name:              { type: string }
+                type:              { type: string, enum: [milk, cheese, yogurt, butter, cream, ghee, other] }
+                quantity:          { type: number }
+                unit:              { type: string, enum: [kg, liter, piece, pack, dozen] }
+                pricePerUnit:      { type: number }
+                availableFrom:     { type: string, format: date }
+                availableTo:       { type: string, format: date }
+                deliveryAvailable: { type: boolean }
+                deliveryCost:      { type: number }
+                description:       { type: string }
+                minStockAlert:     { type: number }
+                images:            { type: array, items: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Dairy product created (status = pending)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DairyProduct' }
+
+  /dairy/my:
+    get:
+      tags: [Dairy]
+      summary: Get seller's own dairy products (all statuses)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of dairy products
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DairyProduct' }
+
+  /dairy/admin/all:
+    get:
+      tags: [Dairy]
+      summary: Get all dairy products regardless of status (admin only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of all dairy products (with seller populated)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DairyProduct' }
+
+  /dairy/{id}:
+    get:
+      tags: [Dairy]
+      summary: Get dairy product by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Dairy product detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DairyProduct' }
+
+    put:
+      tags: [Dairy]
+      summary: Update dairy product (seller owns it or admin)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:              { type: string }
+                type:              { type: string, enum: [milk, cheese, yogurt, butter, cream, ghee, other] }
+                quantity:          { type: number }
+                unit:              { type: string, enum: [kg, liter, piece, pack, dozen] }
+                pricePerUnit:      { type: number }
+                availableFrom:     { type: string, format: date }
+                availableTo:       { type: string, format: date }
+                deliveryAvailable: { type: boolean }
+                deliveryCost:      { type: number }
+                description:       { type: string }
+                minStockAlert:     { type: number }
+                keepImages:        { type: string, description: JSON array of existing paths to keep }
+                images:            { type: array, items: { type: string, format: binary } }
+      responses:
+        '200':
+          description: Updated dairy product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DairyProduct' }
+
+    delete:
+      tags: [Dairy]
+      summary: Delete dairy product
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /dairy/{id}/approve:
+    post:
+      tags: [Dairy]
+      summary: Admin approve or reject dairy product
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:          { type: string, enum: [approved, rejected] }
+                rejectionReason: { type: string }
+      responses:
+        '200':
+          description: Updated dairy product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DairyProduct' }
+
+  /dairy/{id}/stock:
+    post:
+      tags: [Dairy]
+      summary: Update dairy product stock quantity (seller only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [change]
+              properties:
+                change: { type: number, description: Positive to add stock, negative to subtract }
+                note:   { type: string }
+      responses:
+        '200':
+          description: Updated dairy product with new quantity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DairyProduct' }
+        '400':
+          description: Stock cannot go below zero
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ── SUPPLIES ─────────────────────────────────────────────────────────────────
+
+  /supplies:
+    get:
+      tags: [Supplies]
+      summary: Get supplies (public → approved only; seller JWT → own; admin → all)
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string, enum: [feed, veterinary, equipment, seeds, other] }
+      responses:
+        '200':
+          description: Array of supplies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Supply' }
+
+    post:
+      tags: [Supplies]
+      summary: Create supply listing (seller only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, category, quantity, unit, pricePerUnit]
+              properties:
+                name:              { type: string }
+                category:          { type: string, enum: [feed, veterinary, equipment, seeds, other] }
+                description:       { type: string }
+                quantity:          { type: number }
+                unit:              { type: string }
+                pricePerUnit:      { type: number }
+                minOrderQty:       { type: number }
+                location:          { type: string }
+                deliveryAvailable: { type: boolean }
+                deliveryCost:      { type: number }
+                images:            { type: array, items: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Supply created (status = pending)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supply' }
+
+  /supplies/{id}:
+    get:
+      tags: [Supplies]
+      summary: Get supply by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Supply detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supply' }
+
+    put:
+      tags: [Supplies]
+      summary: Update supply (seller owns it or admin)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:              { type: string }
+                category:          { type: string, enum: [feed, veterinary, equipment, seeds, other] }
+                description:       { type: string }
+                quantity:          { type: number }
+                unit:              { type: string }
+                pricePerUnit:      { type: number }
+                minOrderQty:       { type: number }
+                location:          { type: string }
+                deliveryAvailable: { type: boolean }
+                deliveryCost:      { type: number }
+                keepImages:        { type: string, description: JSON array of existing paths to keep }
+                images:            { type: array, items: { type: string, format: binary } }
+      responses:
+        '200':
+          description: Updated supply
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supply' }
+
+    delete:
+      tags: [Supplies]
+      summary: Delete supply
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /supplies/{id}/status:
+    patch:
+      tags: [Supplies]
+      summary: Approve, reject or mark sold-out (admin only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:          { type: string, enum: [approved, rejected, sold_out] }
+                rejectionReason: { type: string }
+      responses:
+        '200':
+          description: Updated supply
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supply' }
+
+  # ── REVIEWS ──────────────────────────────────────────────────────────────────
+
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Submit review for a completed order (buyer only, one per order)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, rating]
+              properties:
+                orderId: { $ref: '#/components/schemas/MongoId' }
+                rating:  { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses:
+        '201':
+          description: Review created; seller averageRating recalculated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '409':
+          description: Order already reviewed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /reviews/admin/all:
+    get:
+      tags: [Reviews]
+      summary: Get all reviews (admin only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of all reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+
+  /reviews/seller/{sellerId}:
+    get:
+      tags: [Reviews]
+      summary: Get reviews for a seller (public)
+      parameters:
+        - in: path
+          name: sellerId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Array of reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+
+  /reviews/{id}:
+    delete:
+      tags: [Reviews]
+      summary: Delete review (admin only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted; seller averageRating recalculated }
+
+  # ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get notifications for current user (latest 50)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Get unread notification count
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+
+  /notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: All marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark a single notification as read
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+
+  # ── FAVORITES ────────────────────────────────────────────────────────────────
+
+  /favorites:
+    get:
+      tags: [Favorites]
+      summary: Get buyer's saved farms (buyer only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of seller profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /favorites/{sellerId}:
+    post:
+      tags: [Favorites]
+      summary: Save farm to favorites (buyer only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: sellerId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Added to favorites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+    delete:
+      tags: [Favorites]
+      summary: Remove farm from favorites (buyer only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: sellerId
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Removed from favorites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  # ── MARKET PRICES ─────────────────────────────────────────────────────────────
+
+  /market-prices:
+    get:
+      tags: [Market Prices]
+      summary: Get avg/min/max price per kg grouped by animal type (public)
+      parameters:
+        - in: query
+          name: governorate
+          schema: { type: string }
+          description: Optional — narrow to a single Egyptian governorate
+      responses:
+        '200':
+          description: Array of price stats by animal type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:     { type: string }
+                    avgPrice: { type: number }
+                    minPrice: { type: number }
+                    maxPrice: { type: number }
+                    count:    { type: integer }
+
+  # ── EID ───────────────────────────────────────────────────────────────────────
+
+  /eid/config:
+    get:
+      tags: [Eid]
+      summary: Get Eid mode configuration (public)
+      responses:
+        '200':
+          description: Eid config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EidConfig' }
+
+    patch:
+      tags: [Eid]
+      summary: Update Eid mode and date (admin only)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EidConfig' }
+      responses:
+        '200':
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EidConfig' }
+
+  /eid/listings:
+    get:
+      tags: [Eid]
+      summary: Get Eid-available listings (public)
+      responses:
+        '200':
+          description: Array of approved listings with eidAvailable=true
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Listing' }
+
+  # ── ADMIN ─────────────────────────────────────────────────────────────────────
+
+  /admin/stats:
+    get:
+      tags: [Admin]
+      summary: Get platform-wide stats (admin only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Stats object
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalUsers:   { type: integer }
+                  totalSellers: { type: integer }
+                  totalBuyers:  { type: integer }
+                  totalListings: { type: integer }
+                  pendingListings: { type: integer }
+                  totalOrders:  { type: integer }
+                  totalRevenue: { type: number }
+                  pendingDairy: { type: integer }
+                  pendingSupplies: { type: integer }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Get all users (admin only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Array of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /admin/users/{id}/toggle:
+    patch:
+      tags: [Admin]
+      summary: Toggle user isActive status (admin only; cannot toggle other admins)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403':
+          description: Cannot deactivate admin accounts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete user (admin only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/MongoId' }
+      responses:
+        '204': { description: Deleted }
+
+  /admin/analytics:
+    get:
+      tags: [Admin]
+      summary: Revenue by governorate — top 12 (admin only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Revenue breakdown by governorate
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    governorate: { type: string }
+                    revenue:     { type: number }
+                    orderCount:  { type: integer }
+
+  # ── BUDGET ────────────────────────────────────────────────────────────────────
+
+  /budget:
+    get:
+      tags: [Budget]
+      summary: Get budget entries for a year (seller only)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: query
+          name: year
+          schema: { type: integer, example: 2025 }
+      responses:
+        '200':
+          description: Array of budget entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Budget' }
+
+    put:
+      tags: [Budget]
+      summary: Upsert budget target (seller only)
+      description: Creates or updates a budget entry for a specific year/month/category combination.
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year, month, category, amount]
+              properties:
+                year:     { type: integer }
+                month:    { type: integer, minimum: 1, maximum: 12 }
+                category: { type: string }
+                amount:   { type: number, minimum: 0 }
+      responses:
+        '200':
+          description: Upserted budget entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Budget' }

@@ -1,5 +1,7 @@
 const { validationResult } = require('express-validator');
 const Listing = require('../models/Listing');
+const User    = require('../models/User');
+const { createNotification } = require('../utils/notify');
 
 // POST /api/listings
 const createListing = async (req, res) => {
@@ -12,13 +14,36 @@ const createListing = async (req, res) => {
     const images = req.files ? req.files.map((f) => `/uploads/${f.filename}`) : [];
 
     // Destructure only safe fields — prevents status/seller injection
-    const { type, breed, age, weight, price, description, location } = req.body;
+    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage } = req.body;
+
+    let parsedQurbaniShares = [];
+    if (qurbaniShares) {
+      try { parsedQurbaniShares = JSON.parse(qurbaniShares); } catch {}
+    }
 
     const listing = await Listing.create({
-      type, breed, age, weight, price, description, location,
+      type, breed, age, weight, price, pricePerKg, description, location,
+      deliveryType: deliveryType || 'none',
+      deliveryCost: deliveryCost || undefined,
+      eidAvailable:     eidAvailable === 'true' || eidAvailable === true || false,
+      slaughterService: slaughterService === 'true' || slaughterService === true || false,
+      slaughterCost:    slaughterCost || undefined,
+      qurbaniShares:    parsedQurbaniShares,
+      depositRequired:  depositRequired === 'true' || depositRequired === true || false,
+      depositPercentage: depositPercentage || undefined,
       seller: req.user.id,
       images,
     });
+
+    // Notify all admins of new pending listing
+    User.find({ role: 'admin' }, '_id').then(admins => {
+      admins.forEach(admin => createNotification(admin._id, {
+        type:    'listing_pending',
+        title:   'إعلان جديد للمراجعة',
+        message: 'تم إرسال إعلان ماشية جديد ويحتاج إلى مراجعة',
+        link:    '/admin/listings',
+      }));
+    }).catch(() => {});
 
     res.status(201).json(listing);
   } catch (err) {
@@ -30,6 +55,7 @@ const createListing = async (req, res) => {
 // - buyer / public : approved only
 // - seller         : their own listings (all statuses)
 // - admin          : everything
+// Supports optional ?page=1&limit=20 for pagination; returns all if omitted.
 const getListings = async (req, res) => {
   try {
     let filter = {};
@@ -42,6 +68,17 @@ const getListings = async (req, res) => {
       filter.seller = req.user.id;
     }
     // admin: no filter — sees all
+
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const p = Math.max(1, parseInt(page, 10));
+      const l = Math.min(100, Math.max(1, parseInt(limit, 10)));
+      const [items, total] = await Promise.all([
+        Listing.find(filter).populate('seller', 'name phone').sort({ createdAt: -1 }).skip((p - 1) * l).limit(l),
+        Listing.countDocuments(filter),
+      ]);
+      return res.json({ items, total, page: p, pages: Math.ceil(total / l), hasMore: p * l < total });
+    }
 
     const listings = await Listing.find(filter)
       .populate('seller', 'name phone')
@@ -97,8 +134,11 @@ const updateListing = async (req, res) => {
     }
 
     // Whitelist updatable fields — prevents seller/status injection
-    const { type, breed, age, weight, price, description, location } = req.body;
-    const updates = { type, breed, age, weight, price, description, location };
+    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage } = req.body;
+    const updates = { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, depositRequired, depositPercentage };
+    if (qurbaniShares !== undefined) {
+      try { updates.qurbaniShares = JSON.parse(qurbaniShares); } catch { updates.qurbaniShares = []; }
+    }
 
     // Strip undefined keys so partial updates don't overwrite with undefined
     Object.keys(updates).forEach((k) => updates[k] === undefined && delete updates[k]);
@@ -109,12 +149,35 @@ const updateListing = async (req, res) => {
     }
 
     const newImages = req.files ? req.files.map((f) => `/uploads/${f.filename}`) : [];
-    if (newImages.length > 0) updates.images = [...listing.images, ...newImages];
+    if (req.body.keepImages !== undefined) {
+      // Explicit image management: caller specifies which existing images to retain
+      let baseImages = listing.images;
+      try { baseImages = JSON.parse(req.body.keepImages); } catch {}
+      updates.images = [...baseImages, ...newImages];
+    } else if (newImages.length > 0) {
+      updates.images = [...listing.images, ...newImages];
+    }
 
     const updated = await Listing.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     });
+
+    // Notify seller when admin approves or rejects
+    if (req.user.role === 'admin' && updates.status) {
+      const sellerId = updated.seller?._id || updated.seller;
+      if (updates.status === 'approved') {
+        createNotification(sellerId, {
+          type: 'listing_approved', title: 'تمت الموافقة على إعلانك',
+          message: 'تمت الموافقة على إعلانك ويمكن للمشترين رؤيته الآن', link: '/seller/listings',
+        });
+      } else if (updates.status === 'rejected') {
+        createNotification(sellerId, {
+          type: 'listing_rejected', title: 'تم رفض إعلانك',
+          message: 'تم رفض إعلانك من قبل المسؤول', link: '/seller/listings',
+        });
+      }
+    }
 
     res.json(updated);
   } catch (err) {

@@ -4,11 +4,20 @@ const path = require('path');
 
 const app = express();
 
-// CORS — in development the Vite dev server (port 5173) is the only browser origin.
-// In production, replace with your deployed frontend URL via FRONTEND_URL env var.
-const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
+// CORS — allowed origins:
+//   • Web dev:     http://localhost:5173 (Vite dev server)
+//   • Web prod:    FRONTEND_URL env var (deployed domain)
+//   • Desktop app: app://localhost (Electron production protocol)
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'app://localhost',
+];
 app.use(cors({
-  origin: allowedOrigin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, same-origin server calls)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin "${origin}" not allowed`));
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -18,11 +27,22 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes (added incrementally)
-app.use('/api/auth', require('./routes/auth'));
+app.use('/api/auth',    require('./routes/auth'));
 app.use('/api/listings', require('./routes/listings'));
-app.use('/api/orders', require('./routes/orders'));
-app.use('/api/finance', require('./routes/expenses'));
-app.use('/api/admin',  require('./routes/admin'));
+app.use('/api/orders',   require('./routes/orders'));
+app.use('/api/finance',  require('./routes/expenses'));
+app.use('/api/admin',    require('./routes/admin'));
+app.use('/api/dairy',    require('./routes/dairy'));
+app.use('/api/sellers',       require('./routes/sellers'));
+app.use('/api/statements',   require('./routes/statements'));
+app.use('/api/reviews',      require('./routes/reviews'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/favorites',    require('./routes/favorites'));
+app.use('/api/market-prices', require('./routes/marketPrices'));
+app.use('/api/eid',           require('./routes/eid'));
+app.use('/api/animals',       require('./routes/animals'));
+app.use('/api/supplies',      require('./routes/supplies'));
+app.use('/api/budget',        require('./routes/budget'));
 
 // Health check — available at both /health (Render default probe path) and /api/health
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

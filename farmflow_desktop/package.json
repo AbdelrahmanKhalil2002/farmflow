@@ -1,0 +1,66 @@
+{
+  "name": "farmflow-desktop",
+  "version": "1.0.0",
+  "description": "FarmFlow — Egyptian Livestock Marketplace (Desktop)",
+  "main": "main.js",
+  "author": "FarmFlow",
+  "license": "UNLICENSED",
+  "private": true,
+
+  "scripts": {
+    "dev":         "concurrently -k -n VITE,ELECTRON -c cyan,green \"npm --prefix ../frontend run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "start":       "electron .",
+    "build:frontend": "npm --prefix ../frontend run build",
+    "build":       "npm run build:frontend && electron-builder",
+    "build:mac":   "npm run build:frontend && electron-builder --mac",
+    "build:win":   "npm run build:frontend && electron-builder --win"
+  },
+
+  "build": {
+    "appId": "com.farmflow.desktop",
+    "productName": "FarmFlow",
+    "copyright": "FarmFlow © 2026",
+    "directories": {
+      "output":          "dist-electron",
+      "buildResources":  "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from":   "../frontend/dist",
+        "to":     "frontend/dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "icon": "assets/icon.png",
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+
+  "devDependencies": {
+    "concurrently":    "^9.0.0",
+    "electron":        "^32.0.0",
+    "electron-builder": "^25.0.0",
+    "wait-on":         "^8.0.0"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  }
+}

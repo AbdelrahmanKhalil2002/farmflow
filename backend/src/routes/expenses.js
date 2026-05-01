@@ -1,16 +1,20 @@
 const router = require('express').Router();
-const { body, query } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const { protect } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/role');
 const {
   addExpense,
   getExpenses,
+  deleteExpense,
+  updateExpense,
   addIncome,
   getIncome,
+  deleteIncome,
+  updateIncome,
   getSummary,
 } = require('../controllers/financeController');
 
-const EXPENSE_CATEGORIES = ['feed', 'doctor', 'transport', 'other'];
+const EXPENSE_CATEGORIES = ['feed', 'doctor', 'transport', 'electricity', 'salary', 'rent', 'water', 'maintenance', 'other'];
 const INCOME_TYPES = ['sale', 'deposit'];
 
 const dateQueryValidation = [
@@ -49,6 +53,30 @@ router.get(
   getExpenses
 );
 
+const expenseBodyValidation = [
+  body('category').optional().isIn(EXPENSE_CATEGORIES).withMessage(`Category must be one of: ${EXPENSE_CATEGORIES.join(', ')}`),
+  body('amount').optional().isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+  body('date').optional().isISO8601().withMessage('Date must be a valid ISO 8601 date'),
+  body('listing').optional().isMongoId().withMessage('Invalid listing ID'),
+  body('note').optional().trim(),
+];
+
+router.delete(
+  '/expenses/:id',
+  protect,
+  authorizeRoles('seller', 'admin'),
+  param('id').isMongoId().withMessage('Invalid expense ID'),
+  deleteExpense
+);
+
+router.put(
+  '/expenses/:id',
+  protect,
+  authorizeRoles('seller', 'admin'),
+  [param('id').isMongoId().withMessage('Invalid expense ID'), ...expenseBodyValidation],
+  updateExpense
+);
+
 // ─── Income ──────────────────────────────────────────────────────────────────
 
 router.post(
@@ -79,6 +107,31 @@ router.get(
     query('sellerId').optional().isMongoId(),
   ],
   getIncome
+);
+
+const incomeBodyValidation = [
+  body('type').optional().isIn(INCOME_TYPES).withMessage(`Type must be one of: ${INCOME_TYPES.join(', ')}`),
+  body('amount').optional().isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+  body('date').optional().isISO8601().withMessage('Date must be a valid ISO 8601 date'),
+  body('listing').optional().isMongoId().withMessage('Invalid listing ID'),
+  body('order').optional().isMongoId().withMessage('Invalid order ID'),
+  body('note').optional().trim(),
+];
+
+router.delete(
+  '/income/:id',
+  protect,
+  authorizeRoles('seller', 'admin'),
+  param('id').isMongoId().withMessage('Invalid income ID'),
+  deleteIncome
+);
+
+router.put(
+  '/income/:id',
+  protect,
+  authorizeRoles('seller', 'admin'),
+  [param('id').isMongoId().withMessage('Invalid income ID'), ...incomeBodyValidation],
+  updateIncome
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

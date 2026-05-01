@@ -1,43 +1,808 @@
-import { useEffect, useState } from 'react';
-import { getSummary } from '../../services/financeService';
+import { useEffect, useId, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { getSummary, getIncome, getExpenses } from '../../services/financeService';
 import { getMyListings } from '../../services/listingService';
+import { getMyOrders } from '../../services/orderService';
+import { getAnimals, getWeighingDue, getFollowUpsDue } from '../../services/animalService';
 import { fmt } from '../../utils/format';
 
-const StatCard = ({ label, value }) => (
-  <div style={{ border: '1px solid #ccc', padding: '16px', minWidth: '160px' }}>
-    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>{label}</p>
-    <p style={{ margin: '8px 0 0', fontSize: '28px', fontWeight: 'bold' }}>{value}</p>
+// ─── Design tokens ─────────────────────────────────────────────────────────────
+const C = {
+  bg:        '#F8F4EE',
+  hero:      'linear-gradient(135deg, #1C3A24 0%, #2D6235 55%, #3A7D44 100%)',
+  card:      '#FFFFFF',
+  green:     '#3A7D44',
+  greenDk:   '#2D6235',
+  greenBg:   '#DCFCE7',
+  greenText: '#166534',
+  amber:     '#D97706',
+  amberBg:   '#FEF3C7',
+  amberText: '#92400E',
+  red:       '#DC2626',
+  redBg:     '#FEF2F2',
+  redText:   '#B91C1C',
+  blue:      '#2563EB',
+  blueBg:    '#DBEAFE',
+  blueText:  '#1E3A5F',
+  border:    '#E8D5C0',
+  text:      '#2C1810',
+  muted:     '#8B6B5A',
+  shadow:    '0 1px 3px rgba(44,24,16,0.07), 0 4px 14px rgba(44,24,16,0.06)',
+};
+
+const TYPE_META = {
+  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', ar: 'أبقار' },
+  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', ar: 'أغنام' },
+  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', ar: 'ماعز'  },
+  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', ar: 'إبل'   },
+  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', ar: 'خيول'  },
+  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', ar: 'أخرى'  },
+};
+
+const CAT = {
+  feed:      { bg: '#FEF9C3', color: '#713F12', label: '🌾 علف'         },
+  doctor:    { bg: '#DBEAFE', color: '#1E3A5F', label: '🏥 بيطري'       },
+  transport: { bg: '#F3E8FF', color: '#581C87', label: '🚛 نقل'          },
+  other:     { bg: '#F3F4F6', color: '#374151', label: '📦 أخرى'         },
+};
+
+const PERIODS = [
+  { key: 'month',   ar: 'هذا الشهر'   },
+  { key: 'quarter', ar: 'آخر 3 أشهر'  },
+  { key: 'year',    ar: 'هذا العام'    },
+  { key: 'all',     ar: 'كل الوقت'    },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const getPeriodDates = (period) => {
+  const now = new Date(), to = now.toISOString().slice(0, 10);
+  if (period === 'month')   { return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), to }; }
+  if (period === 'quarter') { const d = new Date(now); d.setMonth(d.getMonth() - 3); return { from: d.toISOString().slice(0, 10), to }; }
+  if (period === 'year')    { return { from: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10), to }; }
+  return {};
+};
+const thirtyDaysAgo = () => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10); };
+
+const bucketByDay = (entries = []) => {
+  const buckets = new Array(30).fill(0), now = new Date();
+  entries.forEach(e => {
+    const diff = Math.floor((now - new Date(e.date || e.createdAt)) / 86_400_000);
+    const idx  = 29 - diff;
+    if (idx >= 0 && idx < 30) buckets[idx] += e.amount || 0;
+  });
+  return buckets;
+};
+
+const fmtSAR  = (v) => `${fmt(v ?? 0)} ج.م`;
+const fmtDate = (d) => new Date(d).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+
+// ─── Skeleton shimmer ─────────────────────────────────────────────────────────
+const Skeleton = ({ h = 20, r = 8, w = '100%' }) => (
+  <div style={{ height: h, width: w, borderRadius: r, background: 'linear-gradient(90deg,#EDE0D4 0%,#F5EDE5 50%,#EDE0D4 100%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+);
+
+// ─── Dual-line chart (income vs expenses, last 30 days) ───────────────────────
+const LineChart = ({ incomeData, expenseData }) => {
+  const id1 = useId().replace(/[^a-z0-9]/gi, '');
+  const id2 = useId().replace(/[^a-z0-9]/gi, '');
+  const W = 520, H = 120, PAD_L = 8, PAD_R = 8, PAD_T = 8, PAD_B = 22;
+  const IW = W - PAD_L - PAD_R, IH = H - PAD_T - PAD_B;
+
+  const max = Math.max(...incomeData, ...expenseData, 1);
+  const mkPts = (data) => data.map((v, i) => {
+    const x = PAD_L + (i / (data.length - 1)) * IW;
+    const y = PAD_T + IH - (v / max) * IH;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const incPts = mkPts(incomeData);
+  const expPts = mkPts(expenseData);
+  const lastX  = PAD_L + IW, incLast = incomeData[29], expLast = expenseData[29];
+
+  // x-axis labels: every 7 days
+  const labels = [0, 6, 13, 20, 29].map(i => {
+    const d = new Date(); d.setDate(d.getDate() - (29 - i));
+    return { x: PAD_L + (i / 29) * IW, label: `${d.getDate()}/${d.getMonth() + 1}` };
+  });
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={`ig${id1}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={C.green}   stopOpacity="0.25" />
+          <stop offset="100%" stopColor={C.green} stopOpacity="0"    />
+        </linearGradient>
+        <linearGradient id={`eg${id2}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={C.red}   stopOpacity="0.15" />
+          <stop offset="100%" stopColor={C.red} stopOpacity="0"    />
+        </linearGradient>
+      </defs>
+
+      {/* Grid lines */}
+      {[0.25, 0.5, 0.75, 1].map(r => (
+        <line key={r} x1={PAD_L} x2={PAD_L + IW} y1={PAD_T + IH * (1 - r)} y2={PAD_T + IH * (1 - r)}
+          stroke="#E8D5C0" strokeWidth="0.5" strokeDasharray="3 3" />
+      ))}
+
+      {/* Fill areas */}
+      <polygon points={`${incPts} ${lastX},${PAD_T + IH} ${PAD_L},${PAD_T + IH}`} fill={`url(#ig${id1})`} />
+      <polygon points={`${expPts} ${lastX},${PAD_T + IH} ${PAD_L},${PAD_T + IH}`} fill={`url(#eg${id2})`} />
+
+      {/* Lines */}
+      <polyline points={incPts} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={expPts} fill="none" stroke={C.red}   strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+      {/* End-of-line labels */}
+      {incLast > 0 && <text x={lastX + 4} y={PAD_T + IH - (incLast / max) * IH} fontSize="9" fill={C.greenText} fontWeight="700" dominantBaseline="middle">{fmt(incLast)}</text>}
+      {expLast > 0 && <text x={lastX + 4} y={PAD_T + IH - (expLast / max) * IH} fontSize="9" fill={C.redText}   fontWeight="700" dominantBaseline="middle">{fmt(expLast)}</text>}
+
+      {/* X-axis labels */}
+      {labels.map(({ x, label }) => (
+        <text key={label} x={x} y={H - 4} fontSize="8" fill={C.muted} textAnchor="middle">{label}</text>
+      ))}
+    </svg>
+  );
+};
+
+// ─── Bar chart (livestock by type) ───────────────────────────────────────────
+const BarChart = ({ data }) => {
+  if (!data.length) return null;
+  const W = 340, H = 110, PAD_L = 10, PAD_B = 22, BAR_GAP = 8;
+  const max  = Math.max(...data.map(d => d.value), 1);
+  const bw   = Math.max(10, Math.floor((W - PAD_L * 2 - BAR_GAP * (data.length - 1)) / data.length));
+  const totalW = data.length * bw + (data.length - 1) * BAR_GAP;
+  const startX = (W - totalW) / 2;
+  const innerH = H - PAD_B - 8;
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+      {/* Baseline */}
+      <line x1={0} x2={W} y1={H - PAD_B} y2={H - PAD_B} stroke={C.border} strokeWidth="1" />
+
+      {data.map((d, i) => {
+        const bh  = Math.max(2, (d.value / max) * innerH);
+        const x   = startX + i * (bw + BAR_GAP);
+        const y   = H - PAD_B - bh;
+        return (
+          <g key={d.label}>
+            <rect x={x} y={y} width={bw} height={bh} rx="4" fill={d.color} opacity="0.85" />
+            {/* Value */}
+            <text x={x + bw / 2} y={y - 3} fontSize="10" fill={d.color} fontWeight="800" textAnchor="middle">{d.value}</text>
+            {/* Label */}
+            <text x={x + bw / 2} y={H - 6} fontSize="9" fill={C.muted} textAnchor="middle">{d.emoji}</text>
+            <text x={x + bw / 2} y={H - 0} fontSize="8" fill={C.muted} textAnchor="middle">{d.ar}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+const KpiCard = ({ icon, iconBg, label, value, sub, trend, extra, border, loading, children }) => (
+  <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1.5px solid ${border || C.border}`, display: 'flex', flexDirection: 'column', gap: '0' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '8px' }}>
+          {label}
+        </div>
+        {loading
+          ? <Skeleton h={38} r={8} w="130px" />
+          : <div style={{ fontSize: '32px', fontWeight: '800', color: value.color || C.text, letterSpacing: '-1px', lineHeight: 1 }}>
+              {value.text}
+            </div>
+        }
+      </div>
+      <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
+        {icon}
+      </div>
+    </div>
+
+    {!loading && (sub || trend) && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: children ? '12px' : '0' }}>
+        {trend && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '12px', fontWeight: '700', color: trend.dir === 'up' ? C.greenText : trend.dir === 'down' ? C.redText : C.muted, background: trend.dir === 'up' ? C.greenBg : trend.dir === 'down' ? C.redBg : '#F3F4F6', padding: '3px 8px', borderRadius: '20px' }}>
+            {trend.dir === 'up' ? '↗' : trend.dir === 'down' ? '↘' : '→'} {trend.text}
+          </span>
+        )}
+        {sub && <span style={{ fontSize: '12px', color: C.muted }}>{sub}</span>}
+      </div>
+    )}
+
+    {!loading && extra && (
+      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: children ? '12px' : '0' }}>
+        {extra}
+      </div>
+    )}
+
+    {!loading && children}
   </div>
 );
 
+// ─── Activity item ────────────────────────────────────────────────────────────
+const ActivityItem = ({ icon, iconBg, title, sub, amount, amtColor }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '9px 10px', borderRadius: '10px', cursor: 'default', transition: 'background 0.12s' }}
+    onMouseEnter={e => e.currentTarget.style.background = '#FAFAF8'}
+    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+    <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', flexShrink: 0 }}>
+      {icon}
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: '13px', fontWeight: '600', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+      <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{sub}</div>
+    </div>
+    {amount && <div style={{ fontSize: '13px', fontWeight: '800', color: amtColor || C.text, flexShrink: 0, whiteSpace: 'nowrap' }}>{amount}</div>}
+  </div>
+);
+
+// ─── Quick action button ──────────────────────────────────────────────────────
+const QuickBtn = ({ to, emoji, label, primary }) => (
+  <Link to={to} style={{ textDecoration: 'none', flex: 1 }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px',
+      background: primary ? C.green : C.card,
+      color: primary ? '#fff' : C.text,
+      border: `1.5px solid ${primary ? C.green : C.border}`,
+      borderRadius: '14px', cursor: 'pointer', transition: 'all 0.15s',
+      boxShadow: C.shadow, fontFamily: 'inherit',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(58,125,68,0.2)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = C.shadow; e.currentTarget.style.transform = 'none'; }}>
+      <span style={{ fontSize: '20px' }}>{emoji}</span>
+      <span style={{ fontSize: '14px', fontWeight: '700' }}>{label}</span>
+    </div>
+  </Link>
+);
+
+// ─── Main component ────────────────────────────────────────────────────────────
 const SellerDashboard = () => {
-  const [stats, setStats]     = useState(null);
-  const [count, setCount]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const { user } = useAuth();
+
+  const [period,   setPeriod]   = useState('month');
+  const [summary,  setSummary]  = useState(null);
+  const [listings, setListings] = useState([]);
+  const [orders,   setOrders]   = useState([]);
+  const [income30, setIncome30] = useState([]);
+  const [exp30,    setExp30]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+  const [dueVaccinations, setDueVaccinations] = useState([]);
+  const [dueWeighings,    setDueWeighings]    = useState([]);
+  const [dueFollowUps,    setDueFollowUps]    = useState([]);
 
   useEffect(() => {
-    Promise.all([getSummary(), getMyListings()])
-      .then(([summaryRes, listingsRes]) => {
-        setStats(summaryRes.data);
-        setCount(listingsRes.data.length);
-      })
-      .catch(() => setError('Failed to load dashboard data.'))
-      .finally(() => setLoading(false));
+    getAnimals().then(r => {
+      const soon = [];
+      r.data.forEach(a => {
+        (a.vaccinationLog || []).forEach(v => {
+          if (!v.nextDueDate) return;
+          const days = Math.ceil((new Date(v.nextDueDate) - Date.now()) / (24 * 3600 * 1000));
+          if (days <= 14) soon.push({ animalId: a._id, animalType: a.type, breed: a.breed, tagId: a.tagId, vaccine: v.vaccine, nextDueDate: v.nextDueDate, days });
+        });
+      });
+      soon.sort((a, b) => a.days - b.days);
+      setDueVaccinations(soon);
+    }).catch(() => {});
+
+    getWeighingDue().then(r => setDueWeighings(r.data)).catch(() => {});
+    getFollowUpsDue().then(r => setDueFollowUps(r.data)).catch(() => {});
   }, []);
 
-  if (loading) return <p>Loading...</p>;
-  if (error)   return <p style={{ color: 'red' }}>{error}</p>;
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
+  useEffect(() => {
+    setLoading(true); setError('');
+    const { from, to } = getPeriodDates(period);
+    const from30 = thirtyDaysAgo();
+    Promise.all([
+      getSummary({ from, to }),
+      getMyListings(),
+      getMyOrders(),
+      getIncome({ from: from30 }),
+      getExpenses({ from: from30 }),
+    ])
+      .then(([sumRes, listRes, ordRes, incRes, expRes]) => {
+        setSummary(sumRes.data);
+        setListings(listRes.data);
+        setOrders(ordRes.data);
+        setIncome30(incRes.data);
+        setExp30(expRes.data);
+      })
+      .catch(() => setError('تعذّر تحميل البيانات. حاول مرة أخرى.'))
+      .finally(() => setLoading(false));
+  }, [period]);
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const incSpark = useMemo(() => bucketByDay(income30), [income30]);
+  const expSpark = useMemo(() => bucketByDay(exp30),    [exp30]);
+
+  const now            = new Date();
+  const soMonth        = new Date(now.getFullYear(), now.getMonth(), 1);
+  const soLastMonth    = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const newThisMonth   = listings.filter(l => new Date(l.createdAt) >= soMonth).length;
+  const newLastMonth   = listings.filter(l => { const d = new Date(l.createdAt); return d >= soLastMonth && d < soMonth; }).length;
+  const listingTrend   = newThisMonth - newLastMonth;
+
+  const byStatus = listings.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
+  const byType   = listings.reduce((a, l) => { const k = l.type || 'other'; a[k] = (a[k] || 0) + 1; return a; }, {});
+
+  const barData = Object.entries(byType).map(([type, value]) => {
+    const m = TYPE_META[type] || TYPE_META.other;
+    return { label: type, value, color: m.color, emoji: m.emoji, ar: m.ar };
+  });
+
+  const profit       = summary?.netProfit     ?? 0;
+  const income       = summary?.totalIncome   ?? 0;
+  const expenses     = summary?.totalExpenses ?? 0;
+  const margin       = income > 0 ? ((profit / income) * 100).toFixed(1) : null;
+  const profitColor  = profit > 0 ? C.greenText : profit < 0 ? C.redText : C.muted;
+  const profitBorder = profit > 0 ? '#BBF7D0'   : profit < 0 ? '#FECACA' : C.border;
+
+  // Activity feed: orders + income + expenses, sorted desc
+  const activity = useMemo(() => {
+    const items = [
+      ...orders.slice(0, 10).map(o => {
+        const isNew = o.status === 'pending', isDone = o.status === 'completed', isCancelled = o.status === 'cancelled';
+        return {
+          ts: o.createdAt,
+          type: 'order',
+          icon:   isDone ? '✅' : isCancelled ? '❌' : '🛒',
+          iconBg: isDone ? C.greenBg : isCancelled ? C.redBg : C.amberBg,
+          title:  `طلب جديد — ${o.listing?.breed || o.listing?.type || 'مواشي'}`,
+          sub:    `${isNew ? '⏳ في الانتظار' : isDone ? '✅ مكتمل' : isCancelled ? '❌ ملغي' : '🔄 مؤكد'} · ${fmtDate(o.createdAt)}`,
+          amount: o.totalAmount ? `+${fmtSAR(o.totalAmount)}` : null,
+          amtColor: C.greenText,
+        };
+      }),
+      ...income30.map(e => ({
+        ts: e.date || e.createdAt,
+        type: 'income',
+        icon: '💰', iconBg: C.greenBg,
+        title: e.note || (e.type === 'sale' ? 'دخل من بيع' : 'دفعة مقدمة'),
+        sub:   fmtDate(e.date || e.createdAt),
+        amount: `+${fmtSAR(e.amount)}`, amtColor: C.greenText,
+      })),
+      ...exp30.map(e => ({
+        ts: e.date || e.createdAt,
+        type: 'expense',
+        icon: '📉', iconBg: C.redBg,
+        title: e.note || `${(CAT[e.category] || { label: e.category }).label} — مصروف`,
+        sub:   fmtDate(e.date || e.createdAt),
+        amount: `-${fmtSAR(e.amount)}`, amtColor: C.redText,
+      })),
+    ]
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, 10);
+    return items;
+  }, [orders, income30, exp30]);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    return h < 12 ? 'صباح الخير' : h < 17 ? 'مساء الخير' : 'مساء النور';
+  })();
+
+  const periodLabel = PERIODS.find(p => p.key === period)?.ar ?? '';
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div>
-      <h2>Dashboard</h2>
-      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-        <StatCard label="Total Livestock"  value={count ?? 0} />
-        <StatCard label="Total Income"     value={fmt(stats?.totalIncome)} />
-        <StatCard label="Total Expenses"   value={fmt(stats?.totalExpenses)} />
-        <StatCard label="Net Profit"       value={fmt(stats?.netProfit)} />
+    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+      <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+
+      {/* ════ Hero ════ */}
+      <div style={{ background: C.hero, padding: '32px 32px 36px', position: 'relative', overflow: 'hidden' }}>
+        <div aria-hidden style={{ position: 'absolute', right: -20, top: -20, fontSize: '180px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🌾</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <p style={{ margin: '0 0 3px', fontSize: '13px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.3px' }}>{greeting} 👋</p>
+            <h1 style={{ margin: '0 0 5px', fontSize: '24px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
+              {user?.name ?? 'المزارع'}
+            </h1>
+            <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255,255,255,0.55)' }}>
+              {loading ? 'جارٍ تحميل لوحة التحكم…' : `${listings.length} إعلان · ${orders.filter(o => o.status === 'pending').length} طلب معلق`}
+            </p>
+          </div>
+
+          {/* Period selector */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {PERIODS.map(p => (
+              <button key={p.key} type="button" onClick={() => setPeriod(p.key)}
+                style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+                  background: period === p.key ? '#fff' : 'rgba(255,255,255,0.12)',
+                  color:      period === p.key ? C.greenDk : 'rgba(255,255,255,0.8)',
+                  transition: 'all 0.15s' }}>
+                {p.ar}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+
+      <div style={{ padding: '28px 28px 56px', maxWidth: '1140px', margin: '0 auto', boxSizing: 'border-box' }}>
+
+        {/* Error */}
+        {error && (
+          <div role="alert" style={{ background: C.redBg, border: `1px solid #FECACA`, borderRadius: '10px', padding: '11px 16px', color: C.redText, fontSize: '14px', marginBottom: '22px' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* ════ Quick actions ════ */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <QuickBtn to="/seller/add-listing" emoji="➕" label="إضافة قائمة جديدة" primary />
+          <QuickBtn to="/seller/expenses"    emoji="📉" label="عرض المصروفات" />
+          <QuickBtn to="/seller/income"      emoji="💰" label="عرض الدخل" />
+          <QuickBtn to="/seller/listings"    emoji="📋" label="قوائمي" />
+        </div>
+
+        {/* ════ KPI Cards ════ */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '14px', marginBottom: '22px' }}>
+
+          {/* 1 — إجمالي المواشي */}
+          <KpiCard
+            icon="🐄" iconBg={C.amberBg}
+            label="إجمالي المواشي"
+            value={{ text: listings.length, color: C.text }}
+            trend={newThisMonth > 0 ? {
+              dir:  listingTrend >= 0 ? 'up' : 'down',
+              text: `${newThisMonth}+ هذا الشهر`,
+            } : null}
+            extra={Object.entries(byStatus).map(([st, n]) => (
+              <span key={st} style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '20px', background: st === 'approved' ? C.greenBg : st === 'pending' ? C.amberBg : '#F3F4F6', color: st === 'approved' ? C.greenText : st === 'pending' ? C.amberText : '#374151' }}>
+                {n} {st === 'approved' ? 'معتمد' : st === 'pending' ? 'معلق' : st}
+              </span>
+            ))}
+            loading={loading}
+          />
+
+          {/* 2 — الدخل */}
+          <KpiCard
+            icon="💰" iconBg={C.greenBg}
+            label={`الدخل · ${periodLabel}`}
+            value={{ text: fmtSAR(income), color: C.greenText }}
+            trend={summary?.incomeByType ? null : null}
+            sub={summary?.incomeByType ? Object.entries(summary.incomeByType).map(([t, v]) => `${t}: ${fmtSAR(v)}`).join(' · ') : null}
+            loading={loading}
+          />
+
+          {/* 3 — النفقات */}
+          <KpiCard
+            icon="📉" iconBg={C.redBg}
+            label={`النفقات · ${periodLabel}`}
+            value={{ text: fmtSAR(expenses), color: C.redText }}
+            extra={summary?.expenseByCategory
+              ? Object.entries(summary.expenseByCategory).filter(([, v]) => v > 0).map(([cat, amt]) => {
+                  const m = CAT[cat] || { bg: '#F3F4F6', color: '#374151', label: cat };
+                  return <span key={cat} style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', background: m.bg, color: m.color }}>{m.label} {fmtSAR(amt)}</span>;
+                })
+              : null}
+            loading={loading}
+          />
+
+          {/* 4 — صافي الربح */}
+          <KpiCard
+            icon={profit > 0 ? '📈' : profit < 0 ? '⚠️' : '➖'}
+            iconBg={profit > 0 ? C.greenBg : profit < 0 ? C.redBg : '#F3F4F6'}
+            label="صافي الربح"
+            value={{ text: fmtSAR(profit), color: profitColor }}
+            border={profitBorder}
+            loading={loading}
+          >
+            {!loading && (
+              <div style={{ padding: '10px 12px', borderRadius: '10px', background: profit > 0 ? C.greenBg : profit < 0 ? C.redBg : '#F3F4F6' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: profitColor, fontWeight: '600', lineHeight: 1.5 }}>
+                  {profit > 0 && margin
+                    ? `هامش الربح ${margin}٪ — أداء ممتاز! 🎉`
+                    : profit < 0
+                    ? '⚠️ النفقات تتجاوز الدخل في هذه الفترة'
+                    : 'الدخل يساوي النفقات هذه الفترة'}
+                </p>
+              </div>
+            )}
+          </KpiCard>
+        </div>
+
+        {/* ════ Charts ════ */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr', gap: '14px', marginBottom: '22px' }}>
+
+          {/* Line chart */}
+          <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>الاتجاه خلال آخر 30 يومًا</div>
+                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>الدخل مقابل النفقات</div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: C.greenText }}>
+                  <span style={{ width: '20px', height: '2px', background: C.green, borderRadius: '2px', display: 'inline-block' }} /> دخل
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: C.redText }}>
+                  <span style={{ width: '20px', height: '2px', background: C.red, borderRadius: '2px', display: 'inline-block' }} /> نفقات
+                </span>
+              </div>
+            </div>
+            {loading
+              ? <Skeleton h={120} r={8} />
+              : <LineChart incomeData={incSpark} expenseData={expSpark} />
+            }
+          </div>
+
+          {/* Bar chart */}
+          <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>المواشي حسب الفئة</div>
+              <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>توزيع قوائمك الحالية</div>
+            </div>
+            {loading
+              ? <Skeleton h={110} r={8} />
+              : barData.length > 0
+                ? <BarChart data={barData} />
+                : <div style={{ textAlign: 'center', padding: '28px', color: C.muted, fontSize: '13px' }}>لا توجد قوائم بعد</div>
+            }
+          </div>
+        </div>
+
+        {/* ════ Activity + right panel ════ */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px', gap: '14px', alignItems: 'flex-start' }}>
+
+          {/* Activity feed */}
+          <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: '700', color: C.text }}>الأنشطة الأخيرة</div>
+                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>طلبات · دخل · مصروفات</div>
+              </div>
+              <Link to="/seller/orders" style={{ fontSize: '12px', color: C.green, fontWeight: '700', textDecoration: 'none', padding: '5px 12px', background: C.greenBg, borderRadius: '20px', border: `1px solid ${C.green}30` }}>
+                كل الطلبات ›
+              </Link>
+            </div>
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[0,1,2,3,4].map(i => <Skeleton key={i} h={52} r={10} />)}
+              </div>
+            ) : activity.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+                <div style={{ fontSize: '44px', marginBottom: '10px' }}>🌱</div>
+                <p style={{ margin: '0 0 16px', fontSize: '14px', color: C.muted }}>لا توجد أنشطة بعد. ابدأ بإضافة قائمة.</p>
+                <Link to="/seller/add-listing" style={{ display: 'inline-block', padding: '9px 18px', background: C.green, color: '#fff', borderRadius: '10px', fontSize: '13px', fontWeight: '700', textDecoration: 'none' }}>
+                  ➕ إضافة أول قائمة
+                </Link>
+              </div>
+            ) : (
+              <>
+                {/* Section labels */}
+                {['order', 'income', 'expense'].map(type => {
+                  const items = activity.filter(a => a.type === type);
+                  if (!items.length) return null;
+                  const sectionLabel = type === 'order' ? '🛒 طلبات' : type === 'income' ? '💰 دخل' : '📉 مصروفات';
+                  return (
+                    <div key={type} style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 10px 2px' }}>
+                        {sectionLabel}
+                      </div>
+                      {items.map((item, i) => (
+                        <ActivityItem key={i} {...item} />
+                      ))}
+                    </div>
+                  );
+                })}
+                <div style={{ marginTop: '10px', paddingTop: '12px', borderTop: `1px solid ${C.border}`, textAlign: 'center' }}>
+                  <Link to="/seller/income" style={{ fontSize: '12px', color: C.green, fontWeight: '700', textDecoration: 'none' }}>
+                    عرض التحليلات التفصيلية ›
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right panel: pending orders + stats */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            {/* Pending orders alert */}
+            {!loading && orders.filter(o => o.status === 'pending').length > 0 && (
+              <div style={{ background: C.amberBg, border: `1.5px solid #FDE68A`, borderRadius: '14px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '22px' }}>⏳</span>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: C.amberText }}>طلبات معلقة</div>
+                    <div style={{ fontSize: '11px', color: C.amberText, opacity: 0.8 }}>تحتاج موافقتك</div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontSize: '24px', fontWeight: '800', color: C.amberText }}>
+                    {orders.filter(o => o.status === 'pending').length}
+                  </div>
+                </div>
+                <Link to="/seller/orders" style={{ display: 'block', padding: '9px', background: C.amber, color: '#fff', textDecoration: 'none', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: '700' }}>
+                  مراجعة الطلبات
+                </Link>
+              </div>
+            )}
+
+            {/* Mini stats */}
+            <div style={{ background: C.card, borderRadius: '14px', padding: '16px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
+                ملخص سريع
+              </div>
+              {[
+                { label: 'إجمالي الطلبات',  val: orders.length,                                    color: C.text     },
+                { label: 'مكتملة',          val: orders.filter(o => o.status === 'completed').length, color: C.greenText },
+                { label: 'قوائم نشطة',      val: byStatus['approved'] || 0,                        color: C.blue     },
+                { label: 'قوائم معلقة',     val: byStatus['pending']  || 0,                        color: C.amberText },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: '12px', color: C.muted }}>{label}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color }}>{val}</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0' }}>
+                <span style={{ fontSize: '12px', color: C.muted }}>إجمالي الإيرادات</span>
+                <span style={{ fontSize: '14px', fontWeight: '800', color: C.greenText }}>{fmtSAR(income)}</span>
+              </div>
+            </div>
+
+            {/* Livestock by type mini card */}
+            {!loading && barData.length > 0 && (
+              <div style={{ background: C.card, borderRadius: '14px', padding: '16px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                  المواشي حسب النوع
+                </div>
+                {barData.map(({ label, value, emoji, ar, color }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: '15px' }}>{emoji}</span>
+                    <span style={{ flex: 1, fontSize: '12px', color: C.text }}>{ar}</span>
+                    <span style={{ fontSize: '13px', fontWeight: '800', color }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Upcoming vaccination reminders ── */}
+      {dueVaccinations.length > 0 && (
+        <div style={{ marginTop: '24px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: '16px', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontWeight: '800', fontSize: '14px', color: '#92400E' }}>
+              💉 تطعيمات قادمة ({dueVaccinations.length})
+            </div>
+            <Link to="/seller/herd" style={{ fontSize: '12px', color: '#D97706', fontWeight: '700', textDecoration: 'none' }}>
+              عرض كل القطيع ←
+            </Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {dueVaccinations.slice(0, 5).map((v, i) => {
+              const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
+              const TYPE_AR    = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#fff', borderRadius: '10px', border: '1px solid #FDE68A' }}>
+                  <span style={{ fontSize: 18 }}>{TYPE_EMOJI[v.animalType] || '🐾'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#92400E' }}>
+                      {v.vaccine}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#D97706' }}>
+                      {TYPE_AR[v.animalType]}{v.breed ? ` — ${v.breed}` : ''}{v.tagId ? ` · ${v.tagId}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'left', flexShrink: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: v.days <= 0 ? C.red : v.days <= 3 ? '#D97706' : '#92400E' }}>
+                      {v.days <= 0 ? 'متأخر!' : `${v.days} يوم`}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#D97706' }}>
+                      {new Date(v.nextDueDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Medical follow-up reminders ── */}
+      {dueFollowUps.length > 0 && (
+        <div style={{ marginTop: '16px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: '16px', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontWeight: '800', fontSize: '14px', color: '#9F1239' }}>
+              🏥 متابعات طبية قادمة ({dueFollowUps.length})
+            </div>
+            <Link to="/seller/herd" style={{ fontSize: '12px', color: '#E11D48', fontWeight: '700', textDecoration: 'none' }}>
+              عرض القطيع ←
+            </Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {dueFollowUps.slice(0, 4).map((rec, i) => {
+              const TE = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
+              const TA = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
+              const days = rec.followUpDate
+                ? Math.ceil((new Date(rec.followUpDate) - Date.now()) / (24 * 3600 * 1000))
+                : null;
+              const a = rec.animal || {};
+              return (
+                <div key={rec._id ?? i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#fff', borderRadius: '10px', border: '1px solid #FECDD3' }}>
+                  <span style={{ fontSize: 18 }}>{TE[a.type] || '🐾'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#9F1239' }}>
+                      {rec.diagnosis || 'متابعة طبية'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#E11D48' }}>
+                      {TA[a.type] || ''}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
+                    </div>
+                  </div>
+                  {days !== null && (
+                    <div style={{ textAlign: 'left', flexShrink: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: '800', color: days <= 0 ? C.red : days <= 3 ? C.amber : '#E11D48' }}>
+                        {days <= 0 ? 'متأخر!' : `${days} يوم`}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#9F1239' }}>
+                        {new Date(rec.followUpDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Weighing reminders ── */}
+      {dueWeighings.length > 0 && (
+        <div style={{ marginTop: '16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '16px', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontWeight: '800', fontSize: '14px', color: '#1E3A5F' }}>
+              ⚖️ مواعيد وزن قادمة ({dueWeighings.length})
+            </div>
+            <Link to="/seller/herd" style={{ fontSize: '12px', color: '#2563EB', fontWeight: '700', textDecoration: 'none' }}>
+              عرض القطيع ←
+            </Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {dueWeighings.slice(0, 4).map((a, i) => {
+              const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
+              const TYPE_AR    = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
+              const days = a.nextWeighingDate
+                ? Math.ceil((new Date(a.nextWeighingDate) - Date.now()) / (24 * 3600 * 1000))
+                : null;
+              const pct = a.targetWeight && a.currentWeight ? Math.min(100, Math.round((a.currentWeight / a.targetWeight) * 100)) : null;
+              return (
+                <div key={a._id ?? i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#fff', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
+                  <span style={{ fontSize: 18 }}>{TYPE_EMOJI[a.type] || '🐾'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E3A5F' }}>
+                      {TYPE_AR[a.type]}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
+                    </div>
+                    {pct !== null && (
+                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ flex: 1, height: 4, background: '#DBEAFE', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', background: '#2563EB', borderRadius: 2, width: `${pct}%` }} />
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#2563EB', whiteSpace: 'nowrap' }}>{a.currentWeight} / {a.targetWeight} كجم</span>
+                      </div>
+                    )}
+                  </div>
+                  {days !== null && (
+                    <div style={{ textAlign: 'left', flexShrink: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: '800', color: days <= 0 ? C.red : days <= 2 ? C.amber : '#2563EB' }}>
+                        {days <= 0 ? 'متأخر!' : `${days} يوم`}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#6B7280' }}>
+                        {new Date(a.nextWeighingDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

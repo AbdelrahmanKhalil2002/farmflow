@@ -1,0 +1,149 @@
+/* ============================================================
+   FarmFlow — Global Responsive & Polish Stylesheet
+   Tasks 29.1–29.8
+   ============================================================ */
+
+/* ── 29.1 Responsive grids ───────────────────────────────── */
+@media (max-width: 768px) {
+  .ff-grid-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  .ff-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── 29.2 Touch-friendly tap targets ─────────────────────── */
+@media (max-width: 768px) {
+  button,
+  [role="button"] {
+    min-height: 44px !important;
+  }
+  .ff-chip {
+    min-height: 36px !important;
+    padding: 6px 12px !important;
+  }
+}
+
+/* ── 29.3 SellerLayout sidebar mobile drawer ─────────────── */
+@media (max-width: 768px) {
+  .ff-sidebar {
+    position: fixed !important;
+    left: -260px !important;
+    transition: left 0.3s ease !important;
+    z-index: 1000 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+  }
+  .ff-sidebar.open {
+    left: 0 !important;
+  }
+  .ff-sidebar-overlay {
+    display: block !important;
+  }
+  .ff-main-content {
+    margin-left: 0 !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .ff-hamburger {
+    display: flex !important;
+  }
+}
+@media (min-width: 769px) {
+  .ff-hamburger {
+    display: none !important;
+  }
+  .ff-sidebar-overlay {
+    display: none !important;
+  }
+}
+
+/* ── 29.4 BuyerBrowse filter panel mobile bottom sheet ───── */
+@media (max-width: 768px) {
+  .ff-filter-panel {
+    position: fixed !important;
+    bottom: -100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: #fff !important;
+    border-radius: 20px 20px 0 0 !important;
+    padding: 20px !important;
+    z-index: 999 !important;
+    transition: bottom 0.3s ease !important;
+    max-height: 80vh !important;
+    overflow-y: auto !important;
+  }
+  .ff-filter-panel.open {
+    bottom: 0 !important;
+  }
+}
+
+/* ── 29.5 Arabic typography ──────────────────────────────── */
+*,
+*::before,
+*::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+[dir="rtl"],
+.ff-ar {
+  font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+}
+
+/* ── 29.6 Consistent spacing on mobile ───────────────────── */
+@media (max-width: 768px) {
+  .ff-page-pad {
+    padding: 12px !important;
+  }
+  .ff-section {
+    margin-bottom: 12px !important;
+  }
+}
+
+/* ── 29.7 Loading skeleton keyframe (shared) ─────────────── */
+@keyframes ff-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.ff-skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0e8d8 25%,
+    #faf6f0 50%,
+    #f0e8d8 75%
+  );
+  background-size: 200% 100%;
+  animation: ff-shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+
+/* ── 29.8 Empty state utility classes ────────────────────── */
+.ff-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+.ff-empty-state .ff-empty-icon {
+  font-size: 52px;
+  margin-bottom: 12px;
+}
+.ff-empty-state .ff-empty-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #2C1810;
+  margin: 0 0 6px;
+}
+.ff-empty-state .ff-empty-sub {
+  font-size: 13px;
+  color: #8B6B5A;
+  margin: 0 0 20px;
+}

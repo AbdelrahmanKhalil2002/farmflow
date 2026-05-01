@@ -11,13 +11,16 @@ const {
   deleteListing,
 } = require('../controllers/listingController');
 
+const LISTING_TYPES = ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'other'];
+
 const listingValidation = [
-  body('type')
-    .isIn(['cattle', 'sheep', 'goat', 'camel', 'horse', 'other'])
-    .withMessage('Invalid livestock type'),
+  body('type').isIn(LISTING_TYPES).withMessage('Invalid livestock type'),
   body('age').isFloat({ min: 0 }).withMessage('Age must be a positive number (months)'),
   body('weight').isFloat({ min: 0 }).withMessage('Weight must be a positive number (kg)'),
   body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+  body('pricePerKg').optional().isFloat({ min: 0 }).withMessage('pricePerKg must be a positive number'),
+  body('deliveryType').optional().isIn(['none', 'farm', 'admin']).withMessage('Invalid deliveryType'),
+  body('deliveryCost').optional().isFloat({ min: 0 }).withMessage('deliveryCost must be positive'),
 ];
 
 const idParam = param('id').isMongoId().withMessage('Invalid listing ID');
@@ -36,6 +39,9 @@ router.get('/', (req, res, next) => {
   }
   next();
 }, getListings);
+
+// Seller's own listings (all statuses) — must be before /:id
+router.get('/my', protect, authorizeRoles('seller', 'admin'), getListings);
 
 router.get('/:id', idParam, (req, res, next) => {
   const jwt = require('jsonwebtoken');

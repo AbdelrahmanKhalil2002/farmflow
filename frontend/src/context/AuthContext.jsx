@@ -68,14 +68,14 @@ export const AuthProvider = ({ children }) => {
 
   // ─── Auth actions ────────────────────────────────────────────────────────────
 
-  const login = (userData, authToken) => {
+  const login = (userData, authToken, persistent = false) => {
     if (!authToken) {
       console.error('[AuthContext] login() called without a token — session not saved');
       return;
     }
     // Token is intentionally NOT stored in React state.
-    // Keeping it in sessionStorage only reduces React DevTools exposure.
-    saveToken(authToken);
+    // Keeping it out of React state reduces React DevTools exposure.
+    saveToken(authToken, persistent);
     setUser(userData);
   };
 

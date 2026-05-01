@@ -7,11 +7,16 @@
  *   fmt(1500.5)   → "1,500.5"
  *   fmt(null)     → "0"
  */
+export const CURRENCY = 'ج.م';
+
 export const fmt = (n) =>
   Number(n ?? 0).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+
+/** Format a number with the Egyptian Pound symbol: "15,000 ج.م" */
+export const fmtEGP = (n) => `${fmt(n)} ${CURRENCY}`;
 
 /**
  * Resolve a backend-relative image path to an absolute URL.

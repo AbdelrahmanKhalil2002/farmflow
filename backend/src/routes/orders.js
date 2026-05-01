@@ -7,6 +7,7 @@ const {
   getOrders,
   getOrderById,
   updateOrderStatus,
+  setDelivery,
 } = require('../controllers/orderController');
 
 const idParam = param('id').isMongoId().withMessage('Invalid order ID');
@@ -19,7 +20,7 @@ router.post(
   authorizeRoles('buyer'),
   [
     body('listingId').isMongoId().withMessage('Valid listing ID is required'),
-    body('paymentType').isIn(['deposit', 'cod']).withMessage('Payment type must be deposit or cod'),
+    body('paymentType').isIn(['deposit', 'cod', 'instapay']).withMessage('Payment type must be deposit, cod, or instapay'),
     body('depositAmount')
       .optional()
       .isFloat({ min: 0.01 })
@@ -42,6 +43,19 @@ router.put(
     body('status').isIn(VALID_STATUSES).withMessage(`Status must be one of: ${VALID_STATUSES.join(', ')}`),
   ],
   updateOrderStatus
+);
+
+// Admin: set delivery cost + status for admin-handled orders
+router.patch(
+  '/:id/delivery',
+  protect,
+  authorizeRoles('admin'),
+  [
+    idParam,
+    body('deliveryCost').optional().isFloat({ min: 0 }).withMessage('Delivery cost must be a positive number'),
+    body('deliveryStatus').optional().isIn(['pending', 'in_transit', 'delivered']).withMessage('Invalid delivery status'),
+  ],
+  setDelivery
 );
 
 module.exports = router;

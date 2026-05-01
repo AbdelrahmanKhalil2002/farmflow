@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const Order = require('../models/Order');
 const Listing = require('../models/Listing');
+const { createNotification } = require('../utils/notify');
 
 // POST /api/orders
 // Buyer places an order on an approved listing
@@ -10,7 +11,7 @@ const createOrder = async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { listingId, paymentType, depositAmount, notes } = req.body;
+  const { listingId, paymentType, depositAmount, notes, deliveryLocation } = req.body;
 
   try {
     const listing = await Listing.findById(listingId);
@@ -49,12 +50,23 @@ const createOrder = async (req, res) => {
       depositAmount: paymentType === 'deposit' ? depositAmount : 0,
       totalAmount: listing.price,
       notes,
+      deliveryLocation: (deliveryLocation?.lat != null && deliveryLocation?.lng != null)
+        ? { lat: deliveryLocation.lat, lng: deliveryLocation.lng, address: deliveryLocation.address || '' }
+        : undefined,
     });
 
     await order.populate([
-      { path: 'listing', select: 'type breed price' },
+      { path: 'listing', select: 'type breed price images deliveryType deliveryCost' },
       { path: 'seller', select: 'name phone' },
     ]);
+
+    // Notify seller of new order
+    createNotification(listing.seller, {
+      type:    'new_order',
+      title:   'طلب جديد',
+      message: `لديك طلب جديد على إعلانك`,
+      link:    '/seller/orders',
+    });
 
     res.status(201).json(order);
   } catch (err) {
@@ -73,7 +85,7 @@ const getOrders = async (req, res) => {
     // admin: no filter
 
     const orders = await Order.find(filter)
-      .populate('listing', 'type breed price images')
+      .populate('listing', 'type breed price images deliveryType deliveryCost')
       .populate('buyer', 'name phone')
       .populate('seller', 'name phone')
       .sort({ createdAt: -1 });
@@ -88,7 +100,7 @@ const getOrders = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('listing', 'type breed price images')
+      .populate('listing', 'type breed price images deliveryType deliveryCost')
       .populate('buyer', 'name phone')
       .populate('seller', 'name phone');
 
@@ -158,10 +170,50 @@ const updateOrderStatus = async (req, res) => {
       { path: 'seller', select: 'name phone' },
     ]);
 
+    // Notifications based on new status
+    if (status === 'confirmed') {
+      createNotification(order.buyer, {
+        type: 'order_confirmed', title: 'تم تأكيد طلبك',
+        message: 'قام البائع بتأكيد طلبك', link: '/buyer/orders',
+      });
+    } else if (status === 'cancelled') {
+      createNotification(order.buyer, {
+        type: 'order_cancelled', title: 'تم إلغاء الطلب',
+        message: 'تم إلغاء طلبك', link: '/buyer/orders',
+      });
+    } else if (status === 'completed') {
+      createNotification(order.buyer, {
+        type: 'order_completed', title: 'اكتمل طلبك',
+        message: 'تم تسليم طلبك بنجاح', link: '/buyer/orders',
+      });
+    }
+
     res.json(order);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus };
+// PATCH /api/orders/:id/delivery — admin sets delivery cost and/or status
+const setDelivery = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { deliveryCost, deliveryStatus } = req.body;
+  const update = {};
+  if (deliveryCost  !== undefined) update.deliveryCost  = deliveryCost;
+  if (deliveryStatus !== undefined) update.deliveryStatus = deliveryStatus;
+
+  try {
+    const order = await Order.findByIdAndUpdate(req.params.id, update, { new: true })
+      .populate('listing', 'type breed price images deliveryType deliveryCost')
+      .populate('buyer',  'name phone')
+      .populate('seller', 'name phone');
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, setDelivery };

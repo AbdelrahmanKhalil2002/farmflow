@@ -1,124 +1,889 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { registerUser } from '../services/authService';
+import { registerUser, verifyNationalId } from '../services/authService';
+import { validateEgyptianId } from '../utils/egyptianId';
+import { useLang, LangToggle } from '../context/LangContext';
 
-const parseError = (err) => {
-  const data = err.response?.data;
-  if (!data) return 'Network error. Please try again.';
-  if (data.errors?.length) return data.errors[0].msg;
-  return data.message || 'Something went wrong.';
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  bg:           '#FFFDF8',
+  white:        '#FFFFFF',
+  buyerPanel:   'linear-gradient(155deg, #0E2E1A 0%, #1A5C30 50%, #2D7A42 100%)',
+  sellerPanel:  'linear-gradient(155deg, #1C0E05 0%, #4A2208 48%, #6B3518 100%)',
+  green:        '#3A7D44',
+  greenDk:      '#2D6235',
+  greenLt:      '#F0F7F1',
+  tan:          '#C49A6C',
+  amberLt:      '#FFFBEB',
+  border:       '#E8D5C0',
+  text:         '#1C0E05',
+  muted:        '#8B6B5A',
+  errorBg:      '#FFF5F5',
+  errorBorder:  '#FECACA',
+  errorText:    '#B91C1C',
 };
 
-const Register = () => {
-  const navigate = useNavigate();
-  const { user, login } = useAuth();
+// ─── Bilingual data arrays ────────────────────────────────────────────────────
+const GOVERNORATES = [
+  { ar: 'القاهرة',       en: 'Cairo'          },
+  { ar: 'الجيزة',        en: 'Giza'           },
+  { ar: 'الإسكندرية',    en: 'Alexandria'     },
+  { ar: 'الشرقية',       en: 'Sharqia'        },
+  { ar: 'الدقهلية',      en: 'Dakahlia'       },
+  { ar: 'البحيرة',       en: 'Beheira'        },
+  { ar: 'الغربية',       en: 'Gharbia'        },
+  { ar: 'المنوفية',      en: 'Monufia'        },
+  { ar: 'القليوبية',     en: 'Qalyubia'       },
+  { ar: 'كفر الشيخ',     en: 'Kafr El-Sheikh' },
+  { ar: 'دمياط',         en: 'Damietta'       },
+  { ar: 'الإسماعيلية',   en: 'Ismailia'       },
+  { ar: 'بورسعيد',       en: 'Port Said'      },
+  { ar: 'السويس',        en: 'Suez'           },
+  { ar: 'المنيا',        en: 'Minya'          },
+  { ar: 'بني سويف',      en: 'Beni Suef'      },
+  { ar: 'الفيوم',        en: 'Fayoum'         },
+  { ar: 'أسيوط',         en: 'Asyut'          },
+  { ar: 'سوهاج',         en: 'Sohag'          },
+  { ar: 'قنا',           en: 'Qena'           },
+  { ar: 'الأقصر',        en: 'Luxor'          },
+  { ar: 'أسوان',         en: 'Aswan'          },
+  { ar: 'مطروح',         en: 'Matrouh'        },
+  { ar: 'شمال سيناء',    en: 'North Sinai'    },
+  { ar: 'جنوب سيناء',    en: 'South Sinai'    },
+  { ar: 'الوادي الجديد', en: 'New Valley'     },
+  { ar: 'البحر الأحمر',  en: 'Red Sea'        },
+];
 
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'buyer',
-  });
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+const ANIMAL_TYPES = [
+  { id: 'cattle',  emoji: '🐄', ar: 'أبقار',  en: 'Cattle'  },
+  { id: 'buffalo', emoji: '🐃', ar: 'جاموس',  en: 'Buffalo' },
+  { id: 'sheep',   emoji: '🐑', ar: 'أغنام',  en: 'Sheep'   },
+  { id: 'goat',    emoji: '🐐', ar: 'ماعز',   en: 'Goats'   },
+  { id: 'camel',   emoji: '🐪', ar: 'إبل',    en: 'Camels'  },
+  { id: 'horse',   emoji: '🐎', ar: 'خيول',   en: 'Horses'  },
+  { id: 'poultry', emoji: '🐓', ar: 'دواجن',  en: 'Poultry' },
+  { id: 'rabbit',  emoji: '🐇', ar: 'أرانب',  en: 'Rabbits' },
+];
 
-  // Redirect already-authenticated users away from /register
+const BUYER_PERKS = [
+  { ar: 'أكثر من ١٢٠٠ إعلان معتمد',   en: '1,200+ verified listings'        },
+  { ar: 'تواصل مباشر مع البائعين',      en: 'Direct contact with sellers'     },
+  { ar: 'تتبع طلباتك بسهولة',           en: 'Easy order tracking'             },
+  { ar: 'حماية المعاملات من FarmFlow',  en: 'FarmFlow transaction protection'  },
+];
+
+const SELLER_PERKS = [
+  { ar: 'تواصل مع أكثر من ٥٠٠ مشترٍ',  en: 'Reach 500+ active buyers'     },
+  { ar: 'إنشاء إعلانات مجانية',          en: 'Free listing creation'         },
+  { ar: 'إدارة المصاريف والدخل',         en: 'Expense & income tracker'      },
+  { ar: 'لوحة تحكم متكاملة للطلبات',    en: 'Full order management panel'   },
+];
+
+const TRUST_STATS = [
+  { value: '١٢٠٠+', ar: 'إعلان معتمد',  en: 'Verified Listings' },
+  { value: '٣',      ar: 'سنوات تشغيل', en: 'Years Operating'   },
+  { value: '٦٠٠+',  ar: 'صفقة ناجحة',  en: 'Successful Sales'  },
+];
+
+// Map Arabic validation error strings → translation keys
+const ID_ERR_KEYS = {
+  'يجب أن يتكون من 14 رقمًا بالضبط':       'reg.idErr.notFourteen',
+  'الرقم الأول يجب أن يكون 2 أو 3':         'reg.idErr.badCentury',
+  'شهر الميلاد غير صحيح':                   'reg.idErr.badMonth',
+  'يوم الميلاد غير صحيح':                   'reg.idErr.badDay',
+  'تاريخ الميلاد في المستقبل':               'reg.idErr.futureDate',
+  'يجب أن يكون العمر 16 عامًا على الأقل':   'reg.idErr.tooYoung',
+  'كود المحافظة غير صحيح':                   'reg.idErr.badGov',
+};
+
+const parseError = (err, t) => {
+  const data = err.response?.data;
+  if (!data) return t('common.networkErr');
+  if (data.errors?.length) return data.errors[0].msg;
+  return data.message || t('common.unknownErr');
+};
+
+// ─── Field ────────────────────────────────────────────────────────────────────
+const Field = ({ label, optLabel, name, type = 'text', placeholder, value, onChange,
+                 autoFocus, required = true, children }) => {
+  const { isRTL, t } = useLang();
+  const [focused, setFocused] = useState(false);
+  return (
+    <div>
+      <label htmlFor={name} style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+        <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{label}</span>
+        {optLabel && <span style={{ fontSize: '11px', color: C.muted, fontWeight: '400' }}>{optLabel}</span>}
+        {!required && !optLabel && <span style={{ fontSize: '11px', color: C.muted, marginInlineStart: 'auto' }}>({t('common.optional').replace(/[()]/g,'')})</span>}
+      </label>
+      {children ? children({ focused, setFocused }) : (
+        <input
+          id={name} name={name} type={type} value={value} onChange={onChange}
+          placeholder={placeholder} required={required} autoFocus={autoFocus}
+          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          style={{
+            width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+            border: `1.5px solid ${focused ? C.green : C.border}`,
+            borderRadius: '10px', background: C.white, fontSize: '15px',
+            color: C.text, transition: 'border-color 0.15s', fontFamily: 'inherit', outline: 'none',
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── PhoneField ───────────────────────────────────────────────────────────────
+const PhoneField = ({ label, name, value, onChange, required = true, autoFocus = false }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div>
+      <label htmlFor={name} style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: C.text, marginBottom: '6px' }}>
+        {label}
+      </label>
+      <div
+        style={{ display: 'flex', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', overflow: 'hidden', background: C.white, transition: 'border-color 0.15s' }}
+        onFocusCapture={() => setFocused(true)}
+        onBlurCapture={() => setFocused(false)}
+      >
+        <div style={{ padding: '0 14px', background: '#F3F7F3', borderInlineEnd: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '700', color: C.text, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          🇪🇬 +20
+        </div>
+        <input id={name} name={name} type="tel" value={value} onChange={onChange}
+          placeholder="1X XXXX XXXX" required={required} autoFocus={autoFocus}
+          style={{ flex: 1, border: 'none', padding: '12px 14px', fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none', background: 'transparent', minWidth: 0, direction: 'ltr' }} />
+      </div>
+    </div>
+  );
+};
+
+// ─── PwdField ─────────────────────────────────────────────────────────────────
+const PwdField = ({ id, name, value, onChange, placeholder = '••••••••', required = true, minLength }) => {
+  const { t } = useLang();
+  const [focused, setFocused] = useState(false);
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        id={id} name={name} type={show ? 'text' : 'password'}
+        value={value} onChange={onChange}
+        placeholder={placeholder} required={required} minLength={minLength}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{
+          width: '100%', padding: '12px 44px 12px 14px', boxSizing: 'border-box',
+          border: `1.5px solid ${focused ? C.green : C.border}`,
+          borderRadius: '10px', background: C.white, fontSize: '15px',
+          color: C.text, fontFamily: 'inherit', outline: 'none', direction: 'ltr',
+        }}
+      />
+      <button type="button" onClick={() => setShow(p => !p)} aria-label={show ? t('auth.hidePwd') : t('auth.showPwd')}
+        style={{ position: 'absolute', insetInlineEnd: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '17px', padding: '4px', lineHeight: 1 }}>
+        {show ? '🙈' : '👁'}
+      </button>
+    </div>
+  );
+};
+
+// ─── NationalIdField ──────────────────────────────────────────────────────────
+const NationalIdField = ({ value, onChange, onStatusChange }) => {
+  const { t, isRTL } = useLang();
+  const [focused,  setFocused]  = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [idInfo,   setIdInfo]   = useState(null);
+  const [idError,  setIdError]  = useState('');
+  const timerRef  = useRef(null);
+  const statusRef = useRef('idle');
+  const cbRef     = useRef(onStatusChange);
+  useEffect(() => { cbRef.current = onStatusChange; });
+
+  const handleChange = (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 14);
+    onChange({ target: { name: 'nationalId', value: digits } });
+  };
+
+  const xlateErr = (msg) => {
+    const key = ID_ERR_KEYS[msg];
+    return key ? t(key) : msg;
+  };
+
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
-  }, [user, navigate]);
+    if (timerRef.current) clearTimeout(timerRef.current);
 
-  const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const notify = (s) => {
+      if (statusRef.current !== s) { statusRef.current = s; cbRef.current(s); }
+    };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSubmitting(true);
+    if (!value) { setChecking(false); setIdInfo(null); setIdError(''); notify('idle'); return; }
+    if (value.length < 14) { setChecking(false); setIdInfo(null); setIdError(''); notify('idle'); return; }
 
-    try {
-      const { data } = await registerUser(form.name, form.email, form.password, form.role);
-      // Log the user in immediately — the useEffect watching `user` handles redirect.
-      login(data.user, data.token);
-    } catch (err) {
-      setError(parseError(err));
-    } finally {
-      setSubmitting(false);
+    const clientResult = validateEgyptianId(value);
+    if (!clientResult.valid) {
+      setChecking(false); setIdInfo(null);
+      setIdError(xlateErr(clientResult.error || t('reg.idInvalid')));
+      notify('invalid'); return;
     }
+
+    setChecking(true); setIdInfo(null); setIdError('');
+    notify('checking');
+
+    timerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await verifyNationalId(value);
+        if (data.verified) {
+          setChecking(false); setIdInfo(data.info || clientResult.info); notify('valid');
+        } else {
+          setChecking(false);
+          setIdError(data.message || t('reg.idAlreadyReg'));
+          notify('invalid');
+        }
+      } catch {
+        setChecking(false); setIdInfo(clientResult.info); notify('valid');
+      }
+    }, 700);
+
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const borderClr = () => {
+    if (idInfo)  return C.green;
+    if (idError) return C.errorBorder;
+    if (focused) return C.green;
+    return C.border;
   };
 
   return (
     <div>
-      <h1>Register</h1>
+      <label htmlFor="nationalId" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+        <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.nationalId')}</span>
+        <span style={{ fontSize: '11px', color: C.muted }}>{t('reg.nationalIdSub')}</span>
+      </label>
+      <div style={{ position: 'relative' }}>
+        <input
+          id="nationalId" name="nationalId" type="text" inputMode="numeric"
+          value={value} onChange={handleChange}
+          placeholder={isRTL ? '٢٩XXXXXXXXXXXXXX' : '2XXXXXXXXXXXXXX'}
+          maxLength={14} required
+          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          style={{
+            width: '100%', padding: '12px 44px 12px 14px', boxSizing: 'border-box',
+            border: `1.5px solid ${borderClr()}`,
+            borderRadius: '10px', background: C.white, fontSize: '16px', letterSpacing: '2px',
+            color: C.text, transition: 'border-color 0.15s', fontFamily: 'monospace', outline: 'none',
+            direction: 'ltr',
+          }}
+        />
+        <span aria-hidden="true" style={{ position: 'absolute', insetInlineEnd: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '16px', lineHeight: 1, pointerEvents: 'none' }}>
+          {checking           && '⏳'}
+          {!checking && idInfo  && '✅'}
+          {!checking && idError && '❌'}
+        </span>
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="name">Name</label>
-          <br />
-          <input
-            id="name"
-            name="name"
-            type="text"
-            value={form.name}
-            onChange={handleChange}
-            required
-            autoFocus
-          />
+      {!idInfo && !idError && value.length > 0 && value.length < 14 && (
+        <div style={{ fontSize: '11px', color: C.muted, marginTop: '4px' }}>{value.length}/14</div>
+      )}
+      {idError && (
+        <div style={{ fontSize: '11px', color: C.errorText, marginTop: '4px' }}>{idError}</div>
+      )}
+      {idInfo && (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+          {idInfo.birthYear && (
+            <span style={{ fontSize: '11px', background: C.greenLt, border: '1px solid #BBE0C3', color: C.greenDk, padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
+              📅 {idInfo.birthDay}/{idInfo.birthMonth}/{idInfo.birthYear}
+            </span>
+          )}
+          {idInfo.age !== undefined && (
+            <span style={{ fontSize: '11px', background: C.greenLt, border: '1px solid #BBE0C3', color: C.greenDk, padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
+              🎂 {idInfo.age} {t('reg.idYears')}
+            </span>
+          )}
+          {idInfo.governorateName && (
+            <span style={{ fontSize: '11px', background: C.greenLt, border: '1px solid #BBE0C3', color: C.greenDk, padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
+              📍 {idInfo.governorateName}
+            </span>
+          )}
+          {idInfo.gender && (
+            <span style={{ fontSize: '11px', background: C.greenLt, border: '1px solid #BBE0C3', color: C.greenDk, padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
+              {idInfo.gender === 'male' ? `👨 ${t('reg.idGenderMale')}` : `👩 ${t('reg.idGenderFemale')}`}
+            </span>
+          )}
         </div>
-
-        <div>
-          <label htmlFor="email">Email</label>
-          <br />
-          <input
-            id="email"
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password">Password</label>
-          <br />
-          <input
-            id="password"
-            name="password"
-            type="password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            minLength={6}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="role">Role</label>
-          <br />
-          <select
-            id="role"
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-          >
-            <option value="buyer">Buyer</option>
-            <option value="seller">Seller</option>
-          </select>
-        </div>
-
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Registering...' : 'Register'}
-        </button>
-      </form>
-
-      <p>
-        Already have an account? <Link to="/login">Login</Link>
-      </p>
+      )}
     </div>
   );
 };
+
+// ─── ProgressDots ─────────────────────────────────────────────────────────────
+const ProgressDots = ({ step, total }) => (
+  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+    {Array.from({ length: total }, (_, i) => (
+      <div key={i} style={{ height: '4px', width: step >= i + 1 ? '20px' : '8px', borderRadius: '2px', background: step >= i + 1 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)', transition: 'all 0.3s' }} />
+    ))}
+  </div>
+);
+
+// ─── Register ─────────────────────────────────────────────────────────────────
+const Register = () => {
+  const navigate        = useNavigate();
+  const [searchParams]  = useSearchParams();
+  const { user, login } = useAuth();
+  const { t, isRTL, lang } = useLang();
+
+  const roleFromUrl = searchParams.get('role');
+
+  const [step,       setStep]     = useState(roleFromUrl ? 1 : 0);
+  const [error,      setError]    = useState('');
+  const [submitting, setSubmit]   = useState(false);
+  const [isMobile,   setMobile]   = useState(window.innerWidth < 768);
+  const [idStatus,   setIdStatus] = useState('idle');
+
+  const [form, setForm] = useState({
+    name: '', password: '', confirm: '', agreed: false,
+    role: roleFromUrl || 'buyer', nationalId: '',
+    // buyer
+    email: '', phone: '', governorate: '',
+    // seller step 1
+    personalPhone: '',
+    // seller step 2
+    farmName: '', farmPhone: '', sellerGov: '',
+    experience: '', animalTypes: [], bio: '',
+  });
+
+  useEffect(() => { if (user) navigate('/dashboard', { replace: true }); }, [user, navigate]);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
+  const isBuyer    = form.role === 'buyer';
+  const totalSteps = isBuyer ? 1 : 2;
+  const dir        = isRTL ? 'rtl' : 'ltr';
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const pickRole = (role) => { setForm(p => ({ ...p, role })); setIdStatus('idle'); setStep(1); };
+
+  const toggleAnimal = (id) =>
+    setForm(p => ({
+      ...p,
+      animalTypes: p.animalTypes.includes(id)
+        ? p.animalTypes.filter(x => x !== id)
+        : [...p.animalTypes, id],
+    }));
+
+  const validateStep1 = () => {
+    if (!form.name.trim())                                    { setError(t('reg.err.name'));         return false; }
+    if (isBuyer && !form.email.includes('@'))                 { setError(t('reg.err.email'));        return false; }
+    if (!isBuyer && form.email && !form.email.includes('@'))  { setError(t('reg.err.emailFmt'));     return false; }
+    if (isBuyer && !form.phone.trim())                        { setError(t('reg.err.phone'));        return false; }
+    if (!isBuyer && !form.personalPhone.trim())               { setError(t('reg.err.personalPhone')); return false; }
+    if (!form.nationalId || idStatus !== 'valid')             { setError(t('reg.err.nationalId'));   return false; }
+    if (form.password.length < 8)                             { setError(t('reg.err.pwdLen'));       return false; }
+    if (form.password !== form.confirm)                       { setError(t('reg.err.pwdMatch'));     return false; }
+    if (isBuyer && !form.governorate)                         { setError(t('reg.err.gov'));          return false; }
+    if (!form.agreed)                                         { setError(t('reg.err.terms'));        return false; }
+    setError(''); return true;
+  };
+
+  const validateStep2 = () => {
+    if (!form.farmName.trim())  { setError(t('reg.err.farmName'));  return false; }
+    if (!form.farmPhone.trim()) { setError(t('reg.err.farmPhone')); return false; }
+    setError(''); return true;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (step === 1 && !isBuyer) { if (validateStep1()) setStep(2); return; }
+    if (step === 1 && isBuyer  && !validateStep1()) return;
+    if (step === 2             && !validateStep2()) return;
+
+    setError(''); setSubmit(true);
+    try {
+      const payload = { name: form.name.trim(), password: form.password, role: form.role, nationalId: form.nationalId };
+      if (isBuyer) {
+        payload.email = form.email; payload.phone = form.phone; payload.governorate = form.governorate;
+      } else {
+        payload.personalPhone = form.personalPhone;
+        if (form.email)      payload.email       = form.email;
+        payload.farmName     = form.farmName.trim();
+        payload.farmPhone    = form.farmPhone;
+        if (form.sellerGov)  payload.governorate = form.sellerGov;
+        if (form.experience) payload.experience  = form.experience;
+        payload.animalTypes  = form.animalTypes;
+        if (form.bio.trim()) payload.bio         = form.bio.trim();
+      }
+      const { data } = await registerUser(payload);
+      login(data.user, data.token);
+    } catch (err) {
+      setError(parseError(err, t));
+    } finally {
+      setSubmit(false);
+    }
+  };
+
+  // ── Shared select style ──────────────────────────────────────────────────
+  const selStyle = (hasVal) => ({
+    width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+    border: `1.5px solid ${C.border}`, borderRadius: '10px', background: C.white,
+    fontSize: '14px', color: hasVal ? C.text : C.muted, fontFamily: 'inherit', cursor: 'pointer',
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 0 — Role picker
+  // ════════════════════════════════════════════════════════════════════════════
+  if (step === 0) {
+    return (
+      <div dir={dir} style={{ minHeight: '100vh', background: C.bg, fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+        <style>{`*:focus-visible{outline:2px solid #3A7D44;outline-offset:2px;border-radius:4px} @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+        {/* Hero */}
+        <div style={{ background: C.sellerPanel, padding: isMobile ? '36px 24px 48px' : '48px 40px 64px', textAlign: 'center', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+          <div aria-hidden="true" style={{ position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)', width: 400, height: 400, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: '20px', insetInlineStart: '20px', zIndex: 2 }}>
+            <LangToggle />
+          </div>
+          <div>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🌾</div>
+            <h1 style={{ fontSize: isMobile ? '28px' : '36px', fontWeight: '800', margin: '0 0 8px', letterSpacing: '-0.5px' }}>{t('reg.title')}</h1>
+            <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.7)', margin: '0 0 4px' }}>FarmFlow</p>
+            <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.55)', margin: 0, maxWidth: '400px', marginInline: 'auto', lineHeight: 1.6 }}>
+              {t('reg.marketplace')}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: '700px', margin: '0 auto', padding: isMobile ? '0 16px' : '0 24px' }}>
+
+          {/* Trust stats */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: isMobile ? '12px' : '24px', padding: '20px 0', flexWrap: 'wrap', borderBottom: `1px solid ${C.border}` }}>
+            {TRUST_STATS.map(s => (
+              <div key={s.en} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '20px', fontWeight: '800', color: C.green }}>{s.value}</div>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: C.text, marginTop: '2px' }}>{lang === 'ar' ? s.ar : s.en}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Role cards */}
+          <div style={{ padding: '28px 0 8px' }}>
+            <h2 style={{ textAlign: 'center', fontSize: '17px', fontWeight: '700', color: C.text, margin: '0 0 20px' }}>{t('reg.chooseRole')}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px', animation: 'fadeUp 0.4s ease' }}>
+
+              {/* Buyer */}
+              <RoleCard
+                emoji="🛒" title={t('reg.isBuyer')}
+                desc={t('reg.buyerCardDesc')}
+                perks={BUYER_PERKS} lang={lang} accentColor={C.green}
+                btnLabel={t('reg.startBuyer')}
+                btnStyle={{ background: C.green, color: '#fff' }}
+                onPick={() => pickRole('buyer')}
+              />
+
+              {/* Seller */}
+              <RoleCard
+                emoji="🐄" title={t('reg.isSeller')}
+                desc={t('reg.sellerCardDesc')}
+                perks={SELLER_PERKS} lang={lang} accentColor={C.tan}
+                btnLabel={t('reg.startSeller')}
+                btnStyle={{ background: C.sellerPanel, color: '#fff' }}
+                onPick={() => pickRole('seller')}
+              />
+            </div>
+          </div>
+
+          {/* Trust strip */}
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center', padding: '20px 0' }}>
+            {[
+              ['🔒', t('reg.secure')],
+              ['✅', t('reg.verifiedSellers')],
+              ['🛡', t('reg.txProtection')],
+            ].map(([icon, label]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: C.muted }}>
+                <span>{icon}</span>{label}
+              </div>
+            ))}
+          </div>
+
+          <p style={{ textAlign: 'center', paddingBottom: '32px', fontSize: '13px', color: C.muted }}>
+            {t('reg.haveAccount')}{' '}
+            <Link to="/login" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>{t('auth.login')}</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEPS 1 & 2
+  // ════════════════════════════════════════════════════════════════════════════
+  const panelBg  = isBuyer ? C.buyerPanel : C.sellerPanel;
+  const pwMatch  = form.password.length > 0 && form.confirm.length > 0;
+  const pwOk     = form.password === form.confirm && form.password.length >= 8;
+
+  return (
+    <div dir={dir} style={{ display: 'flex', minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+      <style>{`*:focus-visible{outline:2px solid #3A7D44;outline-offset:2px;border-radius:4px} ::placeholder{color:#C4A898} select{appearance:auto} @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* ── Left panel ── */}
+      {!isMobile && (
+        <div style={{ width: '38%', background: panelBg, padding: '44px 36px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: '#fff', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+          <div aria-hidden="true" style={{ position: 'absolute', top: -70, right: -70, width: 250, height: 250, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
+          <div aria-hidden="true" style={{ position: 'absolute', bottom: -50, left: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+              <button type="button" onClick={() => setStep(0)}
+                style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', padding: '7px 16px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer', fontWeight: '600', fontFamily: 'inherit' }}>
+                ← {t('reg.changeRole')}
+              </button>
+              <LangToggle />
+            </div>
+
+            <div style={{ fontSize: '48px', marginBottom: '14px' }}>
+              {isBuyer ? '🛒' : (step === 2 ? '🏡' : '🐄')}
+            </div>
+
+            <h2 style={{ fontSize: '22px', fontWeight: '800', margin: '0 0 2px', lineHeight: 1.3 }}>
+              {step === 2 ? t('reg.farmDetailsTitle') : (isBuyer ? t('reg.welcomeBuyer') : t('reg.welcomeSeller'))}
+            </h2>
+            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', margin: '0 0 18px', fontStyle: 'italic' }}>
+              {step === 2 ? t('reg.farmDetailsDesc') : (isBuyer ? t('reg.buyerPanelDesc') : t('reg.sellerPanelDesc'))}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(isBuyer ? BUYER_PERKS : SELLER_PERKS).map(p => (
+                <div key={p.en} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', flexShrink: 0, fontWeight: '800' }}>✓</div>
+                  <span>{lang === 'ar' ? p.ar : p.en}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            {!isBuyer && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                  {t('reg.step')} {step} {t('reg.of')} {totalSteps}
+                </div>
+                <ProgressDots step={step} total={totalSteps} />
+              </div>
+            )}
+            <div style={{ background: 'rgba(255,255,255,0.09)', borderRadius: '14px', padding: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '16px' }}>📈</span>
+                <span style={{ fontWeight: '700', fontSize: '13px' }}>{t('reg.newMembers')}</span>
+              </div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>{t('reg.newMembersDesc')}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Right: Form ── */}
+      <div style={{ flex: 1, background: C.bg, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: isMobile ? '28px 20px 40px' : '44px 40px', overflowY: 'auto' }}>
+        <div style={{ width: '100%', maxWidth: '440px', animation: 'fadeUp 0.3s ease' }}>
+
+          {/* Mobile header */}
+          {isMobile && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <button type="button" onClick={() => { setStep(step > 1 ? step - 1 : 0); setError(''); }}
+                  style={{ background: 'none', border: 'none', color: C.green, cursor: 'pointer', fontSize: '13px', fontWeight: '700', padding: 0, fontFamily: 'inherit' }}>
+                  ← {step === 2 ? t('reg.back') : t('reg.changeRole')}
+                </button>
+                <LangToggle dark={false} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '22px' }}>🌾</span>
+                <span style={{ fontSize: '18px', fontWeight: '800', color: C.text }}>FarmFlow</span>
+              </div>
+            </div>
+          )}
+
+          {/* Step heading */}
+          <div style={{ marginBottom: '22px' }}>
+            {!isBuyer && !isMobile && (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                {Array.from({ length: totalSteps }, (_, i) => (
+                  <div key={i} style={{ height: '3px', flex: 1, borderRadius: '2px', background: step >= i + 1 ? C.green : C.border, transition: 'background 0.3s' }} />
+                ))}
+              </div>
+            )}
+            <h1 style={{ fontSize: '22px', fontWeight: '800', color: C.text, margin: '0 0 4px', letterSpacing: '-0.3px' }}>
+              {step === 1 ? t('reg.createAccount') : t('reg.farmInfo')}
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <p style={{ color: C.muted, margin: 0, fontSize: '13px' }}>
+                {step === 1 ? t('reg.step1') : t('reg.step2')}
+              </p>
+              {step === 1 && (
+                <span style={{ fontSize: '11px', color: isBuyer ? C.green : C.tan, fontWeight: '700', background: isBuyer ? C.greenLt : C.amberLt, padding: '2px 8px', borderRadius: '8px', flexShrink: 0 }}>
+                  {isBuyer ? t('reg.buyerTag') : t('reg.sellerTag')}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ── STEP 1 ── */}
+          {step === 1 && (
+            <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              {/* Name */}
+              <Field label={t('reg.name')} name="name">
+                {({ focused, setFocused }) => (
+                  <input id="name" name="name" type="text" value={form.name} onChange={handleChange}
+                    placeholder={t('reg.namePlaceholder')} required autoFocus
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', background: C.white, fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none' }} />
+                )}
+              </Field>
+
+              {/* Email */}
+              <Field label={t('reg.email')} optLabel={!isBuyer ? `(${t('common.optional').replace(/[()]/g,'')})` : undefined} name="email" required={isBuyer}>
+                {({ focused, setFocused }) => (
+                  <input id="email" name="email" type="email" value={form.email} onChange={handleChange}
+                    placeholder="example@email.com" required={isBuyer}
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', background: C.white, fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none', direction: 'ltr' }} />
+                )}
+              </Field>
+
+              {/* Phone (buyer) / Personal phone (seller) */}
+              {isBuyer
+                ? <PhoneField label={t('reg.phone')}         name="phone"         value={form.phone}         onChange={handleChange} />
+                : <PhoneField label={t('reg.personalPhone')} name="personalPhone" value={form.personalPhone} onChange={handleChange} />
+              }
+
+              {/* National ID */}
+              <NationalIdField value={form.nationalId} onChange={handleChange} onStatusChange={setIdStatus} />
+
+              {/* Password */}
+              <div>
+                <label htmlFor="password" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.pwdLabel')}</span>
+                  <span style={{ fontSize: '11px', color: C.muted }}>{t('reg.pwdHint')}</span>
+                </label>
+                <PwdField id="password" name="password" value={form.password} onChange={handleChange} minLength={8} />
+                {form.password.length > 0 && form.password.length < 8 && (
+                  <div style={{ fontSize: '11px', color: '#D97706', marginTop: '4px' }}>{t('reg.pwdMin')}</div>
+                )}
+              </div>
+
+              {/* Confirm */}
+              <div>
+                <label htmlFor="confirm" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('auth.confirm')}</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input id="confirm" name="confirm"
+                    type="password"
+                    value={form.confirm} onChange={handleChange} placeholder="••••••••" required
+                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${pwMatch ? (pwOk ? C.green : C.errorBorder) : C.border}`, borderRadius: '10px', background: C.white, fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none', direction: 'ltr' }}
+                    onFocus={e => { if (!pwMatch) e.target.style.borderColor = C.green; }}
+                    onBlur={e => { if (!pwMatch) e.target.style.borderColor = C.border; }} />
+                </div>
+                {pwMatch && (
+                  <div style={{ fontSize: '11px', marginTop: '4px', color: pwOk ? C.green : C.errorText }}>
+                    {pwOk ? t('reg.pwdMatch') : t('reg.pwdNoMatch')}
+                  </div>
+                )}
+              </div>
+
+              {/* Governorate (buyer only in step 1) */}
+              {isBuyer && (
+                <div>
+                  <label htmlFor="governorate" style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: C.text, marginBottom: '6px' }}>
+                    {t('reg.governorate')}
+                  </label>
+                  <select id="governorate" name="governorate" value={form.governorate} onChange={handleChange} required
+                    style={selStyle(!!form.governorate)}
+                    onFocus={e => e.target.style.borderColor = C.green}
+                    onBlur={e => e.target.style.borderColor = C.border}>
+                    <option value="">{t('reg.govSelect')}</option>
+                    {GOVERNORATES.map(g => (
+                      <option key={g.en} value={g.en}>{lang === 'ar' ? g.ar : g.en}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Terms */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', padding: '4px 0', userSelect: 'none' }}>
+                <input type="checkbox" name="agreed" checked={form.agreed} onChange={handleChange}
+                  style={{ width: '17px', height: '17px', accentColor: C.green, cursor: 'pointer', flexShrink: 0, marginTop: '2px' }} />
+                <span style={{ fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                  {t('reg.termsAgree')}{' '}
+                  <a href="/terms"   target="_blank" rel="noreferrer" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>{t('reg.termsService')}</a>
+                  {' '}{t('reg.termsAnd')}{' '}
+                  <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>{t('reg.privacyPolicy')}</a>
+                </span>
+              </label>
+
+              {error && <ErrorBox msg={error} />}
+
+              <button type="submit" disabled={submitting}
+                style={{ padding: '14px', background: submitting ? '#6AAF74' : C.green, color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s', letterSpacing: '-0.2px', marginTop: '4px' }}
+                onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = C.greenDk; }}
+                onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.green; }}>
+                {submitting ? t('reg.creating') : (isBuyer ? t('reg.submit.buyer') + ' →' : t('reg.nextFarm') + ' →')}
+              </button>
+            </form>
+          )}
+
+          {/* ── STEP 2 ── */}
+          {step === 2 && (
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Farm name */}
+              <Field label={t('reg.farmName')} name="farmName">
+                {({ focused, setFocused }) => (
+                  <input id="farmName" name="farmName" type="text" value={form.farmName} onChange={handleChange}
+                    placeholder={t('reg.farmNamePlaceholder')} required autoFocus
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', background: C.white, fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none' }} />
+                )}
+              </Field>
+
+              {/* Farm phone */}
+              <PhoneField label={t('reg.farmPhone')} name="farmPhone" value={form.farmPhone} onChange={handleChange} />
+
+              {/* Governorate (optional for seller) */}
+              <div>
+                <label htmlFor="sellerGov" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.governorate')}</span>
+                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
+                </label>
+                <select id="sellerGov" name="sellerGov" value={form.sellerGov} onChange={handleChange}
+                  style={selStyle(!!form.sellerGov)}
+                  onFocus={e => e.target.style.borderColor = C.green}
+                  onBlur={e => e.target.style.borderColor = C.border}>
+                  <option value="">{t('reg.govSelect')}</option>
+                  {GOVERNORATES.map(g => (
+                    <option key={g.en} value={g.en}>{lang === 'ar' ? g.ar : g.en}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Experience */}
+              <div>
+                <label htmlFor="experience" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.experience')}</span>
+                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
+                </label>
+                <select id="experience" name="experience" value={form.experience} onChange={handleChange}
+                  style={selStyle(!!form.experience)}
+                  onFocus={e => e.target.style.borderColor = C.green}
+                  onBlur={e => e.target.style.borderColor = C.border}>
+                  <option value="">{t('reg.expSelect')}</option>
+                  <option value="<1">{t('reg.expLt1')}</option>
+                  <option value="1-3">{t('reg.exp13')}</option>
+                  <option value="3-5">{t('reg.exp35')}</option>
+                  <option value="5-10">{t('reg.exp510')}</option>
+                  <option value=">10">{t('reg.expGt10')}</option>
+                </select>
+              </div>
+
+              {/* Animal types */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, marginBottom: '4px' }}>
+                  {t('reg.animalTypesTitle')}
+                  <span style={{ fontSize: '11px', color: C.muted, fontWeight: '400', marginInlineStart: '6px' }}>{t('common.optional')}</span>
+                </div>
+                <p style={{ fontSize: '11px', color: C.muted, margin: '0 0 10px' }}>{t('reg.animalTypesHint')}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  {ANIMAL_TYPES.map(({ id, emoji, ar, en }) => {
+                    const active = form.animalTypes.includes(id);
+                    return (
+                      <div key={id}
+                        role="checkbox" aria-checked={active} tabIndex={0}
+                        onClick={() => toggleAnimal(id)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAnimal(id); } }}
+                        style={{ border: `2px solid ${active ? C.green : C.border}`, borderRadius: '12px', padding: '11px 6px', textAlign: 'center', cursor: 'pointer', background: active ? C.greenLt : C.white, transition: 'all 0.15s' }}>
+                        <div style={{ fontSize: '22px', lineHeight: 1, marginBottom: '4px' }}>{emoji}</div>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.green : C.text }}>{lang === 'ar' ? ar : en}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label htmlFor="bio" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.bio')}</span>
+                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
+                </label>
+                <textarea id="bio" name="bio" value={form.bio} onChange={handleChange}
+                  rows={3} placeholder={t('reg.bioPlaceholder')}
+                  style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${C.border}`, borderRadius: '10px', background: C.white, fontSize: '14px', color: C.text, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }}
+                  onFocus={e => e.target.style.borderColor = C.green}
+                  onBlur={e => e.target.style.borderColor = C.border} />
+              </div>
+
+              {error && <ErrorBox msg={error} />}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => { setStep(1); setError(''); }}
+                  style={{ flex: 1, padding: '13px', background: '#F3EDE5', color: C.text, border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  ← {t('reg.back')}
+                </button>
+                <button type="submit" disabled={submitting}
+                  style={{ flex: 2, padding: '13px', background: submitting ? '#6AAF74' : C.green, color: '#fff', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s', letterSpacing: '-0.2px' }}
+                  onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = C.greenDk; }}
+                  onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.green; }}>
+                  {submitting ? t('reg.creating') : t('reg.createFarm') + ' →'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <p style={{ textAlign: 'center', marginTop: '18px', fontSize: '13px', color: C.muted }}>
+            {t('reg.haveAccount')}{' '}
+            <Link to="/login" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>{t('auth.login')}</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── RoleCard ─────────────────────────────────────────────────────────────────
+const RoleCard = ({ emoji, title, desc, perks, lang, accentColor, btnLabel, btnStyle, onPick }) => (
+  <div
+    role="button" tabIndex={0}
+    onClick={onPick}
+    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}
+    style={{ background: C.white, border: `2px solid ${C.border}`, borderRadius: '20px', padding: '28px 24px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 10px rgba(28,14,5,0.06)' }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = accentColor; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 14px 36px rgba(58,125,68,0.12)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(28,14,5,0.06)'; }}
+  >
+    <div style={{ fontSize: '40px', marginBottom: '12px' }}>{emoji}</div>
+    <h3 style={{ fontSize: '20px', fontWeight: '800', color: C.text, margin: '0 0 6px' }}>{title}</h3>
+    <p style={{ color: C.muted, fontSize: '13px', margin: '0 0 18px', lineHeight: 1.65 }}>{desc}</p>
+    <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 22px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {perks.map(p => (
+        <li key={p.en} style={{ fontSize: '13px', color: C.text, display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <span style={{ color: accentColor, fontWeight: '800', flexShrink: 0, marginTop: '1px' }}>✓</span>
+          <span>{lang === 'ar' ? p.ar : p.en}</span>
+        </li>
+      ))}
+    </ul>
+    <button type="button" style={{ width: '100%', padding: '13px', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '800', cursor: 'pointer', letterSpacing: '-0.2px', ...btnStyle }}>
+      {btnLabel}
+    </button>
+  </div>
+);
+
+// ─── ErrorBox ─────────────────────────────────────────────────────────────────
+const ErrorBox = ({ msg }) => (
+  <div role="alert" style={{ background: C.errorBg, border: `1px solid ${C.errorBorder}`, borderRadius: '10px', padding: '11px 14px', color: C.errorText, fontSize: '13px', lineHeight: 1.5 }}>
+    ⚠️ {msg}
+  </div>
+);
 
 export default Register;

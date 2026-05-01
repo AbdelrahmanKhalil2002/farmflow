@@ -68,6 +68,35 @@ const getExpenses = async (req, res) => {
   }
 };
 
+// DELETE /api/finance/expenses/:id
+const deleteExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findOneAndDelete({ _id: req.params.id, seller: req.user.id });
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// PUT /api/finance/expenses/:id
+const updateExpense = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const { category, amount, date, note, listing: listingId } = req.body;
+    const expense = await Expense.findOneAndUpdate(
+      { _id: req.params.id, seller: req.user.id },
+      { category, amount, date, note, listing: listingId || null },
+      { new: true, runValidators: true }
+    ).populate('listing', 'type breed');
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json(expense);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // ─── Income ──────────────────────────────────────────────────────────────────
 
 // POST /api/finance/income
@@ -119,6 +148,37 @@ const getIncome = async (req, res) => {
       .populate('order', 'status totalAmount')
       .sort({ date: -1 });
 
+    res.json(income);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// DELETE /api/finance/income/:id
+const deleteIncome = async (req, res) => {
+  try {
+    const income = await Income.findOneAndDelete({ _id: req.params.id, seller: req.user.id });
+    if (!income) return res.status(404).json({ message: 'Income not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// PUT /api/finance/income/:id
+const updateIncome = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const { type, amount, date, note, listing: listingId, order: orderId } = req.body;
+    const income = await Income.findOneAndUpdate(
+      { _id: req.params.id, seller: req.user.id },
+      { type, amount, date, note, listing: listingId || null, order: orderId || null },
+      { new: true, runValidators: true }
+    )
+      .populate('listing', 'type breed')
+      .populate('order', 'status totalAmount');
+    if (!income) return res.status(404).json({ message: 'Income not found' });
     res.json(income);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -184,4 +244,4 @@ const getSummary = async (req, res) => {
   }
 };
 
-module.exports = { addExpense, getExpenses, addIncome, getIncome, getSummary };
+module.exports = { addExpense, getExpenses, deleteExpense, updateExpense, addIncome, getIncome, deleteIncome, updateIncome, getSummary };

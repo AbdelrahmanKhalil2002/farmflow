@@ -1,10 +1,12 @@
 require('dotenv').config();
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
+const { initScheduler } = require('./src/scheduler');
 
 const PORT = process.env.PORT || 5001;
 
 connectDB().then(() => {
+  initScheduler();
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
   });
