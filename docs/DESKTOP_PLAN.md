@@ -1,6 +1,6 @@
 # FarmFlow — Desktop App Plan
 
-> **Backend:** Existing Node/Express + MongoDB (CORS updated to allow `app://localhost` — only change)
+> **Backend:** Deployed on Render at `https://farmflow-backend-g07p.onrender.com` · MongoDB Atlas M0 (Ireland) · CORS updated to allow `app://localhost`
 > **Desktop stack:** Electron · existing React/Vite frontend (reused as-is) · electron-builder · electron-store
 > **Languages:** Arabic (default, RTL) · English (switchable)
 > **Platforms:** macOS (primary) · Windows (secondary) · Linux (optional)

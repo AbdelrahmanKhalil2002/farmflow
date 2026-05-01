@@ -630,7 +630,8 @@
 ## Current Status Summary (as of 2026-05-01)
 
 > **Web app:** All sections 1–30 complete except items requiring external credentials.
-> **Flutter app:** Sprints 1–15 complete. Full buyer/seller/admin flows, PDF/CSV export, NID validation, infinite scroll, 68 passing tests, FCM push notifications, signed APK/AAB + iOS archive. Remaining: store listings (Play/App Store accounts), Apple provisioning profile for signed IPA, server-side push triggers.
+> **Backend:** Live on Render at `https://farmflow-backend-g07p.onrender.com` (free tier — spins down after 15 min inactivity). MongoDB Atlas M0 cluster at `cluster0.mr7xjcy.mongodb.net` (Ireland, free forever).
+> **Flutter app:** Sprints 1–15 complete. Full buyer/seller/admin flows, PDF/CSV export, NID validation, infinite scroll, 68 passing tests, FCM push notifications, signed APK/AAB + iOS archive. APK rebuilt with Render URL. Remaining: store listings (Play/App Store accounts), Apple provisioning profile for signed IPA, server-side push triggers, Cloudinary for image storage.
 
 **Fully complete (web):** 1 (1.1–1.7), 2, 3, 4, 5, 6 (6.1–6.8, 6.10–6.13), 7, 8, 9 (9.1–9.7), 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 (30.2, 30.3, 30.7)
 
@@ -664,6 +665,6 @@
 **Remaining Flutter items:**
 - M23.8–M23.9 — Google Play + App Store store listings (needs developer accounts + screenshots)
 - M23.3 / M23.7 — iOS signed IPA export (needs Apple Developer team + provisioning profile in Xcode Organizer)
-- Backend deployment — currently local WiFi (`192.168.1.10:5001`); deploy to Railway/Render for public HTTPS
-- Push activation — `FIREBASE_SERVICE_ACCOUNT_JSON` env var needed in `backend/.env` (download from Firebase Console → Service Accounts)
+- Push activation — set `FIREBASE_SERVICE_ACCOUNT_JSON` in Render env vars (Firebase Console → Project Settings → Service Accounts → Generate new private key)
+- Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
 - `flutter analyze`: 0 errors, 0 warnings (2 pre-existing style infos in auth screens)

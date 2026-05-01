@@ -505,6 +505,9 @@ Backend: `fcmToken: { type: String, default: null }` on User model + `PATCH /aut
 `FarmFlowApp` converted from `ConsumerWidget` to `ConsumerStatefulWidget`; FCM init guarded by `_fcmInitialised` bool to prevent re-init on rebuilds.
 **Not yet done:** M16.4/M16.8 — server-side push sending via `firebase-admin` (requires separate setup).
 
+**Sprint 16 — Backend Deployment ✅**
+Backend deployed to Render (free tier) at `https://farmflow-backend-g07p.onrender.com`. MongoDB Atlas M0 cluster provisioned (Ireland, free forever) at `cluster0.mr7xjcy.mongodb.net/farmflow`. Mobile `.env` updated to Render URL; APK rebuilt (32 MB) and redistributed via Firebase App Distribution. Note: `/uploads` directory is ephemeral on Render — images are lost on redeploy until Cloudinary is integrated.
+
 **Sprint 15 — Release (M23) ✅**
 **Icons:** `dart run flutter_launcher_icons` — adaptive Android icon (green `#3A7D44` bg + `assets/icon/icon_foreground.png`); iOS icon with alpha stripped (`remove_alpha_ios: true`). Assets at `assets/icon/icon.png`.
 **Splash:** `dart run flutter_native_splash:create` — green `#3A7D44` (light) / `#2D6235` (dark) background + centered `assets/images/splash_logo.png`; Android v21/v31 window inset styles + iOS `LaunchScreen.storyboard`.
@@ -527,6 +530,7 @@ Backend: `fcmToken: { type: String, default: null }` on User model + `PATCH /aut
 | Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
 | iOS signed IPA (M23.3/M23.7) | Xcode archive ready; needs Apple Developer account + provisioning profile in Xcode Organizer |
 | Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
-| Backend deployment | API currently at `192.168.1.10:5001` (local WiFi, same-network only); deploy to Railway/Render for public HTTPS |
-| Push activation (M16.4/M16.8) | Code done; set `FIREBASE_SERVICE_ACCOUNT_JSON` in `backend/.env` (Firebase Console → Project Settings → Service Accounts → Generate key) |
+| Backend deployment | ✅ Live at `https://farmflow-backend-g07p.onrender.com` (Render free tier, MongoDB Atlas M0) |
+| Cloud image storage | `/uploads` ephemeral on Render — migrate to Cloudinary before production use |
+| Push activation (M16.4/M16.8) | Code done; set `FIREBASE_SERVICE_ACCOUNT_JSON` in Render env vars (Firebase Console → Project Settings → Service Accounts → Generate key) |
 | Offline degradation (M6.4) | Deferred to v2; online-first acceptable for v1 |
