@@ -665,6 +665,6 @@
 **Remaining Flutter items:**
 - M23.8–M23.9 — Google Play + App Store store listings (needs developer accounts + screenshots)
 - M23.3 / M23.7 — iOS signed IPA export (needs Apple Developer team + provisioning profile in Xcode Organizer)
-- Push activation — set `FIREBASE_SERVICE_ACCOUNT_JSON` in Render env vars (Firebase Console → Project Settings → Service Accounts → Generate new private key)
+- Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
 - Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
 - `flutter analyze`: 0 errors, 0 warnings (2 pre-existing style infos in auth screens)

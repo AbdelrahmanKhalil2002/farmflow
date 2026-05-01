@@ -532,5 +532,5 @@ Backend deployed to Render (free tier) at `https://farmflow-backend-g07p.onrende
 | Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
 | Backend deployment | ✅ Live at `https://farmflow-backend-g07p.onrender.com` (Render free tier, MongoDB Atlas M0) |
 | Cloud image storage | `/uploads` ephemeral on Render — migrate to Cloudinary before production use |
-| Push activation (M16.4/M16.8) | Code done; set `FIREBASE_SERVICE_ACCOUNT_JSON` in Render env vars (Firebase Console → Project Settings → Service Accounts → Generate key) |
+| Push activation (M16.4/M16.8) | ✅ `FIREBASE_SERVICE_ACCOUNT_JSON` set in Render env vars — Firebase initialized, server-side push live |
 | Offline degradation (M6.4) | Deferred to v2; online-first acceptable for v1 |
