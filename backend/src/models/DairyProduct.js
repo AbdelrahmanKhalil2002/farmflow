@@ -12,6 +12,11 @@ const dairySchema = new mongoose.Schema(
       ref:      'User',
       required: true,
     },
+    farm: {
+      type:  mongoose.Schema.Types.ObjectId,
+      ref:   'Farm',
+      index: true,
+    },
 
     // Product identity
     name: {

@@ -60,7 +60,10 @@ router.post(
   protect,
   authorizeRoles('seller'),
   upload.array('images', 5),
-  listingValidation,
+  [
+    ...listingValidation,
+    body('status').optional().isIn(['draft']).withMessage('Sellers can only create drafts or pending listings'),
+  ],
   createListing
 );
 
@@ -74,8 +77,8 @@ router.put(
     ...listingValidation.map((v) => v.optional()),
     body('status')
       .optional()
-      .isIn(['pending', 'approved', 'rejected', 'sold'])
-      .withMessage('Status must be one of: pending, approved, rejected, sold'),
+      .isIn(['draft', 'pending', 'approved', 'rejected', 'sold'])
+      .withMessage('Status must be one of: draft, pending, approved, rejected, sold'),
   ],
   updateListing
 );

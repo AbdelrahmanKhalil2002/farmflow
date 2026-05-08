@@ -1,7 +1,8 @@
 import api from './api';
 
 // Buyer: backend returns only approved listings when role = buyer
-export const getAvailableListings = ()   => api.get('/listings');
+// Accepts optional params: { type, minPrice, maxPrice, minWeight, maxWeight, location, delivery, q, sort, page, limit }
+export const getAvailableListings = (params = {}) => api.get('/listings', { params });
 // Seller: backend returns only their own listings
 export const getMyListings  = ()         => api.get('/listings');
 export const getListingById = (id)       => api.get(`/listings/${id}`);

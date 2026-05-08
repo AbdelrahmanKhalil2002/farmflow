@@ -7,6 +7,6 @@ export const createDairy       = (data)    => api.post('/dairy',      data);
 export const updateDairy       = (id, data) => api.put(`/dairy/${id}`, data);
 export const deleteDairy       = (id)      => api.delete(`/dairy/${id}`);
 
-export const getSellers        = ()        => api.get('/sellers');
+export const getSellers        = (params)  => api.get('/sellers', { params });
 export const getFarmById       = (id)      => api.get(`/sellers/${id}`);
 export const updateDairyStock  = (id, data) => api.post(`/dairy/${id}/stock`, data);

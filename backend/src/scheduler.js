@@ -9,6 +9,7 @@ const cron          = require('node-cron');
 const Animal        = require('./models/Animal');
 const DairyProduct  = require('./models/DairyProduct');
 const MedicalRecord = require('./models/MedicalRecord');
+const Expense       = require('./models/Expense');
 const { createNotification } = require('./utils/notify');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -163,6 +164,55 @@ const medicalFollowupReminder = safeJob('medical-followup-reminder', async () =>
   }
 });
 
+// ─── Job 6: Recurring expense auto-creation ──────────────────────────────────
+const recurringExpenses = safeJob('recurring-expenses', async () => {
+  const now     = new Date();
+  const today   = now.getDate();
+  const year    = now.getFullYear();
+  const month   = now.getMonth(); // 0-indexed
+
+  // All expenses with a recurringDay matching today
+  const templates = await Expense.find({ recurringDay: today }).lean();
+  if (!templates.length) return;
+
+  // Deduplicate by seller+category+note combination so multiple past occurrences
+  // don't create multiple new entries.
+  const seen = new Set();
+  const unique = templates.filter(e => {
+    const key = `${e.seller}|${e.category}|${e.note ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const monthStart = new Date(year, month, 1);
+  const monthEnd   = new Date(year, month + 1, 0, 23, 59, 59);
+
+  for (const tmpl of unique) {
+    // Skip if an instance already exists this month for this seller+category+note
+    const exists = await Expense.exists({
+      seller:   tmpl.seller,
+      category: tmpl.category,
+      note:     tmpl.note ?? null,
+      date:     { $gte: monthStart, $lte: monthEnd },
+      recurringDay: null, // only look at non-template instances
+    });
+    if (exists) continue;
+
+    await Expense.create({
+      seller:      tmpl.seller,
+      category:    tmpl.category,
+      amount:      tmpl.amount,
+      note:        tmpl.note,
+      date:        new Date(year, month, today),
+      isMonthly:   true,
+      recurringDay: null, // instance — won't re-trigger
+    });
+  }
+
+  console.log(`[cron] recurring-expenses — created ${unique.length} instance(s) for day ${today}`);
+});
+
 // ─── Register cron schedules ──────────────────────────────────────────────────
 /**
  * All jobs run daily at 08:00 AM server time.
@@ -174,7 +224,8 @@ const initScheduler = () => {
   cron.schedule('0 8 * * *', pregnancyReminder,        { timezone: 'Africa/Cairo' });
   cron.schedule('0 8 * * *', dairyExpiryReminder,      { timezone: 'Africa/Cairo' });
   cron.schedule('0 8 * * *', medicalFollowupReminder,  { timezone: 'Africa/Cairo' });
-  console.log('[scheduler] 5 daily cron jobs registered (08:00 Cairo)');
+  cron.schedule('0 8 * * *', recurringExpenses,        { timezone: 'Africa/Cairo' });
+  console.log('[scheduler] 6 daily cron jobs registered (08:00 Cairo)');
 };
 
 module.exports = { initScheduler };

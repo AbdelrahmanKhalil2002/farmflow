@@ -1,0 +1,93 @@
+name: Desktop Build
+
+# Triggers on every version tag push (e.g. v1.0.0) and on manual dispatch
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+
+    defaults:
+      run:
+        working-directory: farmflow_desktop
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node setup ──────────────────────────────────────────────────────────
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            farmflow_desktop/package-lock.json
+            frontend/package-lock.json
+
+      # ── Install dependencies ─────────────────────────────────────────────────
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop deps
+        run: npm ci
+
+      # ── Build React frontend ──────────────────────────────────────────────────
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: https://farmflow-backend-g07p.onrender.com
+          VITE_GOOGLE_MAPS_KEY: ${{ secrets.VITE_GOOGLE_MAPS_KEY }}
+
+      # ── macOS: build DMG (arm64 + x64) ───────────────────────────────────────
+      - name: Build macOS DMG
+        if: matrix.platform == 'mac'
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing — set these secrets when you have an Apple Developer ID cert
+          # CSC_LINK:           ${{ secrets.MAC_CERT_BASE64 }}
+          # CSC_KEY_PASSWORD:   ${{ secrets.MAC_CERT_PASSWORD }}
+          # APPLE_ID:           ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          # APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
+
+      # ── Windows: build NSIS installer (x64) ──────────────────────────────────
+      - name: Build Windows installer
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # EV code signing — set when you have a Windows EV cert
+          # WIN_CSC_LINK:         ${{ secrets.WIN_CERT_BASE64 }}
+          # WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+
+      # ── Upload artifacts for inspection (optional, keeps 7 days) ────────────
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmflow-${{ matrix.platform }}-${{ github.ref_name }}
+          path: |
+            farmflow_desktop/dist-electron/*.dmg
+            farmflow_desktop/dist-electron/*.exe
+            farmflow_desktop/dist-electron/*.blockmap
+            farmflow_desktop/dist-electron/latest*.yml
+          if-no-files-found: ignore
+          retention-days: 7

@@ -3,48 +3,24 @@ import { getExpenses, addExpense, updateExpense, deleteExpense } from '../../ser
 import { getMyListings } from '../../services/listingService';
 import { fmt } from '../../utils/format';
 import { useToast } from '../../components/Toast';
+import { isDesktop } from '../../utils/platform';
+import { useLang } from '../../context/LangContext';
 
-// ─── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg:        '#FEFAF5',
-  card:      '#FFFFFF',
-  green:     '#3A7D44',
-  greenDark: '#2D6235',
-  greenBg:   '#DCFCE7',
-  greenText: '#166534',
-  amber:     '#D97706',
-  amberBg:   '#FEF3C7',
-  amberText: '#92400E',
-  red:       '#DC2626',
-  redBg:     '#FEF2F2',
-  redText:   '#B91C1C',
-  blue:      '#2563EB',
-  blueBg:    '#DBEAFE',
-  blueText:  '#1E3A5F',
-  purple:    '#7C3AED',
-  purpleBg:  '#F3E8FF',
-  purpleText:'#581C87',
-  tan:       '#C49A6C',
-  border:    '#E8D5C0',
-  text:      '#2C1810',
-  textMuted: '#8B6B5A',
-  shadow:    '0 1px 3px rgba(44,24,16,0.08), 0 4px 12px rgba(44,24,16,0.06)',
-  shadowMd:  '0 4px 20px rgba(44,24,16,0.10)',
-};
+import { C } from '../../tokens';
 
 // ─── Category metadata ─────────────────────────────────────────────────────────
 const CATS = {
   // Livestock-specific
-  feed:         { label: 'علف',      emoji: '🌾', bg: C.amberBg,  color: C.amberText,   bar: '#D97706', group: 'livestock' },
-  doctor:       { label: 'بيطري',    emoji: '🏥', bg: C.blueBg,   color: C.blueText,    bar: '#2563EB', group: 'livestock' },
-  transport:    { label: 'نقل',      emoji: '🚛', bg: C.purpleBg, color: C.purpleText,  bar: '#7C3AED', group: 'livestock' },
+  feed:         { labelKey: 'expenses.cat.feed',         emoji: '🌾', bg: C.amberBg,  color: C.amberText,   bar: '#D97706', group: 'livestock' },
+  doctor:       { labelKey: 'expenses.cat.doctor',       emoji: '🏥', bg: C.blueBg,   color: C.blueText,    bar: '#2563EB', group: 'livestock' },
+  transport:    { labelKey: 'expenses.cat.transport',    emoji: '🚛', bg: C.purpleBg, color: C.purpleText,  bar: '#7C3AED', group: 'livestock' },
   // Monthly farm
-  electricity:  { label: 'كهرباء',   emoji: '⚡', bg: '#FEF9C3',  color: '#713F12',     bar: '#CA8A04', group: 'monthly'   },
-  salary:       { label: 'رواتب',    emoji: '👷', bg: C.greenBg,  color: C.greenText,   bar: '#16A34A', group: 'monthly'   },
-  rent:         { label: 'إيجار',    emoji: '🏠', bg: '#DBEAFE',  color: '#1E40AF',     bar: '#3B82F6', group: 'monthly'   },
-  water:        { label: 'مياه',     emoji: '💧', bg: '#CFFAFE',  color: '#0C4A6E',     bar: '#0891B2', group: 'monthly'   },
-  maintenance:  { label: 'صيانة',    emoji: '🔧', bg: '#FCE7F3',  color: '#831843',     bar: '#DB2777', group: 'monthly'   },
-  other:        { label: 'أخرى',     emoji: '📦', bg: '#F3F4F6',  color: '#374151',     bar: '#9CA3AF', group: 'monthly'   },
+  electricity:  { labelKey: 'expenses.cat.electricity',  emoji: '⚡', bg: '#FEF9C3',  color: '#713F12',     bar: '#CA8A04', group: 'monthly'   },
+  salary:       { labelKey: 'expenses.cat.salary',       emoji: '👷', bg: C.greenBg,  color: C.greenText,   bar: '#16A34A', group: 'monthly'   },
+  rent:         { labelKey: 'expenses.cat.rent',         emoji: '🏠', bg: '#DBEAFE',  color: '#1E40AF',     bar: '#3B82F6', group: 'monthly'   },
+  water:        { labelKey: 'expenses.cat.water',        emoji: '💧', bg: '#CFFAFE',  color: '#0C4A6E',     bar: '#0891B2', group: 'monthly'   },
+  maintenance:  { labelKey: 'expenses.cat.maintenance',  emoji: '🔧', bg: '#FCE7F3',  color: '#831843',     bar: '#DB2777', group: 'monthly'   },
+  other:        { labelKey: 'expenses.cat.other',        emoji: '📦', bg: '#F3F4F6',  color: '#374151',     bar: '#9CA3AF', group: 'monthly'   },
 };
 
 const CAT_KEYS          = ['feed', 'doctor', 'transport', 'electricity', 'salary', 'rent', 'water', 'maintenance', 'other'];
@@ -53,7 +29,7 @@ const MONTHLY_CAT_KEYS   = ['electricity', 'salary', 'rent', 'water', 'maintenan
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const EMPTY_FORM = { category: 'feed', amount: '', date: today(), note: '', listing: '' };
+const EMPTY_FORM = { category: 'feed', amount: '', date: today(), note: '', listing: '', recurringDay: '' };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 const parseApiErr = (err) => {
@@ -79,31 +55,144 @@ const inRange = (dateStr, from, to) => {
 };
 
 // ─── CSV export ────────────────────────────────────────────────────────────────
-const exportCSV = (rows) => {
-  const header = ['التاريخ', 'الفئة', 'الوصف', 'الحيوان المرتبط', 'المبلغ (ج.م)'];
+const exportCSV = async (rows, toast, tFn) => {
+  const filename = `farmflow-expenses-${today()}.csv`;
+  const header = ['Date', 'Category', 'Description', 'Linked Animal', 'Amount (EGP)'];
   const lines = rows.map(e => [
     new Date(e.date).toISOString().slice(0, 10),
-    CATS[e.category]?.label || e.category,
+    tFn ? tFn(CATS[e.category]?.labelKey || 'expenses.cat.other') : (e.category || ''),
     e.note || '',
     e.listing ? `${e.listing.type} — ${e.listing.breed || ''}`.trim() : '',
     e.amount,
   ]);
   const csv = [header, ...lines].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `farmflow-expenses-${today()}.csv`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+
+  if (isDesktop) {
+    const buffer = Array.from(new TextEncoder().encode('﻿' + csv));
+    const res = await window.electron.saveFile({ filename, buffer });
+    if (res?.success) toast?.success(
+      <span>{tFn ? tFn('herd.csv.saved') : 'File saved'}
+        <button onClick={() => window.electron.openFile(res.filePath)}
+          style={{ marginRight:8, background:'none', border:'none', color:'#3A7D44', cursor:'pointer', fontWeight:700, fontSize:13 }}>{tFn ? tFn('herd.csv.open') : 'Open'} ←</button>
+      </span>
+    );
+  } else {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+};
+
+// ─── PDF export ────────────────────────────────────────────────────────────────
+const buildExpensesHTML = (rows, dateFrom, dateTo, tFn) => {
+  const fmtN = v => v ? Number(v).toLocaleString('ar-EG', { maximumFractionDigits: 0 }) + ' ج.م' : '—';
+  const fmtD = d => new Date(d).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+  const total = rows.reduce((s, e) => s + (e.amount || 0), 0);
+
+  const catTotals = Object.fromEntries(CAT_KEYS.map(k => [k, 0]));
+  rows.forEach(e => { if (catTotals[e.category] !== undefined) catTotals[e.category] += e.amount || 0; });
+
+  const dateRange = dateFrom && dateTo
+    ? `${dateFrom} → ${dateTo}`
+    : dateFrom ? `من ${dateFrom}`
+    : dateTo   ? `حتى ${dateTo}`
+    : 'جميع الفترات';
+
+  const makeTd = (txt, right = false, bold = false, bg = '') =>
+    `<td style="padding:7px 10px;text-align:${right ? 'right' : 'center'};border:1px solid #ddd;font-weight:${bold ? '700' : '400'};font-size:11px;${bg ? `background:${bg};` : ''}">${txt ?? '—'}</td>`;
+
+  const catRows = CAT_KEYS
+    .filter(k => catTotals[k] > 0)
+    .sort((a, b) => catTotals[b] - catTotals[a])
+    .map(k => `<tr>
+      ${makeTd(`${CATS[k].emoji} ${tFn ? tFn(CATS[k].labelKey) : k}`, true)}
+      ${makeTd(fmtN(catTotals[k]))}
+      ${makeTd(total > 0 ? `${((catTotals[k] / total) * 100).toFixed(1)}%` : '—')}
+    </tr>`).join('');
+
+  const txRows = rows.map(e => `<tr>
+    ${makeTd(fmtD(e.date), true)}
+    ${makeTd(`${CATS[e.category]?.emoji || ''} ${tFn ? tFn(CATS[e.category]?.labelKey || 'expenses.cat.other') : e.category}`, true)}
+    ${makeTd(e.note || '—', true)}
+    ${makeTd(e.listing ? `${e.listing.type}${e.listing.breed ? ' — ' + e.listing.breed : ''}` : '—', true)}
+    ${makeTd(fmtN(e.amount))}
+  </tr>`).join('');
+
+  return `<!DOCTYPE html><html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><title>تقرير المصروفات</title>
+<style>
+  body{font-family:system-ui,sans-serif;padding:24px;direction:rtl;color:#2C1810}
+  h2{margin:0 0 3px;font-size:18px}
+  .sub{margin:0 0 18px;color:#8B6B5A;font-size:12px}
+  .kpi-row{display:flex;gap:14px;margin-bottom:18px}
+  .kpi{flex:1;border:1px solid #E8D5C0;border-radius:8px;padding:12px 16px;background:#FEFAF5}
+  .kpi p{margin:0}.kpi .lbl{font-size:10px;font-weight:700;color:#8B6B5A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px!important}
+  .kpi .val{font-size:18px;font-weight:800;color:#DC2626}
+  .kpi.cnt .val{color:#2C1810;font-size:16px}
+  h3{font-size:12px;font-weight:700;color:#8B6B5A;text-transform:uppercase;letter-spacing:.6px;margin:18px 0 7px}
+  table{border-collapse:collapse;width:100%;margin-bottom:16px}
+  th{background:#3A7D44;color:#fff;padding:8px 10px;font-size:11px;font-weight:700;text-align:right;border:1px solid #2D6235}
+  th:not(:first-child){text-align:center}
+  .foot td{background:#FEF3C7;font-weight:700;color:#92400E}
+  @media print{button{display:none}}
+</style></head>
+<body>
+  <h2>تقرير المصروفات — FarmFlow</h2>
+  <p class="sub">الفترة: ${dateRange} &nbsp;|&nbsp; تاريخ الإصدار: ${new Date().toLocaleDateString('ar-EG')}</p>
+  <div class="kpi-row">
+    <div class="kpi"><p class="lbl">إجمالي المصروفات</p><p class="val">${fmtN(total)}</p></div>
+    <div class="kpi cnt"><p class="lbl">عدد المعاملات</p><p class="val">${rows.length}</p></div>
+  </div>
+  <h3>تفصيل حسب الفئة</h3>
+  <table>
+    <thead><tr><th>الفئة</th><th>الإجمالي</th><th>النسبة</th></tr></thead>
+    <tbody>${catRows}</tbody>
+    <tfoot class="foot"><tr>
+      ${makeTd('الإجمالي', true, true, '#FEF3C7')}
+      ${makeTd(fmtN(total), false, true, '#FEF3C7')}
+      ${makeTd('100%', false, true, '#FEF3C7')}
+    </tr></tfoot>
+  </table>
+  <h3>المعاملات (${rows.length})</h3>
+  <table>
+    <thead><tr><th>التاريخ</th><th>الفئة</th><th>الوصف</th><th>الحيوان</th><th>المبلغ</th></tr></thead>
+    <tbody>${txRows}</tbody>
+    <tfoot class="foot"><tr>
+      <td colspan="4" style="padding:7px 10px;text-align:right;border:1px solid #ddd;font-size:11px;font-weight:700;background:#FEF3C7">الإجمالي</td>
+      ${makeTd(fmtN(total), false, true, '#FEF3C7')}
+    </tr></tfoot>
+  </table>
+  <button onclick="window.print()" style="padding:8px 20px;background:#3A7D44;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖸 طباعة / حفظ PDF</button>
+</body></html>`;
+};
+
+const doExportExpensesPDF = async (rows, dateFrom, dateTo, toast, tFn) => {
+  const html = buildExpensesHTML(rows, dateFrom, dateTo, tFn);
+  if (isDesktop) {
+    const res = await window.electron.savePdf({ html, filename: `farmflow-expenses-${today()}.pdf` });
+    if (res?.success) toast?.success(
+      <span>{tFn ? tFn('herd.csv.saved') : 'File saved'}
+        <button onClick={() => window.electron.openFile(res.filePath)}
+          style={{ marginRight:8, background:'none', border:'none', color:'#3A7D44', cursor:'pointer', fontWeight:700, fontSize:13 }}>
+          {tFn ? tFn('herd.csv.open') : 'Open'} ←
+        </button>
+      </span>
+    );
+  } else {
+    const w = window.open('', '_blank', 'width=940,height=700');
+    if (w) { w.document.write(html); w.document.close(); }
+  }
 };
 
 // ─── Category badge ────────────────────────────────────────────────────────────
-const CatBadge = ({ cat, small }) => {
+const CatBadge = ({ cat, small, t }) => {
   const m = CATS[cat] || CATS.other;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: small ? '4px' : '5px', padding: small ? '3px 8px' : '4px 10px', borderRadius: '20px', background: m.bg, color: m.color, fontSize: small ? '11px' : '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-      {m.emoji} {m.label}
+      {m.emoji} {t(m.labelKey)}
     </span>
   );
 };
@@ -134,7 +223,7 @@ const FSelect = ({ style = {}, children, ...rest }) => {
 };
 
 // ─── Category breakdown bar chart ─────────────────────────────────────────────
-const BreakdownBars = ({ totals, grandTotal }) => (
+const BreakdownBars = ({ totals, grandTotal, t }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
     {CAT_KEYS.map(k => {
       const m   = CATS[k];
@@ -143,7 +232,7 @@ const BreakdownBars = ({ totals, grandTotal }) => (
       return (
         <div key={k}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: C.textMuted }}>{m.emoji} {m.label}</span>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: C.textMuted }}>{m.emoji} {t(m.labelKey)}</span>
             <span style={{ fontSize: '12px', fontWeight: '700', color: C.text }}>{fmtSAR(amt)} <span style={{ fontWeight: 400, color: C.textMuted }}>({pct.toFixed(0)}%)</span></span>
           </div>
           <div style={{ height: '7px', background: '#EDE0D4', borderRadius: '4px', overflow: 'hidden' }}>
@@ -157,7 +246,8 @@ const BreakdownBars = ({ totals, grandTotal }) => (
 
 // ─── Main component ────────────────────────────────────────────────────────────
 const SellerExpenses = () => {
-  const toast = useToast();
+  const toast  = useToast();
+  const { t }  = useLang();
   const [expenses,  setExpenses]  = useState([]);
   const [listings,  setListings]  = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -198,7 +288,7 @@ const SellerExpenses = () => {
         setExpenses(expRes.data);
         setListings(listRes.data);
       })
-      .catch(() => setFetchErr('فشل تحميل البيانات. حاول مرة أخرى.'))
+      .catch(() => setFetchErr(t('expenses.loadErr')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -246,17 +336,27 @@ const SellerExpenses = () => {
     });
   }, [expenses, catFilter, dateFrom, dateTo, search]);
 
+  // ── Desktop menu shortcuts ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!window.electron?.onMenuAction) return;
+    return window.electron.onMenuAction(({ type }) => {
+      if (type === 'export-csv') exportCSV(visible, toast, t);
+      if (type === 'export-pdf') doExportExpensesPDF(visible, dateFrom, dateTo, toast, t);
+    });
+  }, [visible, dateFrom, dateTo, toast, t]);
+
   // ── Form helpers ──────────────────────────────────────────────────────────
   const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const startEdit = (expense) => {
     setEditId(expense._id);
     setForm({
-      category: expense.category,
-      amount:   String(expense.amount),
-      date:     new Date(expense.date).toISOString().slice(0, 10),
-      note:     expense.note || '',
-      listing:  expense.listing?._id || '',
+      category:     expense.category,
+      amount:       String(expense.amount),
+      date:         new Date(expense.date).toISOString().slice(0, 10),
+      note:         expense.note || '',
+      listing:      expense.listing?._id || '',
+      recurringDay: expense.recurringDay != null ? String(expense.recurringDay) : '',
     });
     setFormErr('');
     setFormOpen(true);
@@ -273,7 +373,7 @@ const SellerExpenses = () => {
   // ── Submit (add or update) ─────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.amount || Number(form.amount) <= 0) { setFormErr('أدخل مبلغاً صحيحاً.'); return; }
+    if (!form.amount || Number(form.amount) <= 0) { setFormErr(t('expenses.form.invalidAmount')); return; }
     setFormErr('');
     setSubmitting(true);
 
@@ -282,12 +382,14 @@ const SellerExpenses = () => {
       ? `[Receipt: ${receipt.name}] ${form.note}`.trim()
       : form.note;
 
+    const rd = form.recurringDay !== '' ? parseInt(form.recurringDay, 10) : null;
     const payload = {
-      category: form.category,
-      amount:   parseFloat(form.amount),
-      date:     form.date || today(),
+      category:     form.category,
+      amount:       parseFloat(form.amount),
+      date:         form.date || today(),
       note,
       ...(form.listing ? { listing: form.listing } : {}),
+      recurringDay: rd,
     };
 
     try {
@@ -295,11 +397,11 @@ const SellerExpenses = () => {
         const { data } = await updateExpense(editId, payload);
         setExpenses(prev => prev.map(x => x._id === editId ? data : x));
         setEditId(null);
-        toast.success('تم تحديث المصروف.');
+        toast.success(t('expenses.updateSuccess'));
       } else {
         const { data } = await addExpense(payload);
         setExpenses(prev => [data, ...prev]);
-        toast.success('تم تسجيل المصروف.');
+        toast.success(t('expenses.addSuccess'));
       }
       setForm(EMPTY_FORM);
       setReceipt(null);
@@ -316,9 +418,9 @@ const SellerExpenses = () => {
     try {
       await deleteExpense(id);
       setExpenses(prev => prev.filter(x => x._id !== id));
-      toast.success('تم حذف المصروف.');
+      toast.success(t('expenses.deleteSuccess'));
     } catch {
-      toast.error('فشل حذف المصروف. حاول مرة أخرى.');
+      toast.error(t('expenses.deleteErr'));
     } finally {
       setDeleting(false);
       setDeletingId(null);
@@ -340,15 +442,21 @@ const SellerExpenses = () => {
         <div aria-hidden="true" style={{ position: 'absolute', right: -8, top: -20, fontSize: '120px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>📉</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>المصروفات</h1>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>{t('expenses.title')}</h1>
             <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
-              {loading ? 'جاري التحميل…' : `${expenses.length} مصروف مسجّل`}
+              {loading ? t('common.loading') : `${expenses.length} ${t('expenses.registeredCount')}`}
             </p>
           </div>
-          <button type="button" onClick={() => exportCSV(visible)}
-            style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-            ⬇ تنزيل تقرير المصروفات (CSV)
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={() => doExportExpensesPDF(visible, dateFrom, dateTo, toast, t)}
+              style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+              🖨 PDF
+            </button>
+            <button type="button" onClick={() => exportCSV(visible, toast, t)}
+              style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+              ⬇ {t('expenses.downloadCSV')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -358,7 +466,7 @@ const SellerExpenses = () => {
         {fetchErr && (
           <div role="alert" style={{ background: C.redBg, border: '1px solid #FECACA', borderRadius: '10px', padding: '11px 16px', color: C.redText, fontSize: '14px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
             {fetchErr}
-            <button type="button" onClick={() => setFetchErr('')} aria-label="إغلاق الخطأ" style={{ background: 'none', border: 'none', color: C.redText, cursor: 'pointer', fontSize: '15px' }}><span aria-hidden="true">✕</span></button>
+            <button type="button" onClick={() => setFetchErr('')} aria-label={t('common.closeError')} style={{ background: 'none', border: 'none', color: C.redText, cursor: 'pointer', fontSize: '15px' }}><span aria-hidden="true">✕</span></button>
           </div>
         )}
 
@@ -368,20 +476,20 @@ const SellerExpenses = () => {
 
             {/* Total this month */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>هذا الشهر</p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('expenses.thisMonth')}</p>
               <p style={{ margin: 0, fontSize: '26px', fontWeight: '800', color: C.redText, letterSpacing: '-0.5px', lineHeight: 1 }}>
                 {fmtSAR(thisMonthTotal)}
               </p>
               <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>
-                {thisMonth.length} مصروف
+                {thisMonth.length} {t('expenses.expenseCount')}
               </p>
             </div>
 
             {/* Trend vs last month */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>مقارنةً بالشهر الماضي</p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('expenses.vsLastMonth')}</p>
               {trendPct === null ? (
-                <p style={{ margin: 0, fontSize: '15px', color: C.textMuted }}>لا توجد بيانات بعد</p>
+                <p style={{ margin: 0, fontSize: '15px', color: C.textMuted }}>{t('common.noData')}</p>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -390,7 +498,7 @@ const SellerExpenses = () => {
                     </span>
                   </div>
                   <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>
-                    {trendPct > 0 ? 'أعلى' : 'أقل'} من {fmtSAR(lastMonthTotal)}
+                    {trendPct > 0 ? t('expenses.higher') : t('expenses.lower')} {t('expenses.than')} {fmtSAR(lastMonthTotal)}
                   </p>
                 </>
               )}
@@ -398,10 +506,10 @@ const SellerExpenses = () => {
 
             {/* Category breakdown */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 12px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>توزيع هذا الشهر حسب الفئة</p>
+              <p style={{ margin: '0 0 12px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('expenses.categoryBreakdown')}</p>
               {thisMonthTotal === 0
-                ? <p style={{ margin: 0, fontSize: '13px', color: C.textMuted }}>لا توجد مصروفات هذا الشهر بعد.</p>
-                : <BreakdownBars totals={thisMonthCatTotals} grandTotal={thisMonthTotal} />
+                ? <p style={{ margin: 0, fontSize: '13px', color: C.textMuted }}>{t('expenses.noExpensesThisMonth')}</p>
+                : <BreakdownBars totals={thisMonthCatTotals} grandTotal={thisMonthTotal} t={t} />
               }
             </div>
           </div>
@@ -418,9 +526,9 @@ const SellerExpenses = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '20px' }}>{editId ? '✏️' : '➕'}</span>
               <span style={{ fontWeight: '700', fontSize: '15px', color: C.text }}>
-                {editId ? 'تعديل المصروف' : 'تسجيل مصروف'}
+                {editId ? t('expenses.editTitle') : t('expenses.addTitle')}
               </span>
-              {editId && <span style={{ fontSize: '12px', color: C.textMuted }}>وضع التعديل — التغييرات تُحفظ عند الضغط على زر التحديث</span>}
+              {editId && <span style={{ fontSize: '12px', color: C.textMuted }}>{t('expenses.editModeHint')}</span>}
             </div>
             {!editId && (
               <span style={{ color: C.textMuted, fontSize: '18px', transition: 'transform 0.2s', display: 'inline-block', transform: formOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
@@ -434,22 +542,22 @@ const SellerExpenses = () => {
 
                 {/* Date */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>التاريخ *</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.date')} *</div>
                   <FI type="date" value={form.date} onChange={e => setF('date', e.target.value)} required max={today()} />
                 </div>
 
                 {/* Category */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>الفئة *</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.category')} *</div>
                   <FSelect value={form.category} onChange={e => setF('category', e.target.value)} required>
-                    <optgroup label="مصاريف الماشية">
+                    <optgroup label={t('expenses.group.livestock')}>
                       {LIVESTOCK_CAT_KEYS.map(k => (
-                        <option key={k} value={k}>{CATS[k].emoji} {CATS[k].label}</option>
+                        <option key={k} value={k}>{CATS[k].emoji} {t(CATS[k].labelKey)}</option>
                       ))}
                     </optgroup>
-                    <optgroup label="مصاريف المزرعة الشهرية">
+                    <optgroup label={t('expenses.group.monthly')}>
                       {MONTHLY_CAT_KEYS.map(k => (
-                        <option key={k} value={k}>{CATS[k].emoji} {CATS[k].label}</option>
+                        <option key={k} value={k}>{CATS[k].emoji} {t(CATS[k].labelKey)}</option>
                       ))}
                     </optgroup>
                   </FSelect>
@@ -457,7 +565,7 @@ const SellerExpenses = () => {
 
                 {/* Amount */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>المبلغ *</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.amount')} *</div>
                   <div style={{ position: 'relative' }}>
                     <FI type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setF('amount', e.target.value)} placeholder="0.00" required style={{ paddingRight: '54px' }} />
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
@@ -466,9 +574,9 @@ const SellerExpenses = () => {
 
                 {/* Linked animal */}
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>الحيوان المرتبط <span style={{ fontWeight: 400, textTransform: 'none' }}>(اختياري)</span></div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.linkedAnimal')} <span style={{ fontWeight: 400, textTransform: 'none' }}>{t('common.optional')}</span></div>
                   <FSelect value={form.listing} onChange={e => setF('listing', e.target.value)}>
-                    <option value="">— بدون —</option>
+                    <option value="">— {t('expenses.form.noAnimal')} —</option>
                     {listings.map(l => (
                       <option key={l._id} value={l._id}>
                         {l.type} {l.breed ? `— ${l.breed}` : ''}
@@ -480,12 +588,11 @@ const SellerExpenses = () => {
 
               {/* Description */}
               <div>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>الوصف</div>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.description')}</div>
                 <textarea
                   value={form.note}
                   onChange={e => setF('note', e.target.value)}
-                  placeholder="على ماذا أنفقت؟ مثال: توصيل علف شهري، 20 بالة"
-                  dir="rtl"
+                  placeholder={t('expenses.form.descPlaceholder')}
                   rows={3}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: '#fff', fontSize: '14px', color: C.text, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, transition: 'border-color 0.15s' }}
                   onFocus={e => e.target.style.borderColor = C.green}
@@ -493,19 +600,52 @@ const SellerExpenses = () => {
                 />
               </div>
 
+              {/* Recurring toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: form.recurringDay !== '' ? C.greenBg : '#F9F5F0', border: `1px solid ${form.recurringDay !== '' ? '#BBF7D0' : C.border}`, borderRadius: '10px', gap: '12px', flexWrap: 'wrap', cursor: 'pointer' }}
+                onClick={() => setF('recurringDay', form.recurringDay !== '' ? '' : String(new Date(form.date || today()).getDate()))}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: form.recurringDay !== '' ? C.greenText : C.text }}>🔁 تكرار شهري</div>
+                  <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '2px' }}>
+                    {form.recurringDay !== '' ? `يُنشأ تلقائيًا كل شهر في اليوم ${form.recurringDay}` : 'اضغط لتفعيل التكرار الشهري التلقائي'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} onClick={e => e.stopPropagation()}>
+                  {form.recurringDay !== '' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '12px', color: C.textMuted, whiteSpace: 'nowrap' }}>يوم</span>
+                      <input
+                        type="number" min="1" max="28"
+                        value={form.recurringDay}
+                        onChange={e => {
+                          const v = Math.min(28, Math.max(1, parseInt(e.target.value, 10) || 1));
+                          setF('recurringDay', String(v));
+                        }}
+                        style={{ width: '56px', padding: '6px 8px', border: `1.5px solid ${C.green}`, borderRadius: '7px', fontSize: '14px', fontWeight: '700', color: C.greenText, background: '#fff', textAlign: 'center', fontFamily: 'inherit' }}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </div>
+                  )}
+                  <div style={{ position: 'relative', width: '44px', height: '24px', flexShrink: 0, cursor: 'pointer' }}
+                    onClick={() => setF('recurringDay', form.recurringDay !== '' ? '' : String(new Date(form.date || today()).getDate()))}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '12px', background: form.recurringDay !== '' ? C.green : '#D1D5DB', transition: 'background 0.2s' }} />
+                    <div style={{ position: 'absolute', top: '3px', left: form.recurringDay !== '' ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
+                  </div>
+                </div>
+              </div>
+
               {/* Receipt upload */}
               <div>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>الإيصال <span style={{ fontWeight: 400, textTransform: 'none' }}>(اختياري)</span></div>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: C.textMuted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expenses.form.receipt')} <span style={{ fontWeight: 400, textTransform: 'none' }}>{t('common.optional')}</span></div>
                 {receipt ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 13px', background: C.greenBg, border: `1px solid #BBF7D0`, borderRadius: '9px' }}>
                     <span style={{ fontSize: '16px' }}>📎</span>
                     <span style={{ flex: 1, fontSize: '13px', fontWeight: '600', color: C.greenText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receipt.name}</span>
-                    <button type="button" onClick={() => setReceipt(null)} style={{ background: 'none', border: 'none', color: C.redText, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>إزالة</button>
+                    <button type="button" onClick={() => setReceipt(null)} style={{ background: 'none', border: 'none', color: C.redText, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>{t('expenses.form.removeReceipt')}</button>
                   </div>
                 ) : (
                   <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '9px 13px', border: `1.5px dashed ${C.border}`, borderRadius: '9px', background: '#FDFAF7', cursor: 'pointer' }}>
                     <span style={{ fontSize: '16px' }}>📎</span>
-                    <span style={{ fontSize: '13px', color: C.textMuted }}>انقر لإرفاق إيصال (PDF، JPG، PNG)</span>
+                    <span style={{ fontSize: '13px', color: C.textMuted }}>{t('expenses.form.attachReceipt')}</span>
                     <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={e => setReceipt(e.target.files[0] || null)} />
                   </label>
                 )}
@@ -523,7 +663,7 @@ const SellerExpenses = () => {
                 {editId && (
                   <button type="button" onClick={cancelEdit}
                     style={{ padding: '10px 18px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-                    إلغاء
+                    {t('common.cancel')}
                   </button>
                 )}
                 <button type="submit" disabled={submitting}
@@ -531,7 +671,7 @@ const SellerExpenses = () => {
                   onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = C.greenDark; }}
                   onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.green; }}
                 >
-                  {submitting ? 'جاري الحفظ…' : editId ? '✓ تحديث المصروف' : '+ تسجيل مصروف'}
+                  {submitting ? t('common.saving') : editId ? `✓ ${t('expenses.form.update')}` : `+ ${t('expenses.form.submit')}`}
                 </button>
               </div>
             </form>
@@ -545,9 +685,8 @@ const SellerExpenses = () => {
             <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: C.textMuted, pointerEvents: 'none' }}>🔍</span>
             <input
               type="text"
-              aria-label="البحث في المصروفات"
-              placeholder="ابحث في الوصف…"
-              dir="rtl"
+              aria-label={t('expenses.filter.searchLabel')}
+              placeholder={t('expenses.filter.searchPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 30px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '13px', color: C.text, transition: 'border-color 0.15s' }}
@@ -555,13 +694,13 @@ const SellerExpenses = () => {
               onBlur={e => e.target.style.borderColor = C.border}
             />
             {search && (
-              <button type="button" onClick={() => setSearch('')} aria-label="مسح البحث" style={{ position: 'absolute', right: '9px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: '13px', padding: 0 }}><span aria-hidden="true">✕</span></button>
+              <button type="button" onClick={() => setSearch('')} aria-label={t('expenses.filter.clearSearch')} style={{ position: 'absolute', right: '9px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: '13px', padding: 0 }}><span aria-hidden="true">✕</span></button>
             )}
           </div>
 
           {/* Category filter pills */}
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-            {[{ k: 'all', label: 'الكل' }, ...CAT_KEYS.map(k => ({ k, label: `${CATS[k].emoji} ${CATS[k].label}` }))].map(({ k, label }) => (
+            {[{ k: 'all', label: t('common.all') }, ...CAT_KEYS.map(k => ({ k, label: `${CATS[k].emoji} ${t(CATS[k].labelKey)}` }))].map(({ k, label }) => (
               <button key={k} type="button" onClick={() => setCatFilter(k)}
                 aria-pressed={catFilter === k}
                 style={{ padding: '7px 12px', borderRadius: '20px', border: `1.5px solid ${catFilter === k ? C.green : C.border}`, background: catFilter === k ? C.green : C.card, color: catFilter === k ? '#fff' : C.textMuted, fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
@@ -573,14 +712,14 @@ const SellerExpenses = () => {
           {/* Date range */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo || today()}
-              aria-label="تصفية من تاريخ"
+              aria-label={t('expenses.filter.dateFromLabel')}
               style={{ padding: '8px 10px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '12px', color: C.text }}
               onFocus={e => e.target.style.borderColor = C.green}
               onBlur={e => e.target.style.borderColor = C.border}
             />
-            <span aria-hidden="true" style={{ fontSize: '12px', color: C.textMuted }}>إلى</span>
+            <span aria-hidden="true" style={{ fontSize: '12px', color: C.textMuted }}>{t('common.to')}</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={today()}
-              aria-label="تصفية إلى تاريخ"
+              aria-label={t('expenses.filter.dateToLabel')}
               style={{ padding: '8px 10px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '12px', color: C.text }}
               onFocus={e => e.target.style.borderColor = C.green}
               onBlur={e => e.target.style.borderColor = C.border}
@@ -588,7 +727,7 @@ const SellerExpenses = () => {
             {(dateFrom || dateTo) && (
               <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); }}
                 style={{ padding: '6px 10px', borderRadius: '9px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                مسح
+                {t('common.clear')}
               </button>
             )}
           </div>
@@ -598,12 +737,12 @@ const SellerExpenses = () => {
         {!loading && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', color: C.textMuted }}>
-              {visible.length} نتيجة
-              {visible.length !== expenses.length ? ` (من أصل ${expenses.length})` : ''}
+              {visible.length} {t('expenses.results')}
+              {visible.length !== expenses.length ? ` (${t('expenses.outOf').replace('{total}', expenses.length)})` : ''}
             </span>
             {visible.length > 0 && (
               <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>
-                الإجمالي: {fmtSAR(visible.reduce((s, e) => s + e.amount, 0))}
+                {t('expenses.total')}: {fmtSAR(visible.reduce((s, e) => s + e.amount, 0))}
               </span>
             )}
           </div>
@@ -624,17 +763,17 @@ const SellerExpenses = () => {
           <div style={{ textAlign: 'center', padding: '56px 24px', background: C.card, borderRadius: '16px', border: `1.5px dashed ${C.border}` }}>
             <div style={{ fontSize: '52px', marginBottom: '12px' }}>{search || catFilter !== 'all' || dateFrom || dateTo ? '🔍' : '📋'}</div>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '700', color: C.text }}>
-              {search || catFilter !== 'all' || dateFrom || dateTo ? 'لا توجد مصروفات تطابق الفلاتر' : 'لا توجد مصروفات مسجّلة بعد'}
+              {search || catFilter !== 'all' || dateFrom || dateTo ? t('expenses.empty.filteredTitle') : t('expenses.empty.title')}
             </h3>
             <p style={{ margin: '0 0 20px', fontSize: '14px', color: C.textMuted }}>
               {search || catFilter !== 'all' || dateFrom || dateTo
-                ? 'جرّب مسح الفلاتر لرؤية كل السجلات.'
-                : 'ابدأ بتسجيل أول مصروف من الأعلى.'}
+                ? t('expenses.empty.filteredHint')
+                : t('expenses.empty.hint')}
             </p>
             {(search || catFilter !== 'all' || dateFrom || dateTo) && (
               <button type="button" onClick={() => { setSearch(''); setCatFilter('all'); setDateFrom(''); setDateTo(''); }}
                 style={{ padding: '9px 18px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                مسح كل الفلاتر
+                {t('expenses.empty.clearAll')}
               </button>
             )}
           </div>
@@ -648,7 +787,7 @@ const SellerExpenses = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#FAF5EF', borderBottom: `2px solid ${C.border}` }}>
-                  {['التاريخ', 'الفئة', 'الوصف', 'الحيوان', 'المبلغ', 'الإجراءات'].map((h, i) => (
+                  {[t('expenses.col.date'), t('expenses.col.category'), t('expenses.col.description'), t('expenses.col.animal'), t('expenses.col.amount'), t('expenses.col.actions')].map((h, i) => (
                     <th key={h} style={{ padding: '12px 14px', textAlign: i >= 4 ? 'right' : 'left', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -670,13 +809,13 @@ const SellerExpenses = () => {
 
                       {/* Category */}
                       <td style={{ padding: '12px 14px' }}>
-                        <CatBadge cat={exp.category} small />
+                        <CatBadge cat={exp.category} small t={t} />
                       </td>
 
                       {/* Description */}
                       <td style={{ padding: '12px 14px', fontSize: '13px', color: C.text, maxWidth: '220px' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {exp.note || <span style={{ color: C.textMuted, fontStyle: 'italic' }}>بدون وصف</span>}
+                          {exp.note || <span style={{ color: C.textMuted, fontStyle: 'italic' }}>{t('expenses.noDescription')}</span>}
                         </div>
                       </td>
 
@@ -696,14 +835,14 @@ const SellerExpenses = () => {
                       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {isDelConfirm ? (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '600' }}>حذف؟</span>
+                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '600' }}>{t('expenses.delete.confirm')}</span>
                             <button type="button" onClick={() => confirmDelete(exp._id)} disabled={deleting}
                               style={{ padding: '5px 10px', borderRadius: '7px', border: 'none', background: C.red, color: '#fff', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer' }}>
-                              {deleting ? '…' : 'نعم'}
+                              {deleting ? '…' : t('common.yes')}
                             </button>
                             <button type="button" onClick={() => setDeletingId(null)}
                               style={{ padding: '5px 10px', borderRadius: '7px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                              لا
+                              {t('common.no')}
                             </button>
                           </div>
                         ) : (
@@ -712,11 +851,11 @@ const SellerExpenses = () => {
                               style={{ padding: '6px 11px', borderRadius: '7px', border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = C.green; e.currentTarget.style.color = C.green; }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}>
-                              ✏ تعديل
+                              ✏ {t('common.edit')}
                             </button>
                             <button type="button" onClick={() => setDeletingId(exp._id)}
                               style={{ padding: '6px 11px', borderRadius: '7px', border: `1px solid #FECACA`, background: C.redBg, color: C.redText, fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
-                              🗑 حذف
+                              🗑 {t('common.delete')}
                             </button>
                           </div>
                         )}
@@ -729,7 +868,7 @@ const SellerExpenses = () => {
 
             {/* Table footer total */}
             <div style={{ padding: '12px 16px', background: '#FAF5EF', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: C.textMuted }}>الإجمالي المعروض:</span>
+              <span style={{ fontSize: '13px', color: C.textMuted }}>{t('expenses.displayedTotal')}:</span>
               <span style={{ fontSize: '15px', fontWeight: '800', color: C.text }}>
                 {fmtSAR(visible.reduce((s, e) => s + e.amount, 0))}
               </span>
@@ -748,11 +887,11 @@ const SellerExpenses = () => {
                 <div key={exp._id} style={{ background: C.card, borderRadius: '14px', border: `1.5px solid ${editId === exp._id ? C.tan : C.border}`, boxShadow: C.shadow, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
                   <div style={{ padding: '14px 14px 10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '7px' }}>
-                      <CatBadge cat={exp.category} />
+                      <CatBadge cat={exp.category} t={t} />
                       <span style={{ fontWeight: '800', fontSize: '16px', color: C.text }}>{fmtSAR(exp.amount)}</span>
                     </div>
                     <div style={{ fontSize: '14px', color: exp.note ? C.text : C.textMuted, fontStyle: exp.note ? 'normal' : 'italic', marginBottom: '6px' }}>
-                      {exp.note || 'بدون وصف'}
+                      {exp.note || t('expenses.noDescription')}
                     </div>
                     <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: C.textMuted }}>
                       <span>📅 {fmtDate(exp.date)}</span>
@@ -762,25 +901,25 @@ const SellerExpenses = () => {
                   <div style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}` }}>
                     {isDelConfirm ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ flex: 1, fontSize: '13px', color: C.redText, fontWeight: '600' }}>حذف هذا المصروف؟</span>
+                        <span style={{ flex: 1, fontSize: '13px', color: C.redText, fontWeight: '600' }}>{t('expenses.delete.confirmMsg')}</span>
                         <button type="button" onClick={() => confirmDelete(exp._id)} disabled={deleting}
                           style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', background: C.red, color: '#fff', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer' }}>
-                          {deleting ? '…' : 'حذف'}
+                          {deleting ? '…' : t('common.delete')}
                         </button>
                         <button type="button" onClick={() => setDeletingId(null)}
                           style={{ padding: '7px 12px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                          إلغاء
+                          {t('common.cancel')}
                         </button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button type="button" onClick={() => startEdit(exp)}
                           style={{ flex: 1, padding: '7px 0', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                          ✏ تعديل
+                          ✏ {t('common.edit')}
                         </button>
                         <button type="button" onClick={() => setDeletingId(exp._id)}
                           style={{ flex: 1, padding: '7px 0', borderRadius: '8px', border: `1px solid #FECACA`, background: C.redBg, color: C.redText, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                          🗑 حذف
+                          🗑 {t('common.delete')}
                         </button>
                       </div>
                     )}

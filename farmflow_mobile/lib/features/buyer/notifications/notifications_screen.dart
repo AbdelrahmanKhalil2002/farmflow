@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../shared/models/notification_model.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
@@ -18,9 +19,9 @@ class NotificationsScreen extends ConsumerWidget {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.green,
-        title: const Text(
-          'الإشعارات',
-          style: TextStyle(
+        title: Text(
+          context.l10n.notificationsTitle,
+          style: const TextStyle(
             fontFamily: 'Cairo',
             fontWeight: FontWeight.w800,
             color: AppColors.white,
@@ -33,9 +34,9 @@ class NotificationsScreen extends ConsumerWidget {
             TextButton(
               onPressed: () =>
                   ref.read(notificationsProvider.notifier).markAllRead(),
-              child: const Text(
-                'قراءة الكل',
-                style: TextStyle(
+              child: Text(
+                context.l10n.markAllRead,
+                style: const TextStyle(
                   fontFamily: 'Cairo',
                   color: AppColors.white,
                   fontSize: 12,
@@ -51,16 +52,16 @@ class NotificationsScreen extends ConsumerWidget {
         ),
         error: (e, _) => EmptyState(
           icon: Icons.wifi_off_rounded,
-          title: 'تعذّر تحميل الإشعارات',
-          actionLabel: 'إعادة المحاولة',
+          title: context.l10n.loadNotificationsFailed,
+          actionLabel: context.l10n.retry,
           action: () => ref.read(notificationsProvider.notifier).load(),
         ),
         data: (notifications) {
           if (notifications.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.notifications_off_outlined,
-              title: 'لا توجد إشعارات',
-              subtitle: 'ستظهر هنا إشعارات طلباتك والمزارع',
+              title: context.l10n.noNotifications,
+              subtitle: context.l10n.noNotificationsSubtitle,
             );
           }
           return RefreshIndicator(

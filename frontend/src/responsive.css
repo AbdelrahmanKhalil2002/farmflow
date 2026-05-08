@@ -123,6 +123,74 @@
   border-radius: 8px;
 }
 
+/* ── Global design tokens ─────────────────────────────────────── */
+:root {
+  --radius-base:  10px;
+  --radius-sm:    6px;
+  --radius-lg:    16px;
+  --icon-radius:  10px;
+  --font-family:  'Cairo', 'Tajawal', sans-serif;
+  --font-size-base: 14px;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size:   var(--font-size-base);
+}
+
+/* ── Icon Style (data-icon attribute set by ThemeContext) ────── */
+/* Border-radius is controlled exclusively by --radius-base (Border Radius token). */
+/* Icon Style only controls visual character, not corner radius.                   */
+
+/* Outline: adds a ring shadow around buttons without removing their background */
+[data-icon="outline"] button:not([disabled]) {
+  box-shadow: 0 0 0 2px var(--primary, #3A7D44) !important;
+  border-width: 2px !important;
+}
+
+/* ── Border Radius token applied to all interactive elements ── */
+button,
+.ff-btn,
+input,
+select,
+textarea {
+  border-radius: var(--radius-base, 10px) !important;
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] body {
+  background: #0F172A;
+  color: #E2E8F0;
+}
+
+/* Inputs, selects, textareas go dark */
+[data-theme="dark"] input:not([type="range"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: var(--bg-input, #0F172A) !important;
+  color: var(--text-main, #E2E8F0)   !important;
+  border-color: var(--border-color, #334155) !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #4B5563 !important;
+}
+
+/* Scrollbar styling in dark mode */
+[data-theme="dark"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #1E293B; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #64748B; }
+
+/* Focus ring adapts in dark mode */
+[data-theme="dark"] *:focus-visible {
+  outline-color: #60A5FA !important;
+}
+
 /* ── 29.8 Empty state utility classes ────────────────────── */
 .ff-empty-state {
   display: flex;

@@ -1,29 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { loginUser } from '../services/authService';
+import { loginUser, verify2FA } from '../services/authService';
+import { C as _C } from '../tokens';
 
 // ─── Design tokens — dark, corporate, secure ────────────────────────────────
 const C = {
-  pageBg:         '#07100A',
-  cardBg:         '#0D1610',
-  cardBorder:     'rgba(34,197,94,0.11)',
-  inputBg:        '#111C13',
-  inputBorder:    'rgba(255,255,255,0.07)',
-  inputFocusBg:   '#131F15',
-  accent:         '#22C55E',
-  accentDark:     '#16A34A',
-  accentDeep:     '#0F766E',
-  accentMuted:    'rgba(34,197,94,0.12)',
-  text:           '#EEF9F1',
-  textSub:        '#7DA88A',
-  textGhost:      '#2E4535',
-  errorBg:        'rgba(239,68,68,0.08)',
-  errorBorder:    'rgba(239,68,68,0.22)',
-  errorText:      '#FCA5A5',
-  warnBg:         'rgba(251,191,36,0.07)',
-  warnBorder:     'rgba(251,191,36,0.22)',
-  warnText:       '#FDE68A',
+  ..._C,
+  pageBg:       '#07100A',
+  cardBg:       '#0D1610',
+  cardBorder:   'rgba(34,197,94,0.11)',
+  inputBg:      '#111C13',
+  inputBorder:  'rgba(255,255,255,0.07)',
+  inputFocusBg: '#131F15',
+  accent:       '#22C55E',
+  accentDark:   '#16A34A',
+  accentDeep:   '#0F766E',
+  accentMuted:  'rgba(34,197,94,0.12)',
+  textSub:      '#7DA88A',
+  textGhost:    '#2E4535',
+  warnBg:       'rgba(251,191,36,0.07)',
+  warnBorder:   'rgba(251,191,36,0.22)',
+  warnText:     '#FDE68A',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -223,10 +221,8 @@ const AdminLogin = () => {
     setError('');
     setSubmitting(true);
     try {
-      // Placeholder — wire to /auth/verify-2fa once backend supports it
-      // const { data } = await verify2FA({ tempToken, code: otp.join('') });
-      // login(tempUser, data.token, rememberMe);
-      setError('2FA verification is not yet active on this server. Contact your system administrator.');
+      const { data } = await verify2FA(tempToken, otp.join(''));
+      login(data.user, data.token, rememberMe);
     } catch (err) {
       setError(parseError(err));
     } finally {
@@ -470,7 +466,7 @@ const AdminLogin = () => {
                   Two-Factor Authentication
                 </h1>
                 <p style={{ margin: 0, fontSize: '13px', color: C.textSub, lineHeight: 1.55 }}>
-                  Enter the 6-digit code from your authenticator app
+                  A 6-digit verification code was sent to your email address
                 </p>
               </div>
 

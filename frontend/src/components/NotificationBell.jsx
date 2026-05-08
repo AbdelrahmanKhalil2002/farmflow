@@ -6,12 +6,9 @@ import {
   markAllRead,
   markOneRead,
 } from '../services/notificationService';
+import { isDesktop } from '../utils/platform';
 
-const C = {
-  card: '#FFFFFF', border: '#E8D5C0', text: '#2C1810', muted: '#8B6B5A',
-  green: '#3A7D44', red: '#DC2626', bg: '#FEFAF5',
-  shadow: '0 8px 32px rgba(44,24,16,0.15)',
-};
+import { C } from '../tokens';
 
 const timeAgo = (dateStr) => {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -29,21 +26,43 @@ const NotificationBell = ({ iconColor = '#4B6B4E' }) => {
   const [notifications, setNotifications] = useState([]);
   const [unread,        setUnread]       = useState(0);
   const [loading,       setLoading]      = useState(false);
-  const panelRef = useRef(null);
-  const navigate = useNavigate();
+  const panelRef  = useRef(null);
+  const prevCount = useRef(null);  // tracks last known count for delta detection
+  const navigate  = useNavigate();
 
   // Poll unread count every 30 seconds
   const fetchCount = useCallback(async () => {
     try {
-      const res = await getUnreadCount();
-      setUnread(res.data.count);
+      const res   = await getUnreadCount();
+      const count = res.data.count ?? 0;
+      setUnread(count);
+
+      if (isDesktop) {
+        // Sync dock / taskbar badge
+        window.electron.setBadge(count);
+
+        // Fire OS notification only when count genuinely increases
+        if (prevCount.current !== null && count > prevCount.current) {
+          const delta = count - prevCount.current;
+          window.electron.notify(
+            'FarmFlow — إشعارات جديدة',
+            delta === 1 ? 'لديك إشعار جديد' : `لديك ${delta} إشعارات جديدة`
+          );
+        }
+      }
+
+      prevCount.current = count;
     } catch {}
   }, []);
 
   useEffect(() => {
     fetchCount();
     const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Clear badge when component unmounts (user logged out)
+      if (isDesktop) window.electron.setBadge(0);
+    };
   }, [fetchCount]);
 
   // Close on outside click
@@ -71,7 +90,9 @@ const NotificationBell = ({ iconColor = '#4B6B4E' }) => {
     try {
       await markAllRead();
       setUnread(0);
+      prevCount.current = 0;
       setNotifications(n => n.map(x => ({ ...x, read: true })));
+      if (isDesktop) window.electron.setBadge(0);
     } catch {}
   };
 
@@ -80,7 +101,12 @@ const NotificationBell = ({ iconColor = '#4B6B4E' }) => {
       try {
         await markOneRead(notif._id);
         setNotifications(n => n.map(x => x._id === notif._id ? { ...x, read: true } : x));
-        setUnread(u => Math.max(0, u - 1));
+        setUnread(u => {
+          const next = Math.max(0, u - 1);
+          prevCount.current = next;
+          if (isDesktop) window.electron.setBadge(next);
+          return next;
+        });
       } catch {}
     }
     if (notif.link) {

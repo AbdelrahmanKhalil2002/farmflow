@@ -68,7 +68,7 @@ dependencies:
 | M2.6 | `AppShell` per role — BottomNavigationBar for buyer/seller; Drawer for admin | [x] |
 | M2.7 | Global error handler — DioException → Arabic error SnackBar via `ScaffoldMessenger` | [x] |
 | M2.8 | `ImageUploadService` — wraps `image_picker` + `dio.post` as `MultipartFile` | [x] |
-| M2.9 | `NotificationService` — FCM setup, `onMessage` / `onBackgroundMessage`, local notification display | [ ] |
+| M2.9 | `NotificationService` — FCM setup, `onMessage` / `onBackgroundMessage`, local notification display | [x] |
 | M2.10 | `ConnectivityWidget` — banner shown when offline; retries on reconnect | [x] |
 
 ---
@@ -85,7 +85,8 @@ dependencies:
 | M3.4 | `BuyerRegisterScreen` — name, email, phone, national ID (14-digit), password, confirm password | [x] |
 | M3.5 | `SellerRegisterScreen` — name, farm name, farm phone, personal phone, optional email, national ID, password | [x] |
 | M3.6 | National ID live validation — format check + `POST /auth/verify-id`; shows extracted info (age, governorate) | [x] |
-| M3.7 | Language toggle (AR/EN) on login + register screens | [x] |
+| M3.7 | Language toggle (AR/EN) on login + register screens (localeProvider via Riverpod) | [x] |
+| M3.8 | Full app-wide language switching across all seller/buyer/admin screens (parity with web section 34) | [x] |
 
 ---
 
@@ -541,6 +542,20 @@ lib/
 - **M16.4/M16.8 (server-side push):** `backend/src/utils/pushNotify.js` already fully implemented — `firebase-admin` installed, `sendPush(userId, {title, body, data})` fetches user's `fcmToken` from DB and calls `admin.messaging().send()`. Wired into every `createNotification()` call in `notify.js` (fire-and-forget, never blocks). Activate by setting `FIREBASE_SERVICE_ACCOUNT_JSON` in `backend/.env` (download key from Firebase Console → Project Settings → Service Accounts → Generate new private key → minify JSON → paste as single-line value).
 - **M18.2 (geolocator):** `geolocator: ^12.0.0` added to `pubspec.yaml`; `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` added to `AndroidManifest.xml`; `NSLocationWhenInUseUsageDescription` added to `ios/Runner/Info.plist`. "استخدام موقعي الحالي" button added to `_GovPickerSheet` — requests permission → `Geolocator.getCurrentPosition(desiredAccuracy: medium)` → Euclidean distance to 27 Egyptian governorate centroids → pops sheet with nearest match. Error string shown below button on service-disabled / permission-denied / timeout.
 - **M22.3 (integration test):** `integration_test: sdk: flutter` added to `dev_dependencies`. `integration_test/app_test.dart` created — covers full buyer flow: splash/auto-login check → enter credentials → tap login → assert BuyerHomeScreen → tap first farm card → tap مواشي tab → tap first listing → tap order button → assert OrderModal payment options. Credentials passed via `--dart-define=TEST_EMAIL=... TEST_PASSWORD=...` (defaults to seeded `buyer1@farmflow.com / buyer123`). Requires backend running + DB seeded.
+
+**Sprint 18 — Vet Records, Breed Settings & UX ✅ DONE**
+- `VetRecordsScreen` (`/seller/vet-records`) — cross-herd view of all medical records and all vaccination entries; data fetched from `GET /api/animals/vet/medical` + `GET /api/animals/vet/vaccinations`; tab bar (medical / vaccinations); animal ref shown with type emoji + tagId; shimmer skeleton + empty state.
+- `BreedSettingsScreen` (`/seller/breed-settings`) — manage custom breed names per animal type; `BreedService` persists breeds via the API; type chip selector (8 types), add/delete breeds.
+- `BuyerHomeScreen` filter sheet expanded: price range filter (min/max ج.م/كجم) wired to `sellersFilterProvider`; sort options extended to include `priceAsc` / `priceDesc`.
+- `BuyerOrdersScreen` revamped with tab bar: الكل / نشط / مكتمل / ملغي; client-side filtering by status.
+- `ApiEndpoints` additions: `vetMedical`, `vetVaccinations`, `budget`, `incomeById`.
+- Router additions: `/seller/vet-records` (VetRecordsScreen), `/seller/breed-settings` (BreedSettingsScreen).
+
+**Sprint 17 — Full App i18n (M3.8) ✅ DONE**
+- **Infrastructure:** `farmflow_mobile/l10n.yaml` (`arb-dir: lib/l10n`, `output-class: AppLocalizations`, `nullable-getter: false`); `lib/core/l10n/l10n_ext.dart` — `BuildContextL10n` extension: `context.l10n` shorthand; `AppLocalizations.delegate` added to `localizationsDelegates` in `main.dart`.
+- **ARB files:** `lib/l10n/app_en.arb` + `lib/l10n/app_ar.arb` expanded from 33 keys to ~200 keys covering all screen titles, tab labels, button labels, form fields, empty states, error messages, section headers, and status strings across every feature area.
+- **Screen updates:** All 35 feature screen files updated — 759 hardcoded Arabic/English strings replaced with `context.l10n.keyName` calls. Admin screens (7), seller screens (12), buyer screens (9), auth screens (5), shared widgets updated. Static backend-returned data (animal types, breeds) left as-is.
+- **Result:** Language toggle (AR↔EN via `localeProvider`) now switches all app chrome instantly. `flutter gen-l10n` generates `lib/core/l10n/app_localizations.dart`. `flutter analyze` 0 errors, 0 warnings.
 
 ---
 

@@ -1,20 +1,13 @@
 import { useEffect, useState } from 'react';
 import { getSupplies, updateSupplyStatus } from '../../services/supplyService';
 
+import { C as _C } from '../../tokens';
+
 const C = {
-  bg:          '#F8FAFC',
-  border:      '#E5E7EB',
-  text:        '#111827',
-  dim:         '#6B7280',
-  card:        '#FFFFFF',
-  cardBorder:  '#E5E7EB',
-  red:         '#DC2626',
-  redBg:       '#FEF2F2',
-  amber:       '#D97706',
-  amberBg:     '#FFFBEB',
-  greenBg:     '#F0FDF4',
-  green:       '#16A34A',
-  header:      '#F9FAFB',
+  ..._C,
+  dim:        '#6B7280',
+  cardBorder: '#E5E7EB',
+  header:     '#F9FAFB',
 };
 
 const CAT_AR    = { feed:'علف', veterinary:'مستلزمات بيطرية', equipment:'معدات ومستلزمات', seeds:'بذور ونباتات', other:'أخرى' };

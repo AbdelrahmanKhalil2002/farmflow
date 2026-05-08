@@ -21,6 +21,11 @@ class ListingModel {
     this.slaughterService = false,
     this.slaughterCost,
     required this.createdAt,
+    this.views = 0,
+    this.rejectionReason,
+    this.healthStatus,
+    this.color,
+    this.traits = const [],
   });
 
   final String id;
@@ -43,6 +48,11 @@ class ListingModel {
   final bool slaughterService;
   final double? slaughterCost;
   final DateTime createdAt;
+  final int views;
+  final String? rejectionReason;
+  final String? healthStatus; // healthy | vaccinated | certified
+  final String? color;
+  final List<String> traits; // dairy | meat | breeding | show | working
 
   static const _typeAr = {
     'cattle':  'أبقار',
@@ -105,6 +115,11 @@ class ListingModel {
       slaughterCost:    (json['slaughterCost'] as num?)?.toDouble(),
       createdAt:        DateTime.tryParse(json['createdAt'] as String? ?? '') ??
                         DateTime.now(),
+      views:            (json['views'] as num?)?.toInt() ?? 0,
+      rejectionReason:  json['rejectionReason'] as String?,
+      healthStatus:     json['healthStatus'] as String?,
+      color:            json['color'] as String?,
+      traits:           (json['traits'] as List?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
 }

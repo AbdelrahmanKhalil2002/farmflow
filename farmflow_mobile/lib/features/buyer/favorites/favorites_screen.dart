@@ -8,6 +8,7 @@ import '../../../shared/models/seller_summary_model.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
 import '../browse/sellers_service.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import 'favorites_service.dart';
 
 class FavoritesScreen extends ConsumerWidget {
@@ -22,9 +23,9 @@ class FavoritesScreen extends ConsumerWidget {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.green,
-        title: const Text(
-          'المفضلة',
-          style: TextStyle(
+        title: Text(
+          context.l10n.favoritesTitle,
+          style: const TextStyle(
             fontFamily: 'Cairo',
             fontWeight: FontWeight.w800,
             color: AppColors.white,
@@ -39,9 +40,9 @@ class FavoritesScreen extends ConsumerWidget {
         ),
         error: (e, _) => EmptyState(
           icon: Icons.wifi_off_rounded,
-          title: 'تعذّر التحميل',
+          title: context.l10n.loadFavoritesFailed,
           subtitle: e.toString(),
-          actionLabel: 'إعادة المحاولة',
+          actionLabel: context.l10n.retry,
           action: () => ref.invalidate(allSellersProvider),
         ),
         data: (all) {
@@ -49,10 +50,10 @@ class FavoritesScreen extends ConsumerWidget {
               all.where((s) => favoriteIds.contains(s.id)).toList();
 
           if (favoriteIds.isEmpty || favorites.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.favorite_outline,
-              title: 'لا توجد مزارع مفضلة',
-              subtitle: 'اضغط على ❤️ في أي مزرعة لإضافتها هنا',
+              title: context.l10n.noFavorites,
+              subtitle: context.l10n.noFavoritesSubtitle,
             );
           }
 
@@ -141,7 +142,7 @@ class _FavoriteTile extends ConsumerWidget {
                       Text(
                         seller.averageRating > 0
                             ? seller.averageRating.toStringAsFixed(1)
-                            : 'جديد',
+                            : context.l10n.newBadge,
                         style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 12,

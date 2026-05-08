@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -55,9 +56,9 @@ class _AnimalDetailScreenState extends ConsumerState<AnimalDetailScreen>
                   onPressed: () => Navigator.pop(context))),
           body: EmptyState(
             icon: Icons.wifi_off_rounded,
-            title: 'تعذّر التحميل',
+            title: context.l10n.animalLoadFailed,
             subtitle: e.toString(),
-            actionLabel: 'إعادة المحاولة',
+            actionLabel: context.l10n.retry,
             action: () => ref.invalidate(animalDetailProvider(widget.animalId)),
           ),
         ),
@@ -80,9 +81,9 @@ class _AnimalDetailScreenState extends ConsumerState<AnimalDetailScreen>
                   onPressed: () async {
                     final ok = await showConfirmDialog(
                       context,
-                      title: 'حذف الحيوان',
-                      message: 'هل تريد حذف هذا الحيوان من القطيع؟\nلا يمكن التراجع عن هذا الإجراء.',
-                      confirmLabel: 'حذف',
+                      title: context.l10n.deleteAnimalTitle,
+                      message: context.l10n.deleteAnimalConfirmMsg,
+                      confirmLabel: context.l10n.delete,
                       dangerous: true,
                     );
                     if (ok && mounted) {
@@ -115,10 +116,10 @@ class _AnimalDetailScreenState extends ConsumerState<AnimalDetailScreen>
                 indicatorWeight: 3,
                 labelStyle: const TextStyle(fontFamily: 'Cairo',
                     fontWeight: FontWeight.w700, fontSize: 13),
-                tabs: const [
-                  Tab(text: '📈 النمو'),
-                  Tab(text: '💉 التطعيمات'),
-                  Tab(text: '🏥 الطب'),
+                tabs: [
+                  Tab(text: context.l10n.tabGrowth),
+                  Tab(text: context.l10n.tabVaccinations),
+                  Tab(text: context.l10n.tabMedical),
                 ],
               ),
             ),
@@ -238,8 +239,8 @@ class _HeaderCard extends ConsumerWidget {
                   onPressed: () => _showPregnancyEditor(context, ref),
                   icon: const Icon(Icons.edit_outlined, size: 14,
                       color: AppColors.green),
-                  label: const Text('تعديل الحمل',
-                      style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                  label: Text(context.l10n.editPregnancy,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                           color: AppColors.green)),
                   style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8)),
@@ -300,7 +301,7 @@ class _WeightProgressBar extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('تقدم الوزن نحو الهدف',
+            Text(context.l10n.weightProgress,
                 style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                     color: AppColors.muted)),
             Text('${fmt.format(current)} / ${fmt.format(target)} كجم',
@@ -339,10 +340,10 @@ class _WeightTab extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const EmptyState(
+            EmptyState(
               icon: Icons.monitor_weight_outlined,
-              title: 'لا توجد إدخالات وزن',
-              subtitle: 'سجّل أول وزن للحيوان',
+              title: context.l10n.noWeightHistory,
+              subtitle: context.l10n.noWeightHistory,
             ),
             const SizedBox(height: 16),
             _WeightGoalCard(animal: animal),
@@ -444,8 +445,8 @@ class _WeightTab extends ConsumerWidget {
           OutlinedButton.icon(
             onPressed: () => _showAddWeightSheet(context, ref, animal.id),
             icon: const Icon(Icons.add, color: AppColors.green, size: 18),
-            label: const Text('تسجيل وزن جديد',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+            label: Text(context.l10n.recordWeightTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                     color: AppColors.green)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.green),
@@ -534,7 +535,7 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
   Future<void> _submit() async {
     final w = double.tryParse(_weightCtrl.text);
     if (w == null || w <= 0) {
-      setState(() => _error = 'أدخل وزناً صحيحاً');
+      setState(() => _error = context.l10n.weightInvalid);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -549,7 +550,7 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() { _error = 'فشل في التسجيل'; _loading = false; });
+      setState(() { _error = context.l10n.recordWeightFailed; _loading = false; });
     }
   }
 
@@ -565,8 +566,8 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
             width: 40, height: 4,
             decoration: BoxDecoration(color: AppColors.border,
                 borderRadius: BorderRadius.circular(2)))),
-        const Text('تسجيل وزن جديد',
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+        Text(context.l10n.recordWeightTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                 fontWeight: FontWeight.w800, color: AppColors.text)),
         const SizedBox(height: 16),
         TextField(
@@ -574,10 +575,10 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
           keyboardType: TextInputType.number,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: 'الوزن (كجم)',
+            labelText: context.l10n.weightKgLabel,
             labelStyle: const TextStyle(fontFamily: 'Cairo', color: AppColors.muted),
             filled: true, fillColor: AppColors.bg,
-            suffixText: 'كجم',
+            suffixText: context.l10n.weightSuffix,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: AppColors.border)),
             enabledBorder: OutlineInputBorder(
@@ -589,7 +590,7 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
         TextField(
           controller: _notesCtrl,
           decoration: InputDecoration(
-            hintText: 'ملاحظة (اختياري)',
+            hintText: context.l10n.noteOptional,
             hintStyle: const TextStyle(fontFamily: 'Cairo', color: AppColors.muted),
             filled: true, fillColor: AppColors.bg,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
@@ -613,8 +614,8 @@ class _AddWeightSheetState extends ConsumerState<_AddWeightSheet> {
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(
                       color: AppColors.white, strokeWidth: 2))
-              : const Text('تسجيل',
-                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+              : Text(context.l10n.recordWeight,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                       color: AppColors.white)),
         ),
       ],
@@ -638,9 +639,9 @@ class _VaccinationsTab extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       children: [
         if (vaccinations.isEmpty)
-          const EmptyState(
+          EmptyState(
             icon: Icons.vaccines_outlined,
-            title: 'لا توجد تطعيمات مسجّلة',
+            title: context.l10n.noVaccinations,
           )
         else ...[
           ...vaccinations.reversed.map((v) => Container(
@@ -674,7 +675,7 @@ class _VaccinationsTab extends ConsumerWidget {
                   Row(children: [
                     const Icon(Icons.schedule, size: 12, color: AppColors.amber),
                     const SizedBox(width: 4),
-                    Text('الجرعة القادمة: ${dateFmt.format(v.nextDueDate!)}',
+                    Text(context.l10n.nextDose(dateFmt.format(v.nextDueDate!)),
                         style: const TextStyle(fontFamily: 'Cairo', fontSize: 11,
                             color: AppColors.amber, fontWeight: FontWeight.w700)),
                   ]),
@@ -687,8 +688,8 @@ class _VaccinationsTab extends ConsumerWidget {
         OutlinedButton.icon(
           onPressed: () => _showAddVacSheet(context, ref),
           icon: const Icon(Icons.add, color: AppColors.green, size: 18),
-          label: const Text('إضافة تطعيم',
-              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+          label: Text(context.l10n.addVaccinationLabel,
+              style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                   color: AppColors.green)),
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: AppColors.green),
@@ -737,7 +738,7 @@ class _AddVacSheetState extends ConsumerState<_AddVacSheet> {
 
   Future<void> _submit() async {
     if (_vaccineCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'اسم اللقاح مطلوب');
+      setState(() => _error = context.l10n.vaccineRequired);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -753,7 +754,7 @@ class _AddVacSheetState extends ConsumerState<_AddVacSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (_) {
-      setState(() { _error = 'فشل في الإضافة'; _loading = false; });
+      setState(() { _error = context.l10n.addVaccineFailed; _loading = false; });
     }
   }
 
@@ -769,13 +770,13 @@ class _AddVacSheetState extends ConsumerState<_AddVacSheet> {
             width: 40, height: 4,
             decoration: BoxDecoration(color: AppColors.border,
                 borderRadius: BorderRadius.circular(2)))),
-        const Text('إضافة تطعيم',
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+        Text(context.l10n.addVacTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                 fontWeight: FontWeight.w800, color: AppColors.text)),
         const SizedBox(height: 14),
-        _SheetField(controller: _vaccineCtrl, label: 'اسم اللقاح *', hint: 'مثال: FMD، PPR...'),
+        _SheetField(controller: _vaccineCtrl, label: context.l10n.vaccineName, hint: context.l10n.vaccineHint),
         const SizedBox(height: 10),
-        _SheetField(controller: _vetCtrl, label: 'اسم الطبيب البيطري', hint: 'اختياري'),
+        _SheetField(controller: _vetCtrl, label: context.l10n.vetName, hint: context.l10n.vetHint),
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(_error!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.red)),
@@ -788,8 +789,8 @@ class _AddVacSheetState extends ConsumerState<_AddVacSheet> {
           child: _loading
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-              : const Text('إضافة',
-                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: AppColors.white)),
+              : Text(context.l10n.addVacButton,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: AppColors.white)),
         ),
       ],
     ),
@@ -810,16 +811,16 @@ class _MedicalTab extends ConsumerWidget {
     return asyncMedical.when(
       loading: () => const Padding(padding: EdgeInsets.all(16),
           child: ShimmerList(count: 3, cardHeight: 90)),
-      error: (_, __) => const EmptyState(
+      error: (_, __) => EmptyState(
           icon: Icons.medical_services_outlined,
-          title: 'تعذّر تحميل السجلات الطبية'),
+          title: context.l10n.loadMedicalFailed),
       data: (records) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (records.isEmpty)
-            const EmptyState(
+            EmptyState(
               icon: Icons.medical_services_outlined,
-              title: 'لا توجد سجلات طبية',
+              title: context.l10n.noMedicalRecords,
             )
           else ...[
             ...records.reversed.map((r) => Container(
@@ -868,7 +869,7 @@ class _MedicalTab extends ConsumerWidget {
                     Row(children: [
                       const Icon(Icons.schedule, size: 12, color: AppColors.amber),
                       const SizedBox(width: 4),
-                      Text('متابعة: ${dateFmt.format(r.followUpDate!)}',
+                      Text(context.l10n.followUpDate(dateFmt.format(r.followUpDate!)),
                           style: const TextStyle(fontFamily: 'Cairo', fontSize: 11,
                               color: AppColors.amber, fontWeight: FontWeight.w700)),
                     ]),
@@ -881,8 +882,8 @@ class _MedicalTab extends ConsumerWidget {
           OutlinedButton.icon(
             onPressed: () => _showAddMedSheet(context, ref),
             icon: const Icon(Icons.add, color: AppColors.rose, size: 18),
-            label: const Text('إضافة سجل طبي',
-                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+            label: Text(context.l10n.addMedicalLabel,
+                style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                     color: AppColors.rose)),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.rose),
@@ -954,7 +955,7 @@ class _AddMedSheetState extends ConsumerState<_AddMedSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (_) {
-      setState(() { _error = 'فشل في الإضافة'; _loading = false; });
+      setState(() { _error = context.l10n.addMedFailed; _loading = false; });
     }
   }
 
@@ -971,20 +972,20 @@ class _AddMedSheetState extends ConsumerState<_AddMedSheet> {
               width: 40, height: 4,
               decoration: BoxDecoration(color: AppColors.border,
                   borderRadius: BorderRadius.circular(2)))),
-          const Text('إضافة سجل طبي',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+          Text(context.l10n.addMedTitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                   fontWeight: FontWeight.w800, color: AppColors.text)),
           const SizedBox(height: 14),
-          _SheetField(controller: _diagCtrl, label: 'التشخيص', hint: 'المرض أو الحالة'),
+          _SheetField(controller: _diagCtrl, label: context.l10n.diagnosisLabel, hint: context.l10n.diagnosisHint),
           const SizedBox(height: 10),
-          _SheetField(controller: _treatCtrl, label: 'العلاج', hint: 'طريقة العلاج'),
+          _SheetField(controller: _treatCtrl, label: context.l10n.treatmentLabel, hint: context.l10n.treatmentHint),
           const SizedBox(height: 10),
-          _SheetField(controller: _medCtrl, label: 'الدواء', hint: 'اسم الدواء'),
+          _SheetField(controller: _medCtrl, label: context.l10n.medicationLabel, hint: context.l10n.medicationHint),
           const SizedBox(height: 10),
-          _SheetField(controller: _vetCtrl, label: 'الطبيب البيطري', hint: 'اختياري'),
+          _SheetField(controller: _vetCtrl, label: context.l10n.vetName, hint: context.l10n.vetHint),
           const SizedBox(height: 10),
-          _SheetField(controller: _costCtrl, label: 'التكلفة (ج.م)',
-              hint: '0', keyboardType: TextInputType.number),
+          _SheetField(controller: _costCtrl, label: context.l10n.costLabel,
+              hint: context.l10n.costHint, keyboardType: TextInputType.number),
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!, style: const TextStyle(fontFamily: 'Cairo',
@@ -998,8 +999,8 @@ class _AddMedSheetState extends ConsumerState<_AddMedSheet> {
             child: _loading
                 ? const SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-                : const Text('إضافة السجل',
-                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+                : Text(context.l10n.addMedButton,
+                    style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                         color: AppColors.white)),
           ),
         ],
@@ -1030,16 +1031,16 @@ class _WeightGoalCard extends ConsumerWidget {
             children: [
               const Icon(Icons.flag_outlined, size: 18, color: AppColors.green),
               const SizedBox(width: 8),
-              const Text('هدف الوزن',
-                  style: TextStyle(fontFamily: 'Cairo', fontSize: 14,
+              Text(context.l10n.weightGoalTitle,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14,
                       fontWeight: FontWeight.w700, color: AppColors.text)),
               const Spacer(),
               TextButton.icon(
                 onPressed: () => _showGoalSheet(context, ref),
                 icon: const Icon(Icons.edit_outlined, size: 14,
                     color: AppColors.green),
-                label: const Text('تعديل',
-                    style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                label: Text(context.l10n.editWeightGoal,
+                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                         color: AppColors.green)),
                 style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8)),
@@ -1054,8 +1055,8 @@ class _WeightGoalCard extends ConsumerWidget {
                   fontWeight: FontWeight.w800, color: AppColors.green),
             )
           else
-            const Text('لم يُحدَّد هدف بعد',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+            Text(context.l10n.weightGoalNotSet,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
                     color: AppColors.muted)),
         ],
       ),
@@ -1113,7 +1114,7 @@ class _WeightGoalSheetState extends ConsumerState<_WeightGoalSheet> {
   Future<void> _submit() async {
     final v = double.tryParse(_ctrl.text);
     if (v == null || v <= 0) {
-      setState(() => _error = 'أدخل وزناً صحيحاً');
+      setState(() => _error = context.l10n.weightInvalid);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -1125,7 +1126,7 @@ class _WeightGoalSheetState extends ConsumerState<_WeightGoalSheet> {
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (_) {
-      setState(() { _error = 'فشل في الحفظ'; _loading = false; });
+      setState(() { _error = context.l10n.saveFailed2; _loading = false; });
     }
   }
 
@@ -1141,8 +1142,8 @@ class _WeightGoalSheetState extends ConsumerState<_WeightGoalSheet> {
             width: 40, height: 4,
             decoration: BoxDecoration(color: AppColors.border,
                 borderRadius: BorderRadius.circular(2)))),
-        const Text('تعديل هدف الوزن',
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+        Text(context.l10n.weightGoalTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                 fontWeight: FontWeight.w800, color: AppColors.text)),
         const SizedBox(height: 16),
         TextField(
@@ -1150,10 +1151,10 @@ class _WeightGoalSheetState extends ConsumerState<_WeightGoalSheet> {
           keyboardType: TextInputType.number,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: 'الوزن المستهدف (كجم)',
+            labelText: context.l10n.weightGoalLabel,
             labelStyle: const TextStyle(fontFamily: 'Cairo', color: AppColors.muted),
             filled: true, fillColor: AppColors.bg,
-            suffixText: 'كجم',
+            suffixText: context.l10n.weightSuffix,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: AppColors.border)),
             enabledBorder: OutlineInputBorder(
@@ -1174,8 +1175,8 @@ class _WeightGoalSheetState extends ConsumerState<_WeightGoalSheet> {
           child: _loading
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-              : const Text('حفظ الهدف',
-                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+              : Text(context.l10n.saveGoal,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                       color: AppColors.white)),
         ),
       ],
@@ -1200,12 +1201,6 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
   DateTime? _expectedDate;
   bool _loading = false;
   String? _error;
-
-  static const _statuses = [
-    ('none',                'لا حمل'),
-    ('pregnant',            '🤰 حامل'),
-    ('recently_gave_birth', '🐣 ولدت حديثاً'),
-  ];
 
   @override
   void initState() {
@@ -1246,13 +1241,18 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (_) {
-      setState(() { _error = 'فشل في الحفظ'; _loading = false; });
+      setState(() { _error = context.l10n.saveFailed2; _loading = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    final statuses = [
+      ('none',                context.l10n.pregnancyNone),
+      ('pregnant',            context.l10n.pregnancyPregnant),
+      ('recently_gave_birth', context.l10n.pregnancyRecentBirth),
+    ];
     return Padding(
       padding: EdgeInsets.fromLTRB(
           20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
@@ -1264,13 +1264,13 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
               width: 40, height: 4,
               decoration: BoxDecoration(color: AppColors.border,
                   borderRadius: BorderRadius.circular(2)))),
-          const Text('حالة الحمل',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+          Text(context.l10n.pregnancyStatusTitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                   fontWeight: FontWeight.w800, color: AppColors.text)),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8, runSpacing: 8,
-            children: _statuses.map((s) => GestureDetector(
+            children: statuses.map((s) => GestureDetector(
               onTap: () => setState(() => _status = s.$1),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
@@ -1289,8 +1289,8 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
           ),
           if (_status == 'pregnant') ...[
             const SizedBox(height: 14),
-            const Text('تاريخ الولادة المتوقع (اختياري)',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+            Text(context.l10n.expectedBirthDateLabel2,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                     fontWeight: FontWeight.w700, color: AppColors.muted)),
             const SizedBox(height: 6),
             GestureDetector(
@@ -1311,7 +1311,7 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
                     Text(
                       _expectedDate != null
                           ? dateFmt.format(_expectedDate!)
-                          : 'اختر التاريخ',
+                          : context.l10n.chooseBirthDate4,
                       style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
                           color: _expectedDate != null
                               ? AppColors.text : AppColors.muted),
@@ -1334,8 +1334,8 @@ class _PregnancyEditorSheetState extends ConsumerState<_PregnancyEditorSheet> {
             child: _loading
                 ? const SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-                : const Text('حفظ',
-                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+                : Text(context.l10n.save,
+                    style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                         color: AppColors.white)),
           ),
           const SizedBox(height: 8),

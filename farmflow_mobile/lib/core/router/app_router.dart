@@ -20,8 +20,10 @@ import '../../features/seller/herd/herd_screen.dart';
 import '../../features/seller/herd/add_animal_screen.dart';
 import '../../features/seller/herd/animal_detail_screen.dart';
 import '../../features/seller/herd/edit_animal_screen.dart';
+import '../../features/seller/herd/vet_records_screen.dart';
 import '../../features/seller/listings/seller_listings_screen.dart';
 import '../../features/seller/listings/add_listing_screen.dart';
+import '../../features/seller/listings/breed_settings_screen.dart';
 import '../../features/seller/listings/edit_listing_screen.dart';
 import '../../shared/models/listing_model.dart';
 import '../../features/seller/dairy/seller_dairy_screen.dart';
@@ -35,6 +37,7 @@ import '../../features/admin/admin_dairy_screen.dart';
 import '../../features/admin/admin_orders_screen.dart';
 import '../../features/admin/admin_reviews_screen.dart';
 import '../../features/admin/admin_eid_screen.dart';
+import '../../features/admin/admin_supplies_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -155,6 +158,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 listing: state.extra as ListingModel),
           ),
           GoRoute(
+            path: '/seller/breed-settings',
+            builder: (_, __) => const BreedSettingsScreen(),
+          ),
+          GoRoute(
             path: '/seller/dairy',
             builder: (_, __) => const SellerDairyScreen(),
           ),
@@ -169,6 +176,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/seller/notifications',
             builder: (_, __) => const NotificationsScreen(),
+          ),
+          GoRoute(
+            path: '/seller/vet-records',
+            builder: (_, __) => const VetRecordsScreen(),
           ),
         ],
       ),
@@ -205,6 +216,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/eid',
             builder: (_, __) => const AdminEidScreen(),
+          ),
+          GoRoute(
+            path: '/admin/supplies',
+            builder: (_, __) => const AdminSuppliesScreen(),
           ),
         ],
       ),

@@ -9,3 +9,4 @@ export const getIncome      = (params)     => api.get('/finance/income',        
 export const addIncome      = (data)       => api.post('/finance/income',           data);
 export const updateIncome   = (id, data)   => api.put(`/finance/income/${id}`,     data);
 export const deleteIncome   = (id)         => api.delete(`/finance/income/${id}`);
+export const getAnalytics   = (params)     => api.get('/finance/analytics',         { params });

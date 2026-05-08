@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_notifier.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -42,7 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on DioException catch (e) {
       setState(() => _errorMsg = dioErrorMessage(e));
     } catch (e) {
-      setState(() => _errorMsg = 'حدث خطأ غير متوقع');
+      setState(() => _errorMsg = context.l10n.unexpectedError);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -86,10 +87,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Text('🌾', style: TextStyle(fontSize: 52)),
                 ),
                 const SizedBox(height: 16),
-                const Center(
+                Center(
                   child: Text(
-                    'تسجيل الدخول',
-                    style: TextStyle(
+                    context.l10n.loginTitle,
+                    style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
                       color: AppColors.text,
@@ -97,34 +98,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Center(
+                Center(
                   child: Text(
-                    'أهلاً بك في FarmFlow',
-                    style: TextStyle(fontSize: 14, color: AppColors.muted),
+                    context.l10n.loginWelcome,
+                    style: const TextStyle(fontSize: 14, color: AppColors.muted),
                   ),
                 ),
                 const SizedBox(height: 40),
 
                 // Fields
                 AppTextField(
-                  label: 'رقم الهاتف أو البريد الإلكتروني',
-                  hint:  'أدخل رقم هاتفك أو بريدك',
+                  label: context.l10n.loginIdLabel,
+                  hint:  context.l10n.loginIdHint,
                   controller: _idCtrl,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   textDirection: TextDirection.ltr,
                   autofillHints: const [AutofillHints.username, AutofillHints.email],
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'هذا الحقل مطلوب' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? context.l10n.fieldRequired : null,
                 ),
                 const SizedBox(height: 16),
                 AppTextField(
-                  label: 'كلمة المرور',
+                  label: context.l10n.loginPasswordLabel,
                   hint:  '••••••••',
                   controller: _pwCtrl,
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   autofillHints: const [AutofillHints.password],
-                  validator: (v) => (v == null || v.isEmpty) ? 'أدخل كلمة المرور' : null,
+                  validator: (v) => (v == null || v.isEmpty) ? context.l10n.loginPasswordRequired : null,
                   onFieldSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: 20),
@@ -155,7 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
 
                 PrimaryButton(
-                  label: 'دخول',
+                  label: context.l10n.loginButton,
                   onPressed: _submit,
                   loading: _loading,
                 ),
@@ -165,12 +166,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('ليس لديك حساب؟', style: TextStyle(color: AppColors.muted, fontSize: 14)),
+                    Text(context.l10n.loginNoAccount, style: const TextStyle(color: AppColors.muted, fontSize: 14)),
                     TextButton(
                       onPressed: () => context.push('/register'),
-                      child: const Text(
-                        'سجّل الآن',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.loginRegisterLink,
+                        style: const TextStyle(
                           color: AppColors.green,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,

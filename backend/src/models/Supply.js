@@ -3,6 +3,7 @@ const { Schema, Types: { ObjectId } } = mongoose;
 
 const supplySchema = new Schema({
   seller: { type: ObjectId, ref: 'User', required: true, index: true },
+  farm:   { type: ObjectId, ref: 'Farm', index: true },
 
   name:        { type: String, required: true, trim: true, maxlength: 120 },
   category:    { type: String, required: true, enum: ['feed', 'veterinary', 'equipment', 'seeds', 'other'] },

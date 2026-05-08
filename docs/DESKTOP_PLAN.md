@@ -46,8 +46,8 @@ The React web app is 100% feature-complete across all 30 sections. Wrapping it i
 | D1.1 | Create `farmflow_desktop/` directory; `npm init` with `electron`, `electron-builder`, `concurrently` | [x] |
 | D1.2 | `main.js` — main process: `BrowserWindow` (1400×900, min 1200×700); loads Vite dev server in dev, `app://localhost/` in prod | [x] |
 | D1.3 | `preload.js` — `contextBridge.exposeInMainWorld('electron', {platform, isDesktop})` for safe IPC; `nodeIntegration: false`, `contextIsolation: true` | [x] |
-| D1.4 | Dev workflow: `concurrently` starts Vite dev server + Electron via `npm run dev`; Electron waits for `:5173` via `wait-on` | [x] |
-| D1.5 | Prod build: `npm run build` → `vite build` then `electron-builder`; React build bundled via `extraResources`; `app://localhost` protocol handler serves static files + proxies `/api/` + `/uploads/` to `localhost:5001` | [x] |
+| D1.4 | Dev workflow: `concurrently` starts **backend + Vite + Electron** via `npm run dev`; Electron waits for `tcp:localhost:5001` and `http://localhost:5173` via `wait-on` | [x] |
+| D1.5 | Prod build: `npm run build` → `vite build` then `electron-builder`; React build bundled via `extraResources`; `app://localhost` protocol handler serves static files + proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`; overridable via `FARMFLOW_API_URL` env var) | [x] |
 | D1.6 | App icon: `assets/icon.png` copied from mobile (1024×1024); `electron-builder` auto-generates `.icns` (macOS) + `.ico` (Windows) | [x] |
 | D1.7 | Window state persistence: `electron-store` saves `x/y/width/height/maximized`; restores on next launch | [x] |
 | D1.8 | Security: `nodeIntegration: false`, `contextIsolation: true`; `webSecurity` relaxed only in dev; external links open in system browser via `setWindowOpenHandler` + `will-navigate` guard | [x] |
@@ -62,11 +62,12 @@ The web app currently exports CSV and PDF via browser download (blob URL). In th
 
 | # | Task | Status |
 |---|------|--------|
-| D2.1 | IPC channel `save-file`: renderer sends `{ filename, buffer, defaultPath }`; main process opens `dialog.showSaveDialog` → writes file with `fs.writeFile`; returns `{ success, filePath }` | [ ] |
-| D2.2 | IPC channel `open-file`: opens a saved file with the OS default app (`shell.openPath`) | [ ] |
-| D2.3 | Update `SellerStatements` CSV export: detect `window.electron` → use `save-file` IPC instead of blob `<a>` download | [ ] |
-| D2.4 | Update `SellerStatements` PDF export: same detection → pipe PDF bytes through `save-file` IPC | [ ] |
-| D2.5 | Success toast shows file path with "فتح الملف ←" button (triggers `open-file` IPC) | [ ] |
+| D2.1 | IPC channel `save-file`: renderer sends `{ filename, buffer, defaultPath }`; main process opens `dialog.showSaveDialog` → writes file with `fs.writeFile`; returns `{ success, filePath }` | [x] |
+| D2.2 | IPC channel `open-file`: opens a saved file with the OS default app (`shell.openPath`) | [x] |
+| D2.3 | Update `SellerStatements` CSV export: detect `window.electron` → use `save-file` IPC instead of blob `<a>` download | [x] |
+| D2.4 | Update `SellerStatements` PDF export: same detection → pipe PDF bytes through `save-file` IPC | [x] |
+| D2.5 | Success toast shows file path with "فتح الملف ←" button (triggers `open-file` IPC) | [x] |
+| D2.6 | Extended native save to `SellerExpenses`, `SellerIncome`, and `SellerHerd` (herd export CSV button added to header) | [x] |
 
 ---
 
@@ -76,12 +77,12 @@ The web app currently exports CSV and PDF via browser download (blob URL). In th
 
 | # | Task | Status |
 |---|------|--------|
-| D3.1 | System tray icon (`Tray`) with context menu: عرض FarmFlow / فصل / إنهاء | [ ] |
-| D3.2 | Tray badge (macOS): set `app.dock.setBadge(count)` when unread notification count > 0; IPC channel `set-badge` called from React `NotificationBell` | [ ] |
-| D3.3 | Windows taskbar overlay icon for unread badge (equivalent to D3.2 on Windows) | [ ] |
-| D3.4 | Native OS notifications: IPC channel `notify` — main process creates `new Notification({ title, body })`; click routes user to relevant screen via `webContents.send('navigate', path)` | [ ] |
-| D3.5 | App menu (macOS menu bar / Windows top menu): File (تسجيل الخروج, إنهاء) · View (تكبير, مستعرض كامل) · Help (عن البرنامج, التحقق من التحديثات) | [ ] |
-| D3.6 | Keyboard shortcuts registered via `globalShortcut` or `Menu` accelerators: Ctrl+N → new listing, Ctrl+Shift+E → expenses, Ctrl+, → settings | [ ] |
+| D3.1 | System tray icon with Arabic context menu (فتح FarmFlow / خروج); double-click shows/focuses window; close button hides to tray (`app._quitting` distinguishes real quit) | [x] |
+| D3.2 | macOS dock badge via `app.setBadgeCount(n)`; tray icon gets red SVG circle overlay when count > 0; IPC `set-badge` called from React `NotificationBell` | [x] |
+| D3.3 | Windows taskbar overlay badge via `win.setOverlayIcon(svgBadge, label)` | [x] |
+| D3.4 | Native OS notifications: IPC `notify` → `new Notification({ title, body, icon }).show()` | [x] |
+| D3.5 | Arabic native app menu (File / Edit / View / Window) via `src/ipc/menu.js`; applied via `Menu.setApplicationMenu` | [x] |
+| D3.6 | Keyboard shortcuts via Menu accelerators: Cmd+Shift+E → export-csv, Cmd+Shift+P → export-pdf; `menu-action` IPC broadcast to renderer; all seller export pages subscribe via `window.electron.onMenuAction` with useEffect unsubscribe | [x] |
 
 ---
 
@@ -93,11 +94,11 @@ The desktop app is typically used in a fixed location (farm office) where connec
 
 | # | Task | Status |
 |---|------|--------|
-| D4.1 | `electron-store` instance in main process; IPC channels `store-get`, `store-set`, `store-delete` exposed via preload | [ ] |
-| D4.2 | Cache strategy: on successful API response, write to store keyed by endpoint + params; serve from store on network error with "بيانات محفوظة مؤقتاً" banner | [ ] |
-| D4.3 | Offline write queue: expense adds, weight entries, and animal notes saved to store queue when offline; synced automatically on next successful API call | [ ] |
-| D4.4 | React `useElectronCache(endpoint)` hook: tries live fetch → falls back to `store-get`; returns `{ data, isStale }` | [ ] |
-| D4.5 | Connectivity detection: `net.isOnline()` checked every 30s in main process; broadcasts `connectivity-change` event to renderer | [ ] |
+| D4.1 | `electron-store` instance in main process; IPC channels `store-get`, `store-set`, `store-delete` exposed via preload | [-] |
+| D4.2 | Cache strategy: on successful GET response, write to cache keyed by endpoint + params; serve from cache on network error with "بيانات محفوظة مؤقتاً" banner | [x] |
+| D4.3 | Offline write queue: expense adds, weight entries, and animal notes saved to store queue when offline; synced automatically on next successful API call | [-] |
+| D4.4 | React `useElectronCache(endpoint)` hook: tries live fetch → falls back to `store-get`; returns `{ data, isStale }` | [-] |
+| D4.5 | Connectivity detection: browser `online`/`offline` events + `ff:cache-hit` custom event; `OfflineBanner` shown when offline or serving cached data | [x] |
 
 ---
 
@@ -107,12 +108,12 @@ The desktop app is typically used in a fixed location (farm office) where connec
 
 | # | Task | Status |
 |---|------|--------|
-| D5.1 | `electron-updater` integrated in main process: checks for updates on launch (silent) + via Help menu; downloads in background; prompts user to restart | [ ] |
-| D5.2 | Update server: GitHub Releases (`publish: { provider: 'github' }` in electron-builder config); tag `vX.Y.Z` triggers CI build + release | [ ] |
-| D5.3 | macOS build: `dmg` installer; code signing via `CSC_LINK` env var (Apple Developer ID Application cert); notarization via `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` | [ ] |
-| D5.4 | Windows build: `nsis` installer (one-click, silent option); code signing via EV certificate (optional for v1; unsigned shows SmartScreen warning) | [ ] |
-| D5.5 | GitHub Actions CI: matrix build `[macos-latest, windows-latest]`; runs on tag push; uploads artifacts to GitHub Release | [ ] |
-| D5.6 | `electron-builder` config: `appId: com.farmflow.desktop`, `productName: FarmFlow`, `copyright`, `files` array (exclude `node_modules` dev deps) | [ ] |
+| D5.1 | `electron-updater` integrated in main process (`src/updater.js`): silent check on launch; `autoDownload: true`, `autoInstallOnAppQuit: true`; Arabic dialogs for update-available + update-downloaded; skipped in dev | [x] |
+| D5.2 | Update server: GitHub Releases (`publish: { provider: 'github', owner: 'abdelrahmankhalil', repo: 'FarmFlow' }` in package.json) | [x] |
+| D5.3 | macOS build: `dmg` target, `arm64 + x64` architectures; code signing (CSC_LINK / notarization) not yet configured | [-] |
+| D5.4 | Windows build: `nsis` installer, `x64`; `oneClick: false`, `allowToChangeInstallationDirectory: true`; EV code signing not yet configured | [-] |
+| D5.5 | GitHub Actions CI: matrix build on tag push, upload to GitHub Releases | [x] |
+| D5.6 | `electron-builder` config complete: `appId: com.farmflow.desktop`, `productName: FarmFlow`, `copyright`, `files`, `extraResources` bundling React build | [x] |
 
 ---
 
@@ -122,13 +123,13 @@ The desktop app is typically used in a fixed location (farm office) where connec
 
 | # | Task | Status |
 |---|------|--------|
-| D6.1 | macOS: frameless window (`titleBarStyle: 'hiddenInset'`) with traffic lights; custom CSS title bar area in React (`-webkit-app-region: drag`) | [ ] |
-| D6.2 | Windows: `titleBarOverlay` with FarmFlow green (`#3A7D44`) background for coloured title bar | [ ] |
-| D6.3 | Splash screen: native `BrowserWindow` (400×300, no frame) shows FarmFlow logo while main window loads; closes when main window is ready | [ ] |
-| D6.4 | `farmflow://` deep link protocol registered (`setAsDefaultProtocolClient`); handles `farmflow://listing/:id` and `farmflow://order/:id` links from emails | [ ] |
-| D6.5 | Single instance lock (`app.requestSingleInstanceLock`): second launch focuses existing window instead of opening duplicate | [ ] |
-| D6.6 | Arabic spellcheck: `webPreferences.spellcheck: true`; set language to `ar` via `session.setSpellCheckerLanguages(['ar', 'en-US'])` | [ ] |
-| D6.7 | Right-click context menu: copy / paste / select all (standard electron `contextmenu` handler, especially needed for Arabic text inputs) | [ ] |
+| D6.1 | macOS: frameless window (`titleBarStyle: 'hiddenInset'`) with traffic lights; custom CSS title bar area in React (`-webkit-app-region: drag`) | [x] |
+| D6.2 | Windows: `titleBarOverlay` with FarmFlow green (`#3A7D44`) background for coloured title bar | [x] |
+| D6.3 | Splash screen: native `BrowserWindow` (400×300, no frame) shows FarmFlow logo while main window loads; closes when main window is ready | [x] |
+| D6.4 | `farmflow://` deep link protocol registered (`setAsDefaultProtocolClient`); handles `farmflow://listing/:id` and `farmflow://order/:id` links from emails | [x] |
+| D6.5 | Single instance lock (`app.requestSingleInstanceLock`): second launch focuses existing window instead of opening duplicate | [x] |
+| D6.6 | Arabic spellcheck: `webPreferences.spellcheck: true`; set language to `ar` via `session.setSpellCheckerLanguages(['ar', 'en-US'])` | [x] |
+| D6.7 | Right-click context menu: copy / paste / select all (standard electron `contextmenu` handler, especially needed for Arabic text inputs) | [x] |
 
 ---
 
@@ -174,30 +175,54 @@ All changes in the React app are additive and non-breaking — the web version c
 
 ## Build Order
 
+**Phase 0 — Preload IPC Activation ✅ (applied across all phases)**
+All `preload.js` IPC bridges that were previously commented out as placeholders are now active: `saveFile`, `openFile`, `savePdf` (Phase 2); `notify`, `setBadge` (Phase 3); `onMenuAction` (Phase 4). New `onDeepLink` bridge added — exposes `window.electron.onDeepLink(cb)` for `farmflow://` deep-link handling from `D6.4`.
+
 **Phase 1 — D1 Scaffold ✅ DONE**
-`farmflow_desktop/` created with Electron 32.3.3 + electron-builder + electron-store. `main.js`: BrowserWindow 1400×900 (min 1200×700), window state persisted via electron-store, `show: false` + `ready-to-show` to avoid white flash, external links open in system browser. Dev: loads `http://localhost:5173` (Vite proxy covers `/api/`). Prod: custom `app://localhost` protocol registered as privileged — `protocol.handle` serves React static build AND proxies `/api/` + `/uploads/` to `localhost:5001` via `net.fetch` (zero changes to React needed). Backend CORS updated to accept `app://localhost` origin alongside web origins. `preload.js` exposes `{ platform, isDesktop }` via contextBridge with commented stubs for Phase 2–3 IPC channels. `assets/icon.png` (1024×1024) copied from mobile. Run: `cd farmflow_desktop && npm run dev` (requires backend + Vite running).
+`farmflow_desktop/` created with Electron 32.3.3 + electron-builder + electron-store. `main.js`: BrowserWindow 1400×900 (min 1200×700), window state persisted via electron-store, `show: false` + `ready-to-show` to avoid white flash, external links open in system browser. Dev: loads `http://localhost:5173`. Prod: `app://localhost` privileged protocol — `protocol.handle` serves React static build AND proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`) via `net.fetch`. Backend CORS allows `app://localhost`. Dev script (concurrently) starts backend + Vite + Electron with wait-on gate.
 
-**Phase 2 — D2 File Export**
-CSV/PDF saved to disk with native dialog. Most-requested seller feature for desktop.
+**Phase 2 — D2 File Export ✅ DONE**
+`src/ipc/file.js`: `save-file` (dialog.showSaveDialog → fs.writeFile) + `open-file` (shell.openPath). `preload.js` exposes `saveFile` + `openFile`. `isDesktop` flag in `frontend/src/utils/platform.js`. Native save wired into `SellerStatements` (CSV + PDF), `SellerExpenses` (CSV), `SellerIncome` (CSV), and `SellerHerd` (CSV — new export button added to header). Success toast shows file path with "فتح الملف" button.
 
-**Phase 3 — D3 OS Integration**
-Tray icon, native notifications, app menu, keyboard shortcuts.
+**Phase 3 — D3 OS Integration ✅ DONE**
+`src/tray.js`: tray icon, Arabic context menu, minimize-to-tray, `updateBadge`. `src/ipc/notify.js`: `notify` + `set-badge` IPC; badge forwarded to tray via `onBadgeChange` callback. `src/ipc/menu.js`: full Arabic app menu (File/Edit/View/Window) with Cmd+Shift+E/P export shortcuts; `menu-action` IPC broadcast; `preload.js` exposes `onMenuAction(cb)` → unsubscribe fn.
 
-**Phase 4 — D4 Offline Cache**
-Local data cache + write queue for intermittent connectivity.
+**Phase 4 — D4 Offline Cache (partial)**
+D4.2 + D4.5 implemented in the React layer (works in both web and Electron):
+- `frontend/src/utils/apiCache.js` — localStorage read-through cache; 10-minute TTL; key = URL + serialised params
+- `frontend/src/services/api.js` — success interceptor caches every GET response; error interceptor falls back to cache after retries are exhausted, fires `ff:cache-hit` CustomEvent
+- `frontend/src/components/OfflineBanner.jsx` — fixed amber banner at top of viewport; listens to browser `online`/`offline` events + `ff:cache-hit`; dismissible
+- Wired into `App.jsx` (global, above all routes)
+Remaining (D4.1/D4.3/D4.4): `electron-store` IPC channels, offline write queue, and dedicated hook deferred to v2.
 
-**Phase 5 — D5 Auto-Updater + CI**
-Signed installers, GitHub Actions pipeline, auto-update on launch.
+**Phase 5 — D5 Auto-Updater + CI ✅ DONE**
+`src/updater.js` + GitHub Releases publish config done. Build targets configured (DMG arm64+x64, NSIS x64). `.github/workflows/build.yml`: matrix build on tag push (`v*`) — macOS DMG + Windows NSIS, uploaded to GitHub Releases via `electron-builder --publish always`. Signing cert env vars stubbed in comments for when certs are obtained.
 
-**Phase 6 — D6 Polish**
-Platform-specific title bar, splash, deep links, single instance, Arabic spellcheck.
+**Phase 6 — D6 Polish ✅ DONE**
+All 7 items implemented in `main.js` + React layouts:
+- D6.1: `titleBarStyle: 'hiddenInset'` + `trafficLightPosition {x:16,y:14}` on macOS; `WebkitAppRegion: 'drag'` on sidebar brand section (Seller + Admin), full header (Buyer); collapse buttons and nav controls marked `no-drag`; extra top padding on macOS to clear traffic lights.
+- D6.2: `titleBarOverlay { color:'#3A7D44', symbolColor:'#fff', height:40 }` on Windows.
+- D6.3: `createSplash()` 400×300 frameless window shows `assets/splash.html` (green FarmFlow brand + animated loading bar); destroyed on `main.once('ready-to-show')`.
+- D6.4: `app.setAsDefaultProtocolClient('farmflow')`; `open-url` handler (macOS) + `second-instance` command-line parse (Windows); `handleDeepLink` sends `deep-link` IPC to renderer; `preload.js` exposes `onDeepLink(cb)`; `DeepLinkHandler` React component (src/components/DeepLinkHandler.jsx) inside `<BrowserRouter>` maps `listing/:id`→`/buyer/listings/:id`, `farm/:id`→`/buyer/farms/:id`, `order/*`→`/buyer/orders`.
+- D6.5: `app.requestSingleInstanceLock()` — second launch focuses existing window and forwards any deep-link URL.
+- D6.6: `spellcheck: true` in webPreferences + `session.setSpellCheckerLanguages(['ar', 'en-US'])`.
+- D6.7: `webContents.on('context-menu')` → Arabic Menu (نسخ / قص / لصق / تحديد الكل) + Dev Tools in dev mode.
 
 ---
 
-## Current Status Summary
+## Current Status Summary (as of 2026-05-08)
 
-> **Desktop app:** Not started. React web app (100% complete) will be wrapped in Electron. Estimated effort: Phase 1 (1–2 days), Phase 2 (1 day), Phase 3 (1–2 days), Phase 4 (2–3 days), Phase 5 (2 days), Phase 6 (1–2 days). Full production-ready desktop app in ~10 days of focused work.
+> **Phases 1–6 fully complete.** The desktop app is feature-complete with full native OS integration including deep-link routing end-to-end. All preload IPC bridges are now active (saveFile, openFile, savePdf, notify, setBadge, onMenuAction, onDeepLink). Remaining blockers before shipping are external credentials only: Apple Developer ID cert for macOS notarization and a Windows EV cert for SmartScreen. Once obtained, uncomment the signing env vars in `.github/workflows/build.yml` and push a `v*` tag.
+>
+> **Phase 4 (offline cache) — partially implemented** via the shared React layer: `apiCache.js` (localStorage, 10-min TTL), axios interceptors cache every GET response and fall back to cache after retries, `OfflineBanner.jsx` shows when offline or serving stale data. D4.1/D4.3/D4.4 (electron-store IPC, write queue, dedicated hook) remain deferred to v2.
+>
+> **Full Arabic/English language switching** is available on the desktop app at no extra cost — it wraps the React frontend which had full i18n (section 34 of PLAN.md) applied to all seller pages, buyer pages, layouts, and settings in May 2026. The user switches language from Settings → Language in the same app window.
 
-**Blocked on external credentials (same as web):**
-- Code signing cert (Apple Developer ID for macOS notarization; EV cert for Windows SmartScreen)
-- Auto-update server (GitHub account for GitHub Releases — free)
+**Remaining (external credentials only):**
+- Code signing: Apple Developer ID cert (macOS notarization) + EV cert (Windows SmartScreen)
+- Store listings: Mac App Store / Microsoft Store submissions (optional)
+
+**To ship v1.0.0:**
+1. Obtain Apple Developer ID cert → set `MAC_CERT_BASE64` + `MAC_CERT_PASSWORD` + `APPLE_*` secrets in GitHub repo settings
+2. Obtain Windows EV cert → set `WIN_CERT_BASE64` + `WIN_CERT_PASSWORD` secrets
+3. `git tag v1.0.0 && git push origin v1.0.0` — GitHub Actions builds + uploads DMG + NSIS to Releases

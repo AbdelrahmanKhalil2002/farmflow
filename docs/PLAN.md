@@ -175,10 +175,10 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 9.1 | Express app + middleware (CORS, JSON, Multer) | [x] |
-| 9.2 | MongoDB connection + Mongoose models (User, Listing, Expense, Income, Order, DairyProduct, Review, Notification, Animal, Supply, AppConfig) | [x] |
+| 9.1 | Express app + middleware (CORS, JSON, Multer, helmet security headers, express-rate-limit) | [x] |
+| 9.2 | MongoDB connection + Mongoose models (User, Listing, Expense, Income, Order, DairyProduct, Review, Notification, Animal, Supply, Farm, AppConfig, Budget, Conversation, Message, MedicalRecord) | [x] |
 | 9.3 | JWT auth middleware (protect, authorizeRoles, optionalAuth) | [x] |
-| 9.4 | Routes: /api/auth, /api/listings (incl. dedicated GET /my before /:id), /api/orders, /api/finance, /api/admin, /api/dairy, /api/sellers, /api/statements, /api/reviews, /api/notifications, /api/favorites, /api/market-prices, /api/eid, /api/animals, /api/supplies | [x] |
+| 9.4 | Routes: /api/auth, /api/listings, /api/orders, /api/finance, /api/admin, /api/dairy, /api/sellers, /api/statements, /api/reviews, /api/notifications, /api/favorites, /api/market-prices, /api/eid, /api/animals, /api/supplies, /api/budget, /api/messages, /api/farms | [x] |
 | 9.5 | express-validator on all mutation routes | [x] |
 | 9.6 | Sparse unique indexes for optional-but-unique fields (email, nationalId, phones) | [x] |
 | 9.7 | Image upload via Multer (local /uploads folder) | [x] |
@@ -225,7 +225,7 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 12.1 | Review model (buyer, seller, order, rating 1–5, comment, createdAt) | [x] |
+| 12.1 | Review model (buyer, seller, order, rating 1–5, comment, createdAt, reply: {body, at}) | [x] |
 | 12.2 | Backend: POST /api/reviews, GET /api/reviews/:sellerId, DELETE (admin) | [x] |
 | 12.3 | Seller aggregate rating stored/updated on User model (averageRating, reviewCount) | [x] |
 | 12.4 | BuyerOrders — "⭐ تقييم" button + ReviewModal after order completed | [x] |
@@ -233,6 +233,9 @@
 | 12.6 | BuyerBrowse farm cards — star display + review count (from seller averageRating) | [x] |
 | 12.7 | "موثوق" trusted badge on BuyerBrowse cards for sellers with avg ≥ 4.5 stars | [x] |
 | 12.8 | Admin: delete flagged reviews UI | [x] |
+| 12.9 | Backend `GET /api/reviews/my-reviewed` (buyer-only) — returns array of reviewed order IDs; placed before `/:sellerId` param route to avoid Express ObjectId collision | [x] |
+| 12.10 | BuyerFarmDetail — reviews section always rendered: empty state when no reviews; rating summary bar (avg score + 5→1 star breakdown with progress bars) when reviews exist | [x] |
+| 12.11 | Seller review reply: `PATCH /api/reviews/:id/reply` — seller can post a reply (max 500 chars); `reply: { body, at }` stored on Review document; rendered under each review card | [x] |
 
 ---
 
@@ -502,11 +505,13 @@
 | 30.2 | QR code generation per animal (links to listing public URL via qrserver.com) | [x] |
 | 30.3 | AdminDashboard — advanced analytics: revenue by governorate bar chart | [x] |
 | 30.4 | Live livestock auction module (bidding, countdown timer, reserve price) | [ ] |
-| 30.5 | Multi-branch farm support (seller can have multiple farm locations) | [ ] |
+| 30.5 | Multi-branch farm support (seller can have multiple farm locations) | [-] |
 | 30.6 | AI recommendations: suggest optimal sale price based on market data + animal age/weight | [ ] |
 | 30.7 | Inventory management: link Herd Management to Listing availability (auto-mark sold when order completes) | [x] |
 | 30.8 | Public API / webhook for third-party farm management integrations | [ ] |
 | 30.9 | Cloud image storage migration (S3 / Cloudinary) to replace local /uploads | [ ] |
+
+> **30.5 note:** Backend infrastructure complete — `Farm` model created (see section 37); `/api/farms` CRUD allows sellers to manage multiple named farms; `Listing`, `DairyProduct`, and `Supply` documents now carry a `farm` ref; `migrateLegacyFarm` endpoint converts existing profile-level farm fields to a Farm document. Web frontend multi-farm UI (switcher, per-farm analytics, per-farm listing creation) is the remaining piece.
 
 ---
 
@@ -627,15 +632,189 @@
 
 ---
 
-## Current Status Summary (as of 2026-05-01)
+## 32. Electron Desktop App (farmflow_desktop/)
 
-> **Web app:** All sections 1–30 complete except items requiring external credentials.
-> **Backend:** Live on Render at `https://farmflow-backend-g07p.onrender.com` (free tier — spins down after 15 min inactivity). MongoDB Atlas M0 cluster at `cluster0.mr7xjcy.mongodb.net` (Ireland, free forever).
-> **Flutter app:** Sprints 1–15 complete. Full buyer/seller/admin flows, PDF/CSV export, NID validation, infinite scroll, 68 passing tests, FCM push notifications, signed APK/AAB + iOS archive. APK rebuilt with Render URL. Remaining: store listings (Play/App Store accounts), Apple provisioning profile for signed IPA, server-side push triggers, Cloudinary for image storage.
+> **Stack:** Electron 32 · electron-builder 25 · electron-store · electron-updater 6
+> **Target:** macOS (arm64 + x64 DMG) · Windows (NSIS x64)
+> **Directory:** `farmflow_desktop/`
+> **Dev:** `npm run dev` — starts BACKEND + VITE + ELECTRON concurrently
+> **Build:** `npm run build:mac` / `npm run build:win`
 
-**Fully complete (web):** 1 (1.1–1.7), 2, 3, 4, 5, 6 (6.1–6.8, 6.10–6.13), 7, 8, 9 (9.1–9.7), 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 (30.2, 30.3, 30.7)
+### Phase 1 — Foundation ✅
 
-**Fully complete (Flutter — Sprints 1–14):**
+| # | Task | Status |
+|---|------|--------|
+| 32.1 | `main.js` — BrowserWindow (1400×900, min 1200×700), window state persistence (electron-store: bounds + maximized) | [x] |
+| 32.2 | Dev mode: loads `http://localhost:5173` (Vite) + DevTools; prod mode: `app://localhost/` custom protocol | [x] |
+| 32.3 | `app://` protocol handler — serves React SPA from bundled `frontend/dist`; proxies `/api/` + `/uploads/` to Render cloud backend; override with `FARMFLOW_API_URL` env var | [x] |
+| 32.4 | External links open in system browser; in-app navigation guarded against accidental redirect | [x] |
+| 32.5 | Dev script — `concurrently` starts BACKEND (nodemon) + VITE + ELECTRON; Electron waits on `tcp:localhost:5001` + `http://localhost:5173` | [x] |
+| 32.6 | electron-builder config: macOS DMG (arm64 + x64), Windows NSIS (x64), `frontend/dist` bundled as extraResources, GitHub Releases publish target | [x] |
+
+### Phase 2 — File Export ✅
+
+| # | Task | Status |
+|---|------|--------|
+| 32.7 | `src/ipc/file.js` — `save-file` IPC: native Save dialog + `fs.writeFile`; `open-file`: `shell.openPath`; `save-pdf`: hidden BrowserWindow → `printToPDF` → Save dialog | [x] |
+| 32.8 | `preload.js` — exposes `saveFile`, `openFile`, `savePdf` to renderer via contextBridge | [x] |
+| 32.9 | `isDesktop` flag in `frontend/src/utils/platform.js` — `!!window.electron?.isDesktop` | [x] |
+| 32.10 | SellerStatements — CSV + PDF use native Save dialog + "فتح الملف" toast link when `isDesktop` | [x] |
+| 32.11 | SellerExpenses — CSV export uses native Save dialog + UTF-8 BOM when `isDesktop` | [x] |
+| 32.12 | SellerIncome — CSV export uses native Save dialog + UTF-8 BOM when `isDesktop` | [x] |
+| 32.13 | SellerHerd — new `exportHerdCSV` (tagId, type, gender, breed, DOB, health, status, weight); ⬇ CSV button in page header; native Save dialog when `isDesktop` | [x] |
+
+### Phase 3 — OS Notifications & Badge ✅
+
+| # | Task | Status |
+|---|------|--------|
+| 32.14 | `src/ipc/notify.js` — `notify` IPC: `Notification.show` with app icon | [x] |
+| 32.15 | `set-badge` IPC: macOS dock badge (`app.setBadgeCount`); Windows taskbar overlay (SVG badge PNG); tray badge forwarded via `onBadgeChange` callback | [x] |
+| 32.16 | `preload.js` — exposes `notify(title, body)` and `setBadge(count)` to renderer | [x] |
+| 32.17 | NotificationBell calls `window.electron.setBadge(count)` automatically — badge updates on all native surfaces | [x] |
+
+### Phase 4 — Native App Menu & Keyboard Shortcuts ✅
+
+| # | Task | Status |
+|---|------|--------|
+| 32.18 | `src/ipc/menu.js` — Arabic menu: ملف (Export CSV `Cmd+Shift+E`, Export PDF `Cmd+Shift+P`, Quit), تعديل (Undo/Redo/Cut/Copy/Paste/SelectAll — native roles), عرض (Reload/DevTools/Zoom/Fullscreen), نافذة | [x] |
+| 32.19 | Menu click sends `menu-action` IPC to focused window; `preload.js` bridges as subscribable callback with unsubscribe return value | [x] |
+| 32.20 | SellerStatements `onMenuAction` → `doExportCSV` / `doExportPDF` with current year + visible months + tableData | [x] |
+| 32.21 | SellerExpenses `onMenuAction` → `exportCSV(visible, toast)` | [x] |
+| 32.22 | SellerIncome `onMenuAction` → `exportCSV(visible, toast)` | [x] |
+| 32.23 | SellerHerd `onMenuAction` → `exportHerdCSV(filtered, toast)` | [x] |
+
+### Phase 5 — System Tray ✅
+
+| # | Task | Status |
+|---|------|--------|
+| 32.24 | `src/tray.js` — Tray (16×16 icon); double-click shows window (single-click on Windows); Arabic context menu: فتح FarmFlow / خروج | [x] |
+| 32.25 | Close button hides to tray (not quit); `app._quitting` flag lets real quit through from tray menu or Cmd+Q | [x] |
+| 32.26 | `updateBadge(n)`: red SVG circle overlay on tray icon; tooltip shows unread count | [x] |
+| 32.27 | macOS `activate` event shows hidden window or re-creates window if none open | [x] |
+
+### Phase 6 — Auto-Updater ✅
+
+| # | Task | Status |
+|---|------|--------|
+| 32.28 | `electron-updater ^6.8.3`; `src/updater.js` — `checkForUpdates()` on packaged build only (skipped in dev) | [x] |
+| 32.29 | Native Arabic dialog on `update-available`; restart/later dialog on `update-downloaded` | [x] |
+| 32.30 | `package.json` publish config: GitHub Releases (`owner: abdelrahmankhalil`, `repo: FarmFlow`) | [x] |
+
+### Remaining Desktop Items
+
+| Item | Notes |
+|------|-------|
+| macOS code signing | Requires Apple Developer certificate + `CSC_LINK` / `CSC_KEY_PASSWORD` env vars for notarization |
+| Windows code signing | Requires EV certificate for `win.certificateFile` in electron-builder config |
+| GitHub release CI | Tag `v1.x.x` → CI builds DMG + NSIS → uploads to GitHub Releases → `electron-updater` picks up |
+
+---
+
+## 35. Security Hardening & API Infrastructure
+
+| # | Task | Status |
+|---|------|--------|
+| 35.1 | `helmet` security headers middleware applied globally | [x] |
+| 35.2 | `express-rate-limit`: auth endpoints 10 req/15 min; all API routes 300 req/15 min; both skipped in dev (`NODE_ENV !== 'production'`) | [x] |
+| 35.3 | Error handler masks stack traces in production (`NODE_ENV === 'production'` → generic message) | [x] |
+| 35.4 | Swagger/OpenAPI docs at `/api/docs` (swagger-ui-express) + `/api/docs.json`; disabled in production by default; enabled with `ENABLE_DOCS=true` env var | [x] |
+| 35.5 | Listing buyer search filters: `?type`, `?minPrice`, `?maxPrice`, `?minWeight`, `?maxWeight`, `?location`, `?delivery=true`, `?q`, `?sort` | [x] |
+| 35.6 | Listing `draft` status — sellers can save without submitting for review; admin notification only fires for non-draft submissions | [x] |
+| 35.7 | Extended animal types on Listing model: ostrich, gazelle, oryx, deer, llama, alpaca, donkey, mule | [x] |
+| 35.8 | `GET /api/animals/vet/medical` — all medical records across all seller's animals (with populated animal ref); admin-accessible | [x] |
+| 35.9 | `GET /api/animals/vet/vaccinations` — all vaccination log entries across all seller's animals (flattened); sorted by date desc | [x] |
+| 35.10 | Order `sourceType: 'listing'\|'supply'`; `supply` ref + `quantity` field on Order model; `createOrder` handles supply orders (quantity check, minOrderQty validation, totalAmount = pricePerUnit × qty) | [x] |
+| 35.11 | Order `timeline[]` embedded array — `{status, at, note}` pushed on every status transition; initial `pending` entry created on order creation | [x] |
+| 35.12 | Expense `recurringDay` (1–28) field; cron Job 6 (08:00 Cairo) auto-creates monthly instances for matching templates; deduplicates by seller+category+note; skips if instance already exists this month | [x] |
+| 35.13 | `GET /api/finance/analytics?months=N` (1–24) — monthly income/expense trends, income by type, expense by category, top 6 animal types by revenue, order stats; admin can scope with `?sellerId=` | [x] |
+| 35.14 | `GET /api/admin/platform-analytics?weeks=N` — Monday-aligned weekly buckets: new buyers, new sellers, new listings, orders, GMV; up to 52 weeks | [x] |
+| 35.15 | Admin users endpoint paginated with per-user listing/order/revenue stats via `Promise.all` aggregation | [x] |
+
+---
+
+## 36. Email Service & Auth Enhancements
+
+| # | Task | Status |
+|---|------|--------|
+| 36.1 | `emailService.js` — Nodemailer SMTP transporter (lazy-init singleton); fire-and-forget `sendEmail({to, subject, html, text})`; silently skipped if `SMTP_HOST`/`SMTP_USER` env vars absent | [x] |
+| 36.2 | `.env.example` updated with SMTP vars: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | [x] |
+| 36.3 | Email sent on registration when email is present (Arabic RTL welcome + verify-email link); 24-hour token validity | [x] |
+| 36.4 | `POST /auth/verify-email` — validates SHA-256 token; sets `isEmailVerified: true` on User; `POST /auth/resend-verification` (protected) re-sends | [x] |
+| 36.5 | `User.isEmailVerified` boolean; `User.emailVerificationToken/Expiry` (select: false) | [x] |
+| 36.6 | `POST /auth/forgot-password` — hashed reset token + 1-hour expiry; sends Arabic reset email with link | [x] |
+| 36.7 | `POST /auth/reset-password` — validates token; bcrypt-hashes new password; clears token fields | [x] |
+| 36.8 | Admin 2FA (email OTP): admin login returns `{ requires2FA: true, token }` (10-min JWT) + sends 6-digit code; `POST /auth/verify-2fa` validates code and returns full JWT; `twoFactorCode/Expiry` on User (select: false) | [x] |
+| 36.9 | `notifPrefs` on User model (`orders/reminders/dairy/messages`, all default true); `GET/PUT /auth/notif-prefs` endpoints | [x] |
+| 36.10 | `createNotification` respects `notifPrefs` — skips in-app creation when preference is `false`; sends HTML email for order events (new_order, order_confirmed, order_completed, order_cancelled) when user has an email address | [x] |
+| 36.11 | `TYPE_TO_PREF` map in `notify.js` links each notification type to its controlling pref key | [x] |
+
+> **SMTP activation (Render):** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in Render environment variables. Gmail: use an App Password. Email is non-blocking — all features work normally without it; emails are silently skipped.
+
+---
+
+## 37. Multi-Farm Support
+
+| # | Task | Status |
+|---|------|--------|
+| 37.1 | `Farm` model — owner (User ref), name, type (livestock/horses/poultry/dairy/exotic/mixed/other), governorate, farmPhone, personalPhone, experience, animalTypes, bio, farmDescription, farmBanner, farmLocation, farmCertificates, workingHours, typicalPrices[], averageRating, ratingCount, isActive | [x] |
+| 37.2 | `/api/farms` CRUD: `GET /` (my farms, seller-only), `GET /:id` (public), `POST /` + `PUT /:id` (with farmBanner upload), `DELETE /:id` | [x] |
+| 37.3 | `migrateLegacyFarm` — `POST /api/farms/migrate/self` creates a Farm document from existing profile-level farm fields for sellers registered before this feature | [x] |
+| 37.4 | Registration: `farms[]` array in request body creates Farm documents for seller on sign-up; `typicalPrices[]` per farm stores expected prices at registration time | [x] |
+| 37.5 | `Listing.farm`, `DairyProduct.farm`, `Supply.farm` — optional Farm ref on all marketplace items for per-farm filtering | [x] |
+| 37.6 | Web frontend multi-farm UI (farm switcher, per-farm listing creation, per-farm analytics) | [ ] |
+
+---
+
+## 34. Full App i18n — Language Switching
+
+| # | Task | Status |
+|---|------|--------|
+| 34.1 | `LangContext` with `DICT` (ar + en) and `useLang()` / `t()` hook | [x] |
+| 34.2 | `LangToggle` component on Login and Register screens | [x] |
+| 34.3 | Settings page — Language section saves selection to global `LangContext` + persists via `localStorage` | [x] |
+| 34.4 | `SellerLayout` — all nav labels, portal badge, user footer, logout button use `t()` | [x] |
+| 34.5 | `BuyerLayout` — all nav labels, account badge, dropdown, drawer, footer use `t()` | [x] |
+| 34.6 | All seller pages wired — `SellerDashboard`, `SellerListings`, `SellerHerd`, `SellerExpenses`, `SellerIncome`, `SellerStatements`, `SellerDairy`, `SellerSupplies`, `SellerBudget`, `SellerAnalytics`, all add/edit forms | [x] |
+| 34.7 | All buyer pages wired — `BuyerBrowse`, `BuyerFarmDetail`, `BuyerListingDetail`, `BuyerOrders`, `BuyerCart`, `BuyerFavorites`, `BuyerSupplyDetail`, `OrderModal` | [x] |
+| 34.8 | `LangContext` DICT expanded with 400+ keys: `dashboard.*`, `listings.*`, `herd.*`, `expenses.*`, `income.*`, `statements.*`, `dairy.*`, `supplies.*`, `buyer.*`, `settings.*`, `nav.*`, `seller.*`, `footer.*` | [x] |
+| 34.9 | `dir` attributes changed from hardcoded `"rtl"` to `{isRTL ? 'rtl' : 'ltr'}` throughout all pages and layouts | [x] |
+
+---
+
+## 33. In-App Messaging (الرسائل)
+
+| # | Task | Status |
+|---|------|--------|
+| 33.1 | `Conversation` model — `participants[]` (2), `context {type/refId/label}`, `lastMessage` denormalized, compound index on participants + updatedAt | [x] |
+| 33.2 | `Message` model — conversation ref, sender ref, body (max 1000 chars), read flag; indexes on conversation + read | [x] |
+| 33.3 | Backend `messageController.js` — 6 handlers: getConversations, getUnreadCount, getOrCreate, getMessages, sendMessage, markRead | [x] |
+| 33.4 | Backend `GET /api/messages` — inbox with per-conversation unread counts | [x] |
+| 33.5 | Backend `GET /api/messages/unread-count` — total unread across all conversations (placed before `/:id` param route) | [x] |
+| 33.6 | Backend `POST /api/messages` — start or retrieve existing conversation using `{$all, $size: 2}` deduplication | [x] |
+| 33.7 | Backend `GET /api/messages/:id` — paginated thread (default 50, newest-first then reversed) | [x] |
+| 33.8 | Backend `POST /api/messages/:id` — send message + update lastMessage denormalized + fire new_message notification | [x] |
+| 33.9 | Backend `PATCH /api/messages/:id/read` — bulk mark all unread messages as read for current user | [x] |
+| 33.10 | `Notification` model: `new_message` type added to enum | [x] |
+| 33.11 | Frontend `messageService.js` — 6 service functions matching all endpoints | [x] |
+| 33.12 | `MessagesPage.jsx` — shared two-panel inbox + chat component; ConvItem with badge/preview; ChatBubble RTL + read receipts; 5 s active-chat polling; `?with=` URL param deep-link handler; mobile-responsive list/chat toggle | [x] |
+| 33.13 | `BuyerMessages.jsx` + `SellerMessages.jsx` — thin wrappers passing basePath prop | [x] |
+| 33.14 | `App.jsx` — `/buyer/messages` + `/seller/messages` routes added | [x] |
+| 33.15 | `BuyerLayout` — 💬 الرسائل nav link with 30 s-polled red unread badge in desktop nav, dropdown, and mobile drawer | [x] |
+| 33.16 | `SellerLayout` — same; collapsed sidebar shows badge as dot on icon; expanded/mobile shows count pill after label | [x] |
+| 33.17 | `BuyerFarmDetail` — "💬 رسالة للبائع" button navigates to `/buyer/messages?with=sellerId&contextLabel=farmName` | [x] |
+
+---
+
+## Current Status Summary (as of 2026-05-08)
+
+> **Web app:** Sections 1–30, 33, 34, 35, 36, 37 complete except items requiring external credentials or pending web UI work. Full Arabic/English language switching is live across all seller pages, buyer pages, both layouts, and Settings.
+> **Backend:** Live on Render at `https://farmflow-backend-g07p.onrender.com` (free tier — spins down after 15 min inactivity). MongoDB Atlas M0 cluster at `cluster0.mr7xjcy.mongodb.net` (Ireland, free forever). Security hardened with helmet + rate limiting. Email service ready — activate by setting SMTP env vars in Render.
+> **Flutter app:** Sprints 1–18 complete. Full buyer/seller/admin flows, PDF/CSV export, NID validation, infinite scroll, 68 passing tests, FCM push notifications, signed APK/AAB + iOS archive, full app-wide i18n. Sprint 18 adds VetRecordsScreen, BreedSettingsScreen, buyer order tabs, price-range filter. Remaining: store listings (Play/App Store accounts), Apple provisioning profile for signed IPA, Cloudinary for image storage.
+> **Desktop app (Electron):** Section 32 complete (phases 1–6). All preload IPC bridges now active (saveFile, openFile, savePdf, notify, setBadge, onMenuAction, onDeepLink). macOS DMG + Windows NSIS installer; native app menu with Arabic labels; Cmd+Shift+E/P export shortcuts wired to all seller screens; OS notifications + dock/tray badge; minimize-to-tray; auto-updater via GitHub Releases. Remaining: code signing certificates, CI/CD release pipeline.
+
+**Fully complete (web/backend):** 1 (1.1–1.7), 2, 3, 4, 5, 6 (6.1–6.8, 6.10–6.13), 7, 8, 9 (9.1–9.7), 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 (30.2, 30.3, 30.7), 33, **34**, **35**, **36**, **37** (37.1–37.5)
+
+**Fully complete (Flutter — Sprints 1–17):**
 - **Sprint 1** — foundation, theme, auth flow, GoRouter, AppShell (buyer + seller + admin tabs)
 - **Sprint 2** — buyer browse/filters, farm detail (4 tabs), listing detail + order modal, orders, favorites, profile, notifications, add-review sheet
 - **Sprint 3** — seller dashboard (KPIs + follow-ups + recent orders), listings screen, herd screen (type filter + summary strip + badges), statements screen (3 tabs + fl_chart), finance/herd/listing services
@@ -651,6 +830,8 @@
 - **Sprint 13** — M22 unit/widget tests: 68/68 passing (`test/unit/national_id_util_test.dart` 21 cases, `test/unit/model_helpers_test.dart` 20 cases, `test/widget/empty_state_test.dart` 5 cases, `test/widget/status_badge_test.dart` 19 cases, `test/widget_test.dart` RTL + smoke)
 - **Sprint 14** — M16.x FCM: Firebase project `farmflow-d049d` configured; `firebase_core` + `firebase_messaging` added; `FcmService` handles permission, token → `PATCH /auth/fcm-token`, foreground SnackBar, background deep-link routing; backend `fcmToken` field on User model
 - **Sprint 15** — M23 Release: icons + splash generated (`flutter_launcher_icons` + `flutter_native_splash`); Android PKCS12 keystore + `build.gradle.kts` signing config + ProGuard; `app-release.apk` (30 MB) + `app-release.aab` (49 MB) signed and built; iOS `Runner.xcarchive` built (unsigned, ready for Xcode Organizer signing); iOS display name fixed to "FarmFlow"; post-release: APK rebuilt after icon timestamp mismatch (icons were generated 4 min after original APK); `android:usesCleartextTraffic="true"` added to manifest; `.env` API URL changed from `10.0.2.2` (emulator alias) to `192.168.1.10` (Mac local WiFi IP) for real-device testing; redistributed via Firebase App Distribution
+- **Sprint 16** — M16.4/M16.8 server-side push (`pushNotify.js` fire-and-forget via firebase-admin, wired into every `createNotification()` call); M18.2 geolocator on GovPickerSheet (nearest Egyptian governorate from GPS); M22.3 integration test (`integration_test/app_test.dart` — splash→login→browse→farm→listing→order flow)
+- **Sprint 17** — M3.8 full app-wide i18n: `l10n.yaml` + `lib/core/l10n/l10n_ext.dart` (`context.l10n` extension); `app_en.arb` + `app_ar.arb` expanded to ~200 keys covering all screens; all 35 feature screens updated (759 hardcoded strings replaced with `context.l10n.key`); `AppLocalizations.delegate` added to `main.dart`; `flutter analyze` 0 errors, 0 warnings
 
 **Blocked on external credentials (web):**
 - 1.8 / 9.9 — Egyptian Civil Registry API (EDA/Nafaz)
@@ -658,13 +839,13 @@
 - 9.10 — Real InstaPay gateway
 - 9.8 / 30.9 — Cloud image storage (S3/Cloudinary)
 - 30.4 — Live auctions
-- 30.5 — Multi-branch farms
 - 30.6 — AI price recommendations
 - 30.8 — Public API/webhooks
+- 36.1–36.11 — Email features require SMTP credentials (SMTP_HOST/USER/PASS in Render env vars); all features degrade gracefully without them
+- 37.6 — Web multi-farm UI (farm switcher, per-farm creation)
 
 **Remaining Flutter items:**
 - M23.8–M23.9 — Google Play + App Store store listings (needs developer accounts + screenshots)
 - M23.3 / M23.7 — iOS signed IPA export (needs Apple Developer team + provisioning profile in Xcode Organizer)
 - Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
-- Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
-- `flutter analyze`: 0 errors, 0 warnings (2 pre-existing style infos in auth screens)
+- `flutter analyze`: 0 errors, 0 warnings (6 pre-existing style infos in auth/test files only)

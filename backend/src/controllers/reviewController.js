@@ -96,4 +96,34 @@ const getAllReviews = async (req, res) => {
   }
 };
 
-module.exports = { createReview, getSellerReviews, deleteReview, getAllReviews };
+// ─── GET /api/reviews/my-reviewed — buyer only ────────────────────────────────
+// Returns the list of order IDs the current buyer has already reviewed
+const getMyReviewedOrders = async (req, res) => {
+  try {
+    const reviews = await Review.find({ buyer: req.user.id }, 'order');
+    res.json(reviews.map(r => r.order.toString()));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── PATCH /api/reviews/:id/reply — seller only ───────────────────────────────
+const replyToReview = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) return res.status(404).json({ message: 'Review not found' });
+    if (review.seller.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    review.reply = { body: req.body.body.trim(), at: new Date() };
+    await review.save();
+    res.json(review);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { createReview, getSellerReviews, deleteReview, getAllReviews, getMyReviewedOrders, replyToReview };

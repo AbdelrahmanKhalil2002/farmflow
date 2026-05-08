@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const User    = require('../models/User');
 const Listing = require('../models/Listing');
 const Order   = require('../models/Order');
+const Expense = require('../models/Expense');
 
 // GET /api/admin/stats
 // Extended to return everything the admin dashboard needs in a single round-trip.
@@ -125,8 +126,13 @@ const getStats = async (req, res) => {
 // GET /api/admin/users  — enriched with per-user listing/order stats
 const getUsers = async (req, res) => {
   try {
-    const [users, listingAgg, buyerOrderAgg, sellerRevenueAgg] = await Promise.all([
-      User.find().sort({ createdAt: -1 }).lean(),
+    const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const skip  = (page - 1) * limit;
+
+    const [total, users, listingAgg, buyerOrderAgg, sellerRevenueAgg] = await Promise.all([
+      User.countDocuments(),
+      User.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Listing.aggregate([
         { $group: { _id: '$seller', count: { $sum: 1 } } },
       ]),
@@ -158,7 +164,13 @@ const getUsers = async (req, res) => {
       };
     });
 
-    res.json(enriched);
+    res.json({
+      users: enriched,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -203,4 +215,67 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getUsers, toggleUserStatus, deleteUser };
+// GET /api/admin/platform-analytics?weeks=N (default 12)
+const getPlatformAnalytics = async (req, res) => {
+  try {
+    const weeks = Math.min(52, Math.max(4, parseInt(req.query.weeks) || 12));
+    const since = new Date();
+    since.setDate(since.getDate() - weeks * 7);
+
+    // Build week-start buckets (Monday-aligned ISO weeks)
+    const buckets = Array.from({ length: weeks }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (weeks - 1 - i) * 7);
+      // Round back to Monday
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+
+    const weekStart = (date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1 - day);
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const [users, listings, orders] = await Promise.all([
+      User.find({ createdAt: { $gte: since } }).select('role createdAt').lean(),
+      Listing.find({ createdAt: { $gte: since } }).select('createdAt').lean(),
+      Order.find({ createdAt: { $gte: since } }).select('status totalAmount createdAt').lean(),
+    ]);
+
+    // Aggregate into weekly buckets
+    const weekMap = {};
+    buckets.forEach(b => {
+      const key = b.toISOString().slice(0, 10);
+      weekMap[key] = { week: key, buyers: 0, sellers: 0, listings: 0, orders: 0, gmv: 0 };
+    });
+
+    users.forEach(u => {
+      const k = weekStart(u.createdAt);
+      if (weekMap[k]) weekMap[k][u.role === 'seller' ? 'sellers' : 'buyers']++;
+    });
+    listings.forEach(l => {
+      const k = weekStart(l.createdAt);
+      if (weekMap[k]) weekMap[k].listings++;
+    });
+    orders.forEach(o => {
+      const k = weekStart(o.createdAt);
+      if (weekMap[k]) {
+        weekMap[k].orders++;
+        if (o.status === 'completed') weekMap[k].gmv += o.totalAmount || 0;
+      }
+    });
+
+    res.json(Object.values(weekMap));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getStats, getUsers, toggleUserStatus, deleteUser, getPlatformAnalytics };

@@ -1,30 +1,34 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LangContext';
 import { useCart } from '../context/CartContext';
+import { useMsgUnread } from '../context/MsgUnreadContext';
 import NotificationBell from '../components/NotificationBell';
 import EidCountdownBanner from '../components/EidCountdownBanner';
 
 const S = {
-  navBg:       '#FFFFFF',
-  mainBg:      '#F7FBF7',
-  activeColor: '#3A7D44',
-  activeBg:    'rgba(58,125,68,0.09)',
-  dimColor:    '#4B6B4E',
-  border:      '#D4E8D6',
-  text:        '#1A2E1C',
-  drawerBg:    '#F0F7F1',
+  navBg:       'var(--sidebar-bg, #F0F7F1)',
+  mainBg:      'var(--main-bg, #F7FBF7)',
+  activeColor: 'var(--sidebar-active-color, #3A7D44)',
+  activeBg:    'var(--sidebar-active-bg, rgba(58,125,68,0.09))',
+  dimColor:    'var(--sidebar-dim-color, #4B6B4E)',
+  border:      'var(--sidebar-border, #D4E8D6)',
+  text:        'var(--sidebar-text, #1A2E1C)',
+  drawerBg:    'var(--sidebar-bg, #F0F7F1)',
 };
 
 const LINKS = [
-  { to: '/buyer',           label: 'استعرض المزارع', icon: '🌾', end: true },
-  { to: '/buyer/orders',    label: 'طلباتي',          icon: '📦'           },
-  { to: '/buyer/favorites', label: 'المفضلة',         icon: '❤️'           },
-  { to: '/buyer/settings',  label: 'الإعدادات',       icon: '⚙️'           },
+  { to: '/buyer',           labelKey: 'nav.browse',    icon: '🌾', end: true },
+  { to: '/buyer/orders',    labelKey: 'nav.myOrders',  icon: '📦'           },
+  { to: '/buyer/messages',  labelKey: 'nav.messages',  icon: '💬', msgBadge: true },
+  { to: '/buyer/favorites', labelKey: 'nav.favorites', icon: '❤️'           },
+  { to: '/buyer/settings',  labelKey: 'nav.settings',  icon: '⚙️'           },
 ];
 
 const BuyerLayout = () => {
   const { user, logout } = useAuth();
+  const { t } = useLang();
   const cart = useCart();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -48,8 +52,11 @@ const BuyerLayout = () => {
     return () => { document.body.style.overflow = ''; };
   }, [menuOpen]);
 
+  const { msgUnread } = useMsgUnread();
+
   const initial = (user?.name?.[0] || 'B').toUpperCase();
   const firstName = user?.name?.split(' ')[0] || 'Buyer';
+  const isMacDesktop = window.electron?.platform === 'darwin';
 
   return (
     <div style={{
@@ -62,14 +69,14 @@ const BuyerLayout = () => {
         .bl-desktop-nav { display: flex !important; }
         .bl-hamburger   { display: none !important; }
         .bl-nav-name    { display: inline !important; }
-        *:focus-visible { outline: 2px solid #3A7D44; outline-offset: 2px; border-radius: 4px; }
+        *:focus-visible { outline: 2px solid var(--primary, #3A7D44); outline-offset: 2px; border-radius: 4px; }
         @media (max-width: 768px) {
           .bl-desktop-nav { display: none !important; }
           .bl-hamburger   { display: flex !important; }
           .bl-nav-name    { display: none !important; }
         }
-        .bl-drop-link:hover { background: ${S.activeBg} !important; }
-        .bl-drawer-link:hover { background: ${S.activeBg} !important; }
+        .bl-drop-link:hover { background: var(--sidebar-active-bg, rgba(58,125,68,0.09)) !important; }
+        .bl-drawer-link:hover { background: var(--sidebar-active-bg, rgba(58,125,68,0.09)) !important; }
       `}</style>
 
       {/* ── Top Navbar ── */}
@@ -78,10 +85,14 @@ const BuyerLayout = () => {
         background: S.navBg,
         borderBottom: `1px solid ${S.border}`,
         boxShadow: '0 1px 4px rgba(26,46,28,0.06)',
+        // macOS: entire header is the drag zone; children mark themselves no-drag
+        WebkitAppRegion: isMacDesktop ? 'drag' : undefined,
       }}>
         <div style={{
           maxWidth: '1280px', margin: '0 auto',
-          padding: '0 20px', height: '62px',
+          // Extra left padding on macOS so logo doesn't collide with traffic lights
+          padding: isMacDesktop ? '0 20px 0 88px' : '0 20px',
+          height: '62px',
           display: 'flex', alignItems: 'center', gap: '16px',
         }}>
 
@@ -94,8 +105,8 @@ const BuyerLayout = () => {
           </div>
 
           {/* Desktop nav — center */}
-          <nav aria-label="Main navigation" className="bl-desktop-nav" style={{ flex: 1, alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
-            {LINKS.map(({ to, label, end }) => (
+          <nav aria-label="Main navigation" className="bl-desktop-nav" style={{ flex: 1, alignItems: 'center', gap: '4px', justifyContent: 'center', WebkitAppRegion: 'no-drag' }}>
+            {LINKS.map(({ to, labelKey, end, msgBadge }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -109,15 +120,24 @@ const BuyerLayout = () => {
                   background: isActive ? S.activeBg : 'transparent',
                   textDecoration: 'none',
                   transition: 'all 0.15s',
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
                 })}
               >
-                {label}
+                {t(labelKey)}
+                {msgBadge && msgUnread > 0 && (
+                  <span style={{ background: '#DC2626', color: '#fff', borderRadius: '9999px', fontSize: 9, fontWeight: 800, minWidth: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                    {msgUnread > 9 ? '9+' : msgUnread}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
 
           {/* Right side */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto', flexShrink: 0, WebkitAppRegion: 'no-drag' }}>
 
             <NotificationBell />
 
@@ -196,12 +216,12 @@ const BuyerLayout = () => {
                   {/* User info */}
                   <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${S.border}` }}>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: S.text }}>{user?.name}</div>
-                    <div style={{ fontSize: '11px', color: S.dimColor, marginTop: '2px' }}>Buyer Account</div>
+                    <div style={{ fontSize: '11px', color: S.dimColor, marginTop: '2px' }}>{t('buyer.account')}</div>
                   </div>
 
                   {/* Nav items */}
                   <div style={{ padding: '6px' }}>
-                    {LINKS.map(({ to, label, icon, end }) => (
+                    {LINKS.map(({ to, labelKey, icon, end, msgBadge }) => (
                       <NavLink
                         key={to}
                         to={to}
@@ -219,7 +239,12 @@ const BuyerLayout = () => {
                         })}
                       >
                         <span style={{ fontSize: '15px' }}>{icon}</span>
-                        {label}
+                        {t(labelKey)}
+                        {msgBadge && msgUnread > 0 && (
+                          <span style={{ marginRight: 'auto', background: '#DC2626', color: '#fff', borderRadius: '9999px', fontSize: 9, fontWeight: 800, minWidth: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                            {msgUnread > 9 ? '9+' : msgUnread}
+                          </span>
+                        )}
                       </NavLink>
                     ))}
                   </div>
@@ -241,7 +266,7 @@ const BuyerLayout = () => {
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <span style={{ fontSize: '14px' }}>⏏</span>
-                      Sign Out
+                      {t('auth.logout')}
                     </button>
                   </div>
                 </div>
@@ -257,7 +282,7 @@ const BuyerLayout = () => {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: S.text, fontSize: '20px', padding: '6px',
-                lineHeight: 1, borderRadius: '8px',
+                lineHeight: 1, borderRadius: '8px', WebkitAppRegion: 'no-drag',
               }}
             >
               {menuOpen ? '✕' : '☰'}
@@ -327,7 +352,7 @@ const BuyerLayout = () => {
           </div>
           <div>
             <div style={{ fontSize: '13px', fontWeight: '600', color: S.text }}>{user?.name}</div>
-            <div style={{ fontSize: '11px', color: S.dimColor, marginTop: '1px' }}>Buyer Account</div>
+            <div style={{ fontSize: '11px', color: S.dimColor, marginTop: '1px' }}>{t('buyer.account')}</div>
           </div>
         </div>
 
@@ -337,7 +362,7 @@ const BuyerLayout = () => {
           display: 'flex', flexDirection: 'column', gap: '2px',
           overflowY: 'auto',
         }}>
-          {LINKS.map(({ to, label, icon, end }) => (
+          {LINKS.map(({ to, labelKey, icon, end, msgBadge }) => (
             <NavLink
               key={to}
               to={to}
@@ -356,7 +381,12 @@ const BuyerLayout = () => {
               })}
             >
               <span style={{ fontSize: '16px', lineHeight: 1 }}>{icon}</span>
-              {label}
+              {t(labelKey)}
+              {msgBadge && msgUnread > 0 && (
+                <span style={{ marginRight: 'auto', background: '#DC2626', color: '#fff', borderRadius: '9999px', fontSize: 10, fontWeight: 800, minWidth: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                  {msgUnread > 9 ? '9+' : msgUnread}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -383,7 +413,7 @@ const BuyerLayout = () => {
               e.currentTarget.style.borderColor = S.border;
             }}
           >
-            Sign Out
+            {t('auth.logout')}
           </button>
         </div>
       </div>
@@ -405,7 +435,7 @@ const BuyerLayout = () => {
             <span aria-hidden="true" style={{ fontSize: '16px' }}>🌾</span>
             <span style={{ fontSize: '13px', fontWeight: '800', color: S.text }}>FarmFlow</span>
             <span aria-hidden="true" style={{ color: S.border }}>·</span>
-            <span style={{ fontSize: '12px', color: S.dimColor }}>🛡 All transactions protected by FarmFlow</span>
+            <span style={{ fontSize: '12px', color: S.dimColor }}>🛡 {t('footer.protected')}</span>
           </div>
           <nav aria-label="Footer links" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
             {[

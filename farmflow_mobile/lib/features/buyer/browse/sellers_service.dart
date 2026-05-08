@@ -3,32 +3,67 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../shared/models/seller_summary_model.dart';
 
+// ── Sort options ──────────────────────────────────────────────────────────────
+enum SellersSortBy { newest, priceAsc, priceDesc, rating }
+
 class SellersFilter {
   final String search;
   final String? governorate;
   final String? animalType;
+  final double? minPrice;
+  final double? maxPrice;
+  final bool deliveryOnly;
+  final SellersSortBy sortBy;
 
-  const SellersFilter({this.search = '', this.governorate, this.animalType});
+  const SellersFilter({
+    this.search = '',
+    this.governorate,
+    this.animalType,
+    this.minPrice,
+    this.maxPrice,
+    this.deliveryOnly = false,
+    this.sortBy = SellersSortBy.rating,
+  });
 
   SellersFilter copyWith({
     String? search,
     Object? governorate = _sentinel,
     Object? animalType  = _sentinel,
+    Object? minPrice    = _sentinel,
+    Object? maxPrice    = _sentinel,
+    bool? deliveryOnly,
+    SellersSortBy? sortBy,
   }) => SellersFilter(
     search:      search      ?? this.search,
     governorate: governorate == _sentinel ? this.governorate : governorate as String?,
     animalType:  animalType  == _sentinel ? this.animalType  : animalType  as String?,
+    minPrice:    minPrice    == _sentinel ? this.minPrice    : minPrice    as double?,
+    maxPrice:    maxPrice    == _sentinel ? this.maxPrice    : maxPrice    as double?,
+    deliveryOnly: deliveryOnly ?? this.deliveryOnly,
+    sortBy:      sortBy      ?? this.sortBy,
   );
+
+  bool get hasActiveFilters =>
+      governorate != null ||
+      animalType != null ||
+      minPrice != null ||
+      maxPrice != null ||
+      deliveryOnly ||
+      sortBy != SellersSortBy.rating;
 
   @override
   bool operator ==(Object other) =>
       other is SellersFilter &&
       other.search == search &&
       other.governorate == governorate &&
-      other.animalType == animalType;
+      other.animalType == animalType &&
+      other.minPrice == minPrice &&
+      other.maxPrice == maxPrice &&
+      other.deliveryOnly == deliveryOnly &&
+      other.sortBy == sortBy;
 
   @override
-  int get hashCode => Object.hash(search, governorate, animalType);
+  int get hashCode => Object.hash(search, governorate, animalType, minPrice, maxPrice, deliveryOnly, sortBy);
 }
 
 const _sentinel = Object();
@@ -46,7 +81,7 @@ final allSellersProvider = FutureProvider<List<SellerSummaryModel>>((ref) async 
 /// Current filter state.
 final sellersFilterProvider = StateProvider<SellersFilter>((_) => const SellersFilter());
 
-/// Derived provider: all sellers filtered + sorted by rating.
+/// Derived provider: all sellers filtered + sorted.
 final filteredSellersProvider =
     Provider<AsyncValue<List<SellerSummaryModel>>>((ref) {
   final allAsync = ref.watch(allSellersProvider);
@@ -70,10 +105,40 @@ final filteredSellersProvider =
         final types = <String>{...s.animalTypes, ...s.listingTypes};
         if (!types.contains(filter.animalType)) return false;
       }
+      // Price range filter — uses minPricePerKg/maxPricePerKg aggregates
+      if (filter.minPrice != null && s.minPricePerKg != null) {
+        if (s.minPricePerKg! < filter.minPrice!) return false;
+      }
+      if (filter.maxPrice != null && s.maxPricePerKg != null) {
+        if (s.maxPricePerKg! > filter.maxPrice!) return false;
+      }
       return true;
     }).toList();
 
-    result.sort((a, b) => b.averageRating.compareTo(a.averageRating));
+    // Sort
+    switch (filter.sortBy) {
+      case SellersSortBy.newest:
+        result.sort((a, b) {
+          final aDate = a.newestListingAt ?? a.createdAt;
+          final bDate = b.newestListingAt ?? b.createdAt;
+          return bDate.compareTo(aDate);
+        });
+      case SellersSortBy.priceAsc:
+        result.sort((a, b) {
+          final ap = a.minPricePerKg ?? double.maxFinite;
+          final bp = b.minPricePerKg ?? double.maxFinite;
+          return ap.compareTo(bp);
+        });
+      case SellersSortBy.priceDesc:
+        result.sort((a, b) {
+          final ap = a.maxPricePerKg ?? 0;
+          final bp = b.maxPricePerKg ?? 0;
+          return bp.compareTo(ap);
+        });
+      case SellersSortBy.rating:
+        result.sort((a, b) => b.averageRating.compareTo(a.averageRating));
+    }
+
     return result;
   });
 });
@@ -128,7 +193,6 @@ class PaginatedSellersNotifier
     } catch (e, st) {
       // Restore the previous data; don't wipe what the user already sees.
       state = AsyncData(current.copyWith(isLoading: false));
-      // Re-throw so callers can surface errors if needed.
       Error.throwWithStackTrace(e, st);
     }
   }
@@ -147,9 +211,12 @@ class PaginatedSellersNotifier
       'page':  page,
       'limit': _kSellersPageSize,
     };
-    if (filter.search.isNotEmpty)    params['search']      = filter.search;
-    if (filter.governorate != null)  params['governorate'] = filter.governorate;
-    if (filter.animalType  != null)  params['animalType']  = filter.animalType;
+    if (filter.search.isNotEmpty)    params['search']       = filter.search;
+    if (filter.governorate != null)  params['governorate']  = filter.governorate;
+    if (filter.animalType  != null)  params['animalType']   = filter.animalType;
+    if (filter.minPrice    != null)  params['minPrice']     = filter.minPrice;
+    if (filter.maxPrice    != null)  params['maxPrice']     = filter.maxPrice;
+    if (filter.deliveryOnly)         params['deliveryOnly'] = true;
 
     final res  = await dio.get(ApiEndpoints.sellers, queryParameters: params);
     final data = res.data;

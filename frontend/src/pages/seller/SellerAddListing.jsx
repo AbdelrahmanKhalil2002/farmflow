@@ -2,41 +2,102 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createListing } from '../../services/listingService';
 import { getMarketPrices } from '../../services/marketPricesService';
+import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
+import { resolveBreeds } from '../../utils/breedPrefs';
 
-// ─── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg:        '#FEFAF5',
-  card:      '#FFFFFF',
-  green:     '#3A7D44',
-  greenDark: '#2D6235',
-  greenBg:   '#DCFCE7',
-  greenText: '#166534',
-  amber:     '#D97706',
-  amberBg:   '#FEF3C7',
-  amberText: '#92400E',
-  red:       '#DC2626',
-  redBg:     '#FEF2F2',
-  redText:   '#B91C1C',
-  tan:       '#C49A6C',
-  border:    '#E8D5C0',
-  text:      '#2C1810',
-  textMuted: '#8B6B5A',
-  shadow:    '0 1px 3px rgba(44,24,16,0.08), 0 4px 12px rgba(44,24,16,0.06)',
-  shadowMd:  '0 4px 20px rgba(44,24,16,0.12)',
-};
+import { C } from '../../tokens';
+import { animalImg, imgFallback } from '../../utils/animalImg';
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 const STEPS = [
-  { n: 1, label: 'المعلومات',  icon: '🐾' },
-  { n: 2, label: 'المواصفات',  icon: '⚖️'  },
-  { n: 3, label: 'المستندات',  icon: '📄' },
-  { n: 4, label: 'الصور',      icon: '📷' },
-  { n: 5, label: 'السعر',      icon: '💰' },
+  { n: 1, labelKey: 'addListing.step.info',   icon: '🐾' },
+  { n: 2, labelKey: 'addListing.step.specs',  icon: '⚖️'  },
+  { n: 3, labelKey: 'addListing.step.docs',   icon: '📄' },
+  { n: 4, labelKey: 'addListing.step.photos', icon: '📷' },
+  { n: 5, labelKey: 'addListing.step.price',  icon: '💰' },
 ];
 
-const TYPES      = ['cattle', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'other'];
-const TYPE_EMOJI = { cattle: '🐄', sheep: '🐑', goat: '🐐', camel: '🐪', horse: '🐎', poultry: '🐔', other: '🐾' };
-const TYPE_AR    = { cattle: 'ماشية', sheep: 'أغنام', goat: 'ماعز', camel: 'إبل', horse: 'خيول', poultry: 'دواجن', other: 'أخرى' };
+const TYPES      = ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'ostrich', 'gazelle', 'oryx', 'deer', 'llama', 'alpaca', 'donkey', 'mule', 'other'];
+const TYPE_EMOJI = { cattle: '🐄', buffalo: '🐃', sheep: '🐑', goat: '🐐', camel: '🐪', horse: '🐎', poultry: '🐔', rabbit: '🐇', ostrich: '🦢', gazelle: '🦌', oryx: '🦬', deer: '🦌', llama: '🦙', alpaca: '🦙', donkey: '🐴', mule: '🐴', other: '🐾' };
+const TYPE_KEY   = { cattle: 'herd.type.cattle', buffalo: 'herd.type.buffalo', sheep: 'herd.type.sheep', goat: 'herd.type.goat', camel: 'herd.type.camel', horse: 'herd.type.horse', poultry: 'herd.type.poultry', rabbit: 'herd.type.rabbit', ostrich: 'herd.type.ostrich', gazelle: 'herd.type.gazelle', oryx: 'herd.type.oryx', deer: 'herd.type.deer', llama: 'herd.type.llama', alpaca: 'herd.type.alpaca', donkey: 'herd.type.donkey', mule: 'herd.type.mule', other: 'herd.type.other' };
+
+// ── Expanded poultry sub-types (all set type='poultry', breed=label) ──────────
+const POULTRY_SUBTYPES = [
+  { id: 'baladi',  label: 'فراخ بلدي',  emoji: '🐓' },
+  { id: 'broiler', label: 'فراخ تسمين', emoji: '🐔' },
+  { id: 'layers',  label: 'فراخ بياضة', emoji: '🥚' },
+  { id: 'duck',    label: 'بط',         emoji: '🦆' },
+  { id: 'turkey',  label: 'ديك رومي',  emoji: '🦃' },
+  { id: 'pigeon',  label: 'حمام',       emoji: '🕊️' },
+  { id: 'quail',   label: 'سمان',       emoji: '🐦' },
+  { id: 'goose',   label: 'إوز',        emoji: '🦢' },
+  { id: 'guinea',  label: 'دراج',       emoji: '🦜' },
+  { id: 'peacock', label: 'طاووس',      emoji: '🦚' },
+];
+
+// ── Breed chips per poultry sub-type ─────────────────────────────────────────
+const POULTRY_BREEDS_CHIPS = {
+  baladi:  ['فيومي', 'دمياطي', 'سيناوي', 'بلدي مصري', 'عسيل', 'دجاج الصخرة', 'حساني'],
+  broiler: ['روس 308', 'كوب 500', 'هبارد', 'أريبياكلس', 'راس', 'مارشال'],
+  layers:  ['هاي لاين', 'لومان براون', 'نوفوجن', 'إيزا براون', 'شيفر', 'باب كوك'],
+  duck:    ['بكين', 'مسكوفي', 'كايوغا', 'رووين', 'إيندير رانر'],
+  turkey:  ['برونز الكبير', 'ذهبي', 'أبيض عريض الصدر', 'نيكولاس 300', 'بيوتي'],
+  pigeon:  ['زاجل', 'مموه', 'مروب', 'تيلر', 'جيكوبان', 'رومان', 'الملك', 'قاصر'],
+  quail:   ['ياباني', 'أمريكي', 'فرنسي', 'بوب وايت', 'كوتورنيكس'],
+  goose:   ['إمبدن', 'تولوز', 'أفريكان', 'بيلجريم', 'أوروبي'],
+  guinea:  ['بيرل', 'أبيض', 'لافندر', 'كورنيش'],
+  peacock: ['هندي أزرق', 'أبيض', 'شابو', 'بياض العين'],
+};
+
+const LIVESTOCK_TYPES = [
+  { id: 'cattle',  label: 'أبقار', emoji: '🐄' },
+  { id: 'buffalo', label: 'جاموس', emoji: '🐃' },
+  { id: 'sheep',   label: 'أغنام', emoji: '🐑' },
+  { id: 'goat',    label: 'ماعز',  emoji: '🐐' },
+  { id: 'camel',   label: 'إبل',   emoji: '🐪' },
+];
+
+const EXOTIC_ANIMALS = [
+  { id: 'ostrich',    label: 'نعام',    emoji: '🦢' },
+  { id: 'gazelle',    label: 'غزلان',   emoji: '🦌' },
+  { id: 'oryx',       label: 'مها',     emoji: '🦬' },
+  { id: 'deer',       label: 'أيل',     emoji: '🦌' },
+  { id: 'llama',      label: 'لاما',    emoji: '🦙' },
+  { id: 'alpaca',     label: 'ألبكا',   emoji: '🦙' },
+  { id: 'donkey',     label: 'حمير',    emoji: '🐴' },
+  { id: 'mule',       label: 'بغال',    emoji: '🐴' },
+];
+
+const EXOTIC_BREEDS_CHIPS = {
+  ostrich:    ['أفريقي الرقبة الحمراء', 'أفريقي الرقبة الزرقاء', 'أسترالي', 'أمريكي', 'صومالي'],
+  gazelle:    ['غزال الريم', 'غزال الدوركاس', 'غزال السبلة', 'غزال الجبلي', 'غزال عفري'],
+  oryx:       ['مها عربي أبيض', 'مها عربي أسمر'],
+  deer:       ['أيل أحمر', 'أيل الأكسيس', 'أيل الدام'],
+  llama:      ['كلاسيكية', 'بنية', 'بيضاء'],
+  alpaca:     ['هواكايا', 'سوري'],
+  donkey:     ['مصري بلدي', 'صومالي', 'نوبي', 'إيطالي', 'أمريكي'],
+  mule:       ['بغل عمل', 'بغل رياضي'],
+};
+
+// ── Quick-select breed chips per type ─────────────────────────────────────────
+const TYPE_BREEDS_CHIPS = {
+  cattle:     ['فريزيان', 'هولشتاين', 'براهمان', 'سيمنتال', 'ليموزين', 'واجو', 'أنغوس', 'بلدي'],
+  buffalo:    ['بلدي مصري', 'مري', 'نيلي رافي'],
+  sheep:      ['نجدي', 'عواسي', 'بربرة', 'نعيمي', 'ميرينو', 'سفولك', 'بلدي'],
+  goat:       ['نوبي', 'بور', 'شامي', 'بلدي', 'سانن', 'ألباين'],
+  camel:      ['دروميدار', 'مجاهيم', 'حُمُر', 'وضحاء'],
+  horse:      ['عربي أصيل', 'ثوروبرد', 'كوارتر هورس', 'أندلسي', 'فريزيان', 'خيل عمل'],
+  // exotic
+  ostrich:    ['أفريقي الرقبة الحمراء', 'أفريقي الرقبة الزرقاء', 'أسترالي', 'أمريكي', 'صومالي'],
+  gazelle:    ['غزال الريم', 'غزال الدوركاس', 'غزال السبلة', 'غزال الجبلي', 'غزال عفري'],
+  oryx:       ['مها عربي أبيض', 'مها عربي أسمر'],
+  deer:       ['أيل أحمر', 'أيل الأكسيس', 'أيل الدام'],
+  llama:      ['كلاسيكية', 'بنية', 'بيضاء'],
+  alpaca:     ['هواكايا', 'سوري'],
+  donkey:     ['مصري بلدي', 'صومالي', 'نوبي', 'إيطالي', 'أمريكي'],
+  mule:       ['بغل عمل', 'بغل رياضي'],
+};
 
 const BREEDS = {
   cattle:  ['فريزيان', 'أنغوس', 'هيرفورد', 'براهمان', 'سيمنتال', 'هولشتاين', 'ليموزين', 'واجو', 'نجدي'],
@@ -48,35 +109,53 @@ const BREEDS = {
   other:   [],
 };
 
-const COLORS = ['بني', 'أسود', 'أبيض', 'رمادي', 'كستنائي', 'منقط', 'مختلط', 'أشهب'];
+const COLORS_MAP = {
+  poultry: ['أبيض', 'أسود', 'بني', 'ذهبي', 'رقطاء', 'ملون', 'رمادي', 'فضي'],
+  horses:  ['أشهب', 'كستنائي', 'أسود', 'بني فاتح', 'رمادي', 'طيلساني', 'مرقط', 'بيج'],
+  default: ['بني', 'أسود', 'أبيض', 'رمادي', 'كستنائي', 'منقط', 'مختلط', 'أشهب'],
+};
+
+const TRAIT_OPTS_MAP = {
+  poultry: [
+    { key: 'eggs',      labelKey: 'addListing.trait.eggs'      },
+    { key: 'fattening', labelKey: 'addListing.trait.fattening' },
+    { key: 'breeding',  labelKey: 'addListing.trait.breeding'  },
+    { key: 'show',      labelKey: 'addListing.trait.show'      },
+  ],
+  horses: [
+    { key: 'racing',   labelKey: 'addListing.trait.racing'   },
+    { key: 'show',     labelKey: 'addListing.trait.show'     },
+    { key: 'working',  labelKey: 'addListing.trait.working'  },
+    { key: 'breeding', labelKey: 'addListing.trait.breeding' },
+  ],
+  default: [
+    { key: 'dairy',    labelKey: 'addListing.trait.dairy'    },
+    { key: 'meat',     labelKey: 'addListing.trait.meat'     },
+    { key: 'breeding', labelKey: 'addListing.trait.breeding' },
+    { key: 'show',     labelKey: 'addListing.trait.show'     },
+    { key: 'working',  labelKey: 'addListing.trait.working'  },
+  ],
+};
 
 const HEALTH_OPTS = [
-  { key: 'healthy',    emoji: '💚', label: 'صحي',           sub: 'حالة صحية جيدة بشكل عام'       },
-  { key: 'vaccinated', emoji: '💉', label: 'معفّى',          sub: 'تم إعطاء اللقاحات الأساسية'    },
-  { key: 'certified',  emoji: '📋', label: 'معتمد بيطرياً', sub: 'يحمل شهادة بيطرية رسمية'      },
-];
-
-const TRAIT_OPTS = [
-  { key: 'dairy',    label: '🥛 ألبان'           },
-  { key: 'meat',     label: '🥩 جودة اللحم'      },
-  { key: 'breeding', label: '🌱 تربية ونسل'      },
-  { key: 'show',     label: '🏆 عروض ومعارض'    },
-  { key: 'working',  label: '💪 حيوان عمل'       },
+  { key: 'healthy',    emoji: '💚', labelKey: 'addAnimal.health.healthy',    subKey: 'addAnimal.health.healthySub'    },
+  { key: 'vaccinated', emoji: '💉', labelKey: 'addAnimal.health.vaccinated', subKey: 'addAnimal.health.vaccinatedSub' },
+  { key: 'certified',  emoji: '📋', labelKey: 'addAnimal.health.certified',  subKey: 'addAnimal.health.certifiedSub'  },
 ];
 
 const DOC_SLOTS = [
-  { key: 'vaccine', label: 'سجلات التطعيم',         emoji: '💉' },
-  { key: 'health',  label: 'شهادة الصحة',           emoji: '📋' },
-  { key: 'vet',     label: 'شهادة الفحص البيطري',  emoji: '🏥' },
+  { key: 'vaccine', labelKey: 'addListing.doc.vaccine', emoji: '💉' },
+  { key: 'health',  labelKey: 'addListing.doc.health',  emoji: '📋' },
+  { key: 'vet',     labelKey: 'addListing.doc.vet',     emoji: '🏥' },
 ];
 
 const DRAFT_KEY = 'farmflow_listing_draft';
 
-const TIPS = [
-  'اذكر السجل الصحي والتطعيمات والشهادات.',
-  'صِف المزاج: هادئ، نشيط، سهل التعامل؟',
-  'أضف معلومات عن التغذية والنظام الغذائي الحالي.',
-  'أبرز الصفات الخاصة أو الجوائز أو الأنساب.',
+const TIPS_KEYS = [
+  'addListing.tip1',
+  'addListing.tip2',
+  'addListing.tip3',
+  'addListing.tip4',
 ];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -179,6 +258,21 @@ const SectionTitle = ({ children }) => (
 const SellerAddListing = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { t, isRTL } = useLang();
+  const { activeFarm } = useFarm();
+
+  const farmType = activeFarm?.type;
+  const pageTitle = farmType === 'poultry' ? 'إضافة دواجن جديدة'
+                  : farmType === 'horses'  ? 'إضافة خيل جديد'
+                  : farmType === 'exotic'  ? 'إضافة حيوان نادر'
+                  : farmType === 'dairy'   ? 'إضافة ماشية جديدة'
+                  : 'إضافة ماشية جديدة';
+  const step1Title = farmType === 'poultry' ? 'نوع الدواجن والمعلومات الأساسية'
+                   : farmType === 'horses'  ? 'نوع الخيل والمعلومات الأساسية'
+                   : farmType === 'exotic'  ? 'نوع الحيوان والمعلومات الأساسية'
+                   : 'نوع المواشي والمعلومات الأساسية';
+  const traitOpts  = TRAIT_OPTS_MAP[farmType] || TRAIT_OPTS_MAP.default;
+  const activeColors = COLORS_MAP[farmType] || COLORS_MAP.default;
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => {
@@ -186,8 +280,15 @@ const SellerAddListing = () => {
     const pType   = searchParams.get('type');
     const pBreed  = searchParams.get('breed');
     const pWeight = searchParams.get('weight');
+    const farmTypes = activeFarm?.animalTypes;
+    const farmDefault =
+      activeFarm?.type === 'poultry' ? 'poultry' :
+      activeFarm?.type === 'horses'  ? 'horse'   :
+      activeFarm?.type === 'dairy'   ? 'cattle'  :
+      farmTypes?.find(t => TYPES.includes(t)) || 'cattle';
     return {
-      type:        pType   || 'sheep',
+      type:        pType   || farmDefault,
+      poultryType: '',   // tracks which poultry sub-type card is active
       breed:       pBreed  || '',
       ageValue: '', ageUnit: 'months', gender: '',
       weightValue: pWeight || '', weightUnit: 'kg',
@@ -297,17 +398,17 @@ const SellerAddListing = () => {
   const validate = (n) => {
     const e = {};
     if (n === 1) {
-      if (!form.type)     e.type     = 'اختر نوع المواشي';
-      if (!form.ageValue) e.ageValue = 'أدخل العمر';
-      if (!form.gender)   e.gender   = 'اختر الجنس';
+      if (!form.type)     e.type     = t('addListing.err.type');
+      if (!form.ageValue) e.ageValue = t('addListing.err.age');
+      if (!form.gender)   e.gender   = t('addListing.err.gender');
     }
     if (n === 2) {
-      if (!form.weightValue) e.weightValue = 'أدخل الوزن';
-      if (!form.health)      e.health      = 'اختر الحالة الصحية';
+      if (!form.weightValue) e.weightValue = t('addListing.err.weight');
+      if (!form.health)      e.health      = t('addListing.err.health');
     }
     if (n === 5) {
-      if (!form.pricePerKg || Number(form.pricePerKg) <= 0) e.pricePerKg = 'أدخل السعر لكل كيلوجرام';
-      if (!form.location) e.location = 'أدخل موقع الاستلام';
+      if (!form.pricePerKg || Number(form.pricePerKg) <= 0) e.pricePerKg = t('addListing.err.price');
+      if (!form.location) e.location = t('addListing.err.location');
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -326,8 +427,8 @@ const SellerAddListing = () => {
   };
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!validate(5)) return;
+  const handleSubmit = async (asDraft = false) => {
+    if (!asDraft && !validate(5)) return;
     setSubmitErr('');
     setSubmitting(true);
     try {
@@ -336,21 +437,25 @@ const SellerAddListing = () => {
       const totalPrice = parseFloat((weightKg * pricePerKg).toFixed(2));
 
       const fd = new FormData();
-      fd.append('type',        form.type);
-      if (form.breed)  fd.append('breed', form.breed);
-      fd.append('age',         toMonths(form.ageValue, form.ageUnit));
-      fd.append('weight',      weightKg);
-      fd.append('pricePerKg',  pricePerKg);
-      fd.append('price',       totalPrice);
+      fd.append('type', form.type);
+      if (form.breed) fd.append('breed', form.breed);
+      // Only send numeric fields when they have real values (skip nulls for drafts)
+      const ageMonths = toMonths(form.ageValue, form.ageUnit);
+      if (ageMonths !== null) fd.append('age', ageMonths);
+      if (weightKg > 0)   fd.append('weight',      weightKg);
+      if (pricePerKg > 0) fd.append('pricePerKg',  pricePerKg);
+      if (totalPrice > 0) fd.append('price',        totalPrice);
       fd.append('deliveryType', form.deliveryType);
       if (form.deliveryType === 'farm' && form.deliveryCost) fd.append('deliveryCost', form.deliveryCost);
-      fd.append('location',    form.location);
+      if (form.location)    fd.append('location',    form.location);
       fd.append('description', buildDescription(form));
       fd.append('eidAvailable',     form.eidAvailable);
       fd.append('slaughterService', form.slaughterService);
       if (form.slaughterService && form.slaughterCost) fd.append('slaughterCost', form.slaughterCost);
       fd.append('depositRequired', form.depositRequired);
       if (form.depositRequired && form.depositPercentage) fd.append('depositPercentage', form.depositPercentage);
+      if (asDraft) fd.append('status', 'draft');
+
       if (form.qurbaniEnabled) {
         const shares = ['seventh', 'quarter', 'half']
           .filter(k => form.qurbaniShares[k].enabled && form.qurbaniShares[k].pricePerShare && form.qurbaniShares[k].totalShares)
@@ -366,7 +471,7 @@ const SellerAddListing = () => {
 
       await createListing(fd);
       localStorage.removeItem(DRAFT_KEY);
-      setSuccess(true);
+      setSuccess(asDraft ? 'draft' : 'published');
     } catch (err) {
       setSubmitErr(parseApiError(err));
     } finally {
@@ -376,7 +481,12 @@ const SellerAddListing = () => {
 
   // ── Reset for "Add Another" ────────────────────────────────────────────────
   const resetAll = () => {
-    setForm({ type: 'sheep', breed: '', ageValue: '', ageUnit: 'months', gender: '', weightValue: '', weightUnit: 'kg', color: '', colorCustom: '', health: '', traits: [], pricePerKg: '', location: '', deliveryType: 'none', deliveryCost: '', description: '', eidAvailable: false, slaughterService: false, slaughterCost: '', qurbaniEnabled: false, qurbaniShares: { seventh: { enabled: false, pricePerShare: '', totalShares: '' }, quarter: { enabled: false, pricePerShare: '', totalShares: '' }, half: { enabled: false, pricePerShare: '', totalShares: '' } } });
+    const resetType =
+      activeFarm?.type === 'poultry' ? 'poultry' :
+      activeFarm?.type === 'horses'  ? 'horse'   :
+      activeFarm?.type === 'dairy'   ? 'cattle'  :
+      activeFarm?.animalTypes?.[0]   || 'cattle';
+    setForm({ type: resetType, breed: '', poultryType: '', ageValue: '', ageUnit: 'months', gender: '', weightValue: '', weightUnit: 'kg', color: '', colorCustom: '', health: '', traits: [], pricePerKg: '', location: '', deliveryType: 'none', deliveryCost: '', description: '', eidAvailable: false, slaughterService: false, slaughterCost: '', qurbaniEnabled: false, qurbaniShares: { seventh: { enabled: false, pricePerShare: '', totalShares: '' }, quarter: { enabled: false, pricePerShare: '', totalShares: '' }, half: { enabled: false, pricePerShare: '', totalShares: '' } } });
     setDocFiles({ vaccine: null, health: null, vet: null, extra: [] });
     setPhotoFiles([]);
     setErrors({});
@@ -388,17 +498,14 @@ const SellerAddListing = () => {
   // ─────────────────────────────────────────────────────────────────────────
   // SUCCESS SCREEN
   // ─────────────────────────────────────────────────────────────────────────
-  if (success) {
+  if (success === 'draft') {
     return (
-      <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", padding: '32px' }}>
+      <div dir={isRTL ? 'rtl' : 'ltr'} style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", padding: '32px' }}>
         <div style={{ textAlign: 'center', maxWidth: '420px' }}>
-          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', margin: '0 auto 20px' }}>✅</div>
-          <h2 style={{ margin: '0 0 10px', fontSize: '24px', fontWeight: '800', color: C.text }}>تم إرسال الإعلان!</h2>
-          <p style={{ margin: '0 0 10px', fontSize: '15px', color: C.textMuted, lineHeight: 1.65 }}>
-            تم إرسال إعلانك لمراجعة المسؤول. سيظهر مباشرةً بعد الموافقة عليه.
-          </p>
-          <p style={{ margin: '0 0 28px', fontSize: '13px', color: C.textMuted, background: C.amberBg, border: '1px solid #FDE68A', borderRadius: '10px', padding: '10px 14px' }}>
-            ⏳ تستغرق المراجعة عادةً بضع ساعات خلال أوقات العمل.
+          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: C.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', margin: '0 auto 20px' }}>💾</div>
+          <h2 style={{ margin: '0 0 10px', fontSize: '24px', fontWeight: '800', color: C.text }}>تم حفظ المسودة</h2>
+          <p style={{ margin: '0 0 24px', fontSize: '15px', color: C.textMuted, lineHeight: 1.65 }}>
+            تم حفظ الإعلان كمسودة. يمكنك مراجعته ونشره لاحقاً من صفحة إعلاناتي.
           </p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => navigate('/seller/listings')}
@@ -407,7 +514,34 @@ const SellerAddListing = () => {
             </button>
             <button type="button" onClick={resetAll}
               style={{ padding: '11px 22px', borderRadius: '10px', background: C.card, color: C.text, border: `1.5px solid ${C.border}`, fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
-              + إضافة إعلان آخر
+              + إضافة إعلان جديد
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div dir={isRTL ? 'rtl' : 'ltr'} style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", padding: '32px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '420px' }}>
+          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', margin: '0 auto 20px' }}>✅</div>
+          <h2 style={{ margin: '0 0 10px', fontSize: '24px', fontWeight: '800', color: C.text }}>{t('addListing.success.title')}</h2>
+          <p style={{ margin: '0 0 10px', fontSize: '15px', color: C.textMuted, lineHeight: 1.65 }}>
+            {t('addListing.success.body')}
+          </p>
+          <p style={{ margin: '0 0 28px', fontSize: '13px', color: C.textMuted, background: C.amberBg, border: '1px solid #FDE68A', borderRadius: '10px', padding: '10px 14px' }}>
+            ⏳ {t('addListing.success.reviewTime')}
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => navigate('/seller/listings')}
+              style={{ padding: '11px 22px', borderRadius: '10px', background: C.green, color: '#fff', border: 'none', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
+              {t('addListing.success.viewBtn')} ←
+            </button>
+            <button type="button" onClick={resetAll}
+              style={{ padding: '11px 22px', borderRadius: '10px', background: C.card, color: C.text, border: `1.5px solid ${C.border}`, fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
+              + {t('addListing.success.addAnother')}
             </button>
           </div>
         </div>
@@ -428,84 +562,235 @@ const SellerAddListing = () => {
   // Step 1 ── Basic Info
   const renderStep1 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      <SectionTitle>نوع المواشي والمعلومات الأساسية</SectionTitle>
+      <SectionTitle>{step1Title}</SectionTitle>
 
-      {/* نوع المواشي */}
+      {/* Animal type — context-aware based on farm category */}
       <div>
-        <Lbl req>نوع المواشي</Lbl>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-          {TYPES.map(t => {
-            const active = form.type === t;
-            return (
-              <button key={t} type="button" onClick={() => setFs({ type: t, breed: '' })}
-                style={{ padding: '14px 8px', borderRadius: '12px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = C.tan; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = C.border; }}
-              >
-                <div style={{ fontSize: '26px', marginBottom: '5px' }}>{TYPE_EMOJI[t]}</div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{TYPE_AR[t]}</div>
-              </button>
-            );
-          })}
-        </div>
+        <Lbl req>{t('addListing.step1.type')}</Lbl>
+
+        {/* Poultry farm → show expanded poultry sub-types */}
+        {activeFarm?.type === 'poultry' ? (
+          <div>
+            {(() => {
+              // Map farm animalTypes (chicken_X → X; others unchanged) to a Set for fast lookup
+              const farmSubIds = new Set(
+                (activeFarm?.animalTypes || []).map(t => t.startsWith('chicken_') ? t.slice(8) : t)
+              );
+              const visibleSubtypes = farmSubIds.size > 0
+                ? POULTRY_SUBTYPES.filter(s => farmSubIds.has(s.id))
+                : POULTRY_SUBTYPES;
+              const cols = visibleSubtypes.length === 1 ? 'repeat(1, 1fr)' : visibleSubtypes.length === 2 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)';
+              return (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '10px' }}>
+                    {visibleSubtypes.map(sub => {
+                      const active = form.poultryType === sub.id;
+                      return (
+                        <button key={sub.id} type="button"
+                          onClick={() => setFs({ type: 'poultry', breed: sub.label, poultryType: sub.id })}
+                          style={{ padding: '16px 8px', borderRadius: '14px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center', boxShadow: active ? `0 0 0 3px ${C.green}22` : 'none' }}>
+                          <img src={animalImg(sub.id, sub.emoji)} alt={sub.label} onError={imgFallback(sub.emoji)} style={{ width: '40px', height: '40px', marginBottom: '6px', objectFit: 'contain', borderRadius: '8px' }} />
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{sub.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Breed chips for selected poultry sub-type — filtered by farm preferences */}
+                  {form.poultryType && POULTRY_BREEDS_CHIPS[form.poultryType]?.length > 0 && (
+                    <div style={{ marginTop: '14px', padding: '14px', background: C.greenBg, borderRadius: '12px', border: `1px solid ${C.green}30` }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: C.greenText, marginBottom: '9px' }}>
+                        {POULTRY_SUBTYPES.find(s => s.id === form.poultryType)?.emoji} سلالة {POULTRY_SUBTYPES.find(s => s.id === form.poultryType)?.label}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                        {resolveBreeds(activeFarm?._id, form.poultryType, POULTRY_BREEDS_CHIPS[form.poultryType] || []).map(breed => {
+                          const active = form.breed === breed;
+                          return (
+                            <button key={breed} type="button"
+                              onClick={() => set('breed', active ? POULTRY_SUBTYPES.find(s => s.id === form.poultryType)?.label || '' : breed)}
+                              style={{ padding: '6px 14px', borderRadius: '99px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.card : 'transparent', color: active ? C.greenText : C.text, fontSize: '12px', fontWeight: active ? '700' : '500', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.13s', boxShadow: active ? C.shadow : 'none' }}>
+                              {breed}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        ) : activeFarm?.type === 'horses' ? (
+          /* Horse farm → single card + breed chips below */
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', background: C.greenBg, borderRadius: '14px', border: `2px solid ${C.green}` }}>
+            <img src={animalImg('horse', '🐎')} alt="horse" onError={imgFallback('🐎')} style={{ width: 40, height: 40, objectFit: 'contain' }} />
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: C.greenText }}>خيول</div>
+              <div style={{ fontSize: '12px', color: C.textMuted }}>اختر السلالة من الأسفل</div>
+            </div>
+          </div>
+        ) : activeFarm?.type === 'exotic' ? (
+          /* Exotic farm → animal grid (filtered to registered types) + breed chips panel */
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              {(activeFarm.animalTypes?.length > 0
+                ? EXOTIC_ANIMALS.filter(a => activeFarm.animalTypes.includes(a.id))
+                : EXOTIC_ANIMALS
+              ).map(animal => {
+                const active = form.type === animal.id;
+                return (
+                  <button key={animal.id} type="button"
+                    onClick={() => setFs({ type: animal.id, breed: '' })}
+                    style={{ padding: '16px 8px', borderRadius: '14px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center', boxShadow: active ? `0 0 0 3px ${C.green}22` : 'none' }}>
+                    <img src={animalImg(animal.id, animal.emoji)} alt={animal.label} onError={imgFallback(animal.emoji)} style={{ width: '40px', height: '40px', marginBottom: '6px', objectFit: 'contain', borderRadius: '8px' }} />
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{animal.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Breed chips for selected exotic animal */}
+            {EXOTIC_BREEDS_CHIPS[form.type]?.length > 0 && (
+              <div style={{ marginTop: '14px', padding: '14px', background: C.greenBg, borderRadius: '12px', border: `1px solid ${C.green}30` }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: C.greenText, marginBottom: '9px' }}>
+                  {EXOTIC_ANIMALS.find(a => a.id === form.type)?.emoji} سلالة {EXOTIC_ANIMALS.find(a => a.id === form.type)?.label}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                  {EXOTIC_BREEDS_CHIPS[form.type].map(breed => {
+                    const active = form.breed === breed;
+                    return (
+                      <button key={breed} type="button"
+                        onClick={() => set('breed', active ? '' : breed)}
+                        style={{ padding: '6px 14px', borderRadius: '99px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.card : 'transparent', color: active ? C.greenText : C.text, fontSize: '12px', fontWeight: active ? '700' : '500', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.13s', boxShadow: active ? C.shadow : 'none' }}>
+                        {breed}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Livestock / mixed / unknown → 3-category split */
+          <div>
+            {/* Category tabs if mixed farm */}
+            {(!activeFarm || ['mixed', 'other'].includes(activeFarm.type)) && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                {[
+                  { cat: 'livestock', icon: '🐄', label: 'مواشي', types: LIVESTOCK_TYPES.map(l => l.id) },
+                  { cat: 'horses',    icon: '🐎', label: 'خيول',  types: ['horse'] },
+                  { cat: 'poultry',   icon: '🐔', label: 'دواجن', types: ['poultry'] },
+                ].map(({ cat, icon, label, types }) => {
+                  const active = types.includes(form.type) || (cat === 'poultry' && form.type === 'poultry');
+                  return (
+                    <button key={cat} type="button"
+                      onClick={() => setFs({ type: types[0], breed: cat === 'poultry' ? '' : '' })}
+                      style={{ flex: 1, padding: '10px 6px', borderRadius: '10px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.14s', textAlign: 'center' }}>
+                      <div style={{ fontSize: '20px', marginBottom: '3px' }}>{icon}</div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Livestock animals — filtered to farm's registered types when applicable */}
+            {form.type !== 'poultry' && form.type !== 'horse' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '4px' }}>
+                {(activeFarm?.type === 'livestock' && activeFarm.animalTypes?.length > 0
+                  ? LIVESTOCK_TYPES.filter(lt => activeFarm.animalTypes.includes(lt.id))
+                  : LIVESTOCK_TYPES
+                ).map(lt => {
+                  const active = form.type === lt.id;
+                  return (
+                    <button key={lt.id} type="button" onClick={() => setFs({ type: lt.id, breed: '' })}
+                      style={{ padding: '16px 8px', borderRadius: '14px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center', boxShadow: active ? `0 0 0 3px ${C.green}22` : 'none' }}>
+                      <img src={animalImg(lt.id, lt.emoji)} alt={lt.label} onError={imgFallback(lt.emoji)} style={{ width: '40px', height: '40px', marginBottom: '6px', objectFit: 'contain', borderRadius: '8px' }} />
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{lt.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Poultry sub-types (when poultry tab is active in mixed) */}
+            {form.type === 'poultry' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '4px' }}>
+                {POULTRY_SUBTYPES.map(sub => {
+                  const active = form.breed === sub.label;
+                  return (
+                    <button key={sub.id} type="button" onClick={() => setFs({ type: 'poultry', breed: sub.label })}
+                      style={{ padding: '16px 8px', borderRadius: '14px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center', boxShadow: active ? `0 0 0 3px ${C.green}22` : 'none' }}>
+                      <img src={animalImg(sub.id, sub.emoji)} alt={sub.label} onError={imgFallback(sub.emoji)} style={{ width: '40px', height: '40px', marginBottom: '6px', objectFit: 'contain', borderRadius: '8px' }} />
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.greenText : C.text }}>{sub.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <ErrMsg msg={errors.type} />
       </div>
 
-      {/* السلالة */}
-      <div>
-        <Lbl>السلالة <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختياري)</span></Lbl>
-        <div style={{ position: 'relative' }} ref={breedRef}>
-          <FocusInput
-            type="text"
-            value={form.breed}
-            onChange={e => { set('breed', e.target.value); setBreedOpen(true); }}
-            onFocus={() => setBreedOpen(true)}
-            placeholder={`مثال: ${(BREEDS[form.type] || ['—'])[0]}`}
-            dir="rtl"
-          />
-          {breedOpen && breedSuggestions.length > 0 && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: C.card, border: `1.5px solid ${C.border}`, borderRadius: '10px', boxShadow: C.shadowMd, zIndex: 200, overflow: 'hidden' }}>
-              {breedSuggestions.map(b => (
-                <div key={b}
-                  onMouseDown={() => { set('breed', b); setBreedOpen(false); }}
-                  style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '14px', color: C.text, borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s', direction: 'rtl' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#FAFAF8'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  {b}
-                </div>
-              ))}
+      {/* Breed — chip selector (hidden for poultry since breed = sub-type above) */}
+      {form.type !== 'poultry' && (
+        <div>
+          <Lbl>{t('addListing.step1.breed')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')})</span></Lbl>
+
+          {/* Quick-select chips — filtered by farm breed preferences */}
+          {TYPE_BREEDS_CHIPS[form.type]?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '10px' }}>
+              {resolveBreeds(activeFarm?._id, form.type, TYPE_BREEDS_CHIPS[form.type] || []).map(breed => {
+                const active = form.breed === breed;
+                return (
+                  <button key={breed} type="button" onClick={() => set('breed', active ? '' : breed)}
+                    style={{ padding: '6px 14px', borderRadius: '99px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : 'transparent', color: active ? C.greenText : C.text, fontSize: '12px', fontWeight: active ? '700' : '500', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.13s' }}>
+                    {breed}
+                  </button>
+                );
+              })}
             </div>
           )}
-        </div>
-      </div>
 
-      {/* العمر */}
+          {/* Custom input if not in list */}
+          <div style={{ position: 'relative' }} ref={breedRef}>
+            <FocusInput
+              type="text"
+              value={TYPE_BREEDS_CHIPS[form.type]?.includes(form.breed) ? '' : form.breed}
+              onChange={e => { set('breed', e.target.value); setBreedOpen(true); }}
+              onFocus={() => setBreedOpen(true)}
+              placeholder={TYPE_BREEDS_CHIPS[form.type]?.includes(form.breed) ? `✓ ${form.breed}` : t('addListing.step1.breedPlaceholder')}
+              dir={isRTL ? 'rtl' : 'ltr'}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Age */}
       <div>
-        <Lbl req>العمر</Lbl>
+        <Lbl req>{t('addListing.step1.age')}</Lbl>
         <div style={{ display: 'flex', gap: '10px' }}>
           <div style={{ flex: 1 }}>
-            <FocusInput type="number" min="0" step="0.5" value={form.ageValue} onChange={e => set('ageValue', e.target.value)} placeholder="مثال: 18" />
+            <FocusInput type="number" min="0" step="0.5" value={form.ageValue} onChange={e => set('ageValue', e.target.value)} placeholder={t('addListing.step1.agePlaceholder')} />
           </div>
-          <UnitPill value={form.ageUnit} onChange={v => set('ageUnit', v)} opts={['months', 'years']} labels={['أشهر', 'سنوات']} />
+          <UnitPill value={form.ageUnit} onChange={v => set('ageUnit', v)} opts={['months', 'years']} labels={[t('addListing.step1.months'), t('addListing.step1.years')]} />
         </div>
         <ErrMsg msg={errors.ageValue} />
         {form.ageValue && form.ageUnit === 'years' && (
-          <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>= {toMonths(form.ageValue, 'years')} شهرًا</div>
+          <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>= {toMonths(form.ageValue, 'years')} {t('addListing.step1.monthsLabel')}</div>
         )}
       </div>
 
-      {/* الجنس */}
+      {/* Gender */}
       <div>
-        <Lbl req>الجنس</Lbl>
+        <Lbl req>{t('addListing.step1.gender')}</Lbl>
         <div style={{ display: 'flex', gap: '10px' }}>
-          {[{ key: 'male', emoji: '♂', label: 'ذكر' }, { key: 'female', emoji: '♀', label: 'أنثى' }, { key: 'other', emoji: '⚥', label: 'آخر' }].map(g => {
+          {[{ key: 'male', emoji: '♂', labelKey: 'herd.gender.male' }, { key: 'female', emoji: '♀', labelKey: 'herd.gender.female' }, { key: 'other', emoji: '⚥', labelKey: 'herd.gender.other' }].map(g => {
             const active = form.gender === g.key;
             return (
               <button key={g.key} type="button" onClick={() => set('gender', g.key)}
                 style={{ flex: 1, padding: '14px 12px', borderRadius: '12px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}>
                 <div style={{ fontSize: '26px', marginBottom: '5px', color: active ? C.greenText : C.textMuted }}>{g.emoji}</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: active ? C.greenText : C.text }}>{g.label}</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: active ? C.greenText : C.text }}>{t(g.labelKey)}</div>
               </button>
             );
           })}
@@ -518,28 +803,28 @@ const SellerAddListing = () => {
   // Step 2 ── Physical Details
   const renderStep2 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      <SectionTitle>المواصفات الجسدية والحالة الصحية</SectionTitle>
+      <SectionTitle>{t('addListing.step2.title')}</SectionTitle>
 
-      {/* الوزن */}
+      {/* Weight */}
       <div>
-        <Lbl req>الوزن</Lbl>
+        <Lbl req>{t('addListing.step2.weight')}</Lbl>
         <div style={{ display: 'flex', gap: '10px' }}>
           <div style={{ flex: 1 }}>
-            <FocusInput type="number" min="0" step="0.1" value={form.weightValue} onChange={e => set('weightValue', e.target.value)} placeholder="مثال: 45" />
+            <FocusInput type="number" min="0" step="0.1" value={form.weightValue} onChange={e => set('weightValue', e.target.value)} placeholder={t('addListing.step2.weightPlaceholder')} />
           </div>
-          <UnitPill value={form.weightUnit} onChange={v => set('weightUnit', v)} opts={['kg', 'lbs']} labels={['كجم', 'رطل']} />
+          <UnitPill value={form.weightUnit} onChange={v => set('weightUnit', v)} opts={['kg', 'lbs']} labels={[t('common.kg'), t('common.lbs')]} />
         </div>
         <ErrMsg msg={errors.weightValue} />
         {form.weightValue && form.weightUnit === 'lbs' && (
-          <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>= {toKg(form.weightValue, 'lbs')} كجم</div>
+          <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>= {toKg(form.weightValue, 'lbs')} {t('common.kg')}</div>
         )}
       </div>
 
-      {/* اللون / العلامات المميزة */}
+      {/* Color */}
       <div>
-        <Lbl>اللون / العلامات المميزة <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختياري)</span></Lbl>
+        <Lbl>{t('addListing.step2.color')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')})</span></Lbl>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-          {COLORS.map(c => {
+          {activeColors.map(c => {
             const active = form.color === c;
             return (
               <button key={c} type="button" onClick={() => set('color', active ? '' : c)}
@@ -550,19 +835,19 @@ const SellerAddListing = () => {
           })}
           <button type="button" onClick={() => set('color', form.color === 'custom' ? '' : 'custom')}
             style={{ padding: '7px 14px', borderRadius: '20px', border: `1.5px solid ${form.color === 'custom' ? C.green : C.border}`, background: form.color === 'custom' ? C.greenBg : C.card, color: form.color === 'custom' ? C.greenText : C.textMuted, fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
-            ✏️ مخصص
+            ✏️ {t('addListing.step2.colorCustom')}
           </button>
         </div>
         {form.color === 'custom' && (
           <div style={{ marginTop: '9px' }}>
-            <FocusInput type="text" value={form.colorCustom} onChange={e => set('colorCustom', e.target.value)} placeholder="صِف اللون والعلامات والأنماط…" dir="rtl" />
+            <FocusInput type="text" value={form.colorCustom} onChange={e => set('colorCustom', e.target.value)} placeholder={t('addListing.step2.colorPlaceholder')} dir={isRTL ? 'rtl' : 'ltr'} />
           </div>
         )}
       </div>
 
-      {/* حالة الصحة */}
+      {/* Health */}
       <div>
-        <Lbl req>حالة الصحة</Lbl>
+        <Lbl req>{t('addListing.step2.health')}</Lbl>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
           {HEALTH_OPTS.map(h => {
             const active = form.health === h.key;
@@ -571,8 +856,8 @@ const SellerAddListing = () => {
                 style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '12px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'right', width: '100%' }}>
                 <span style={{ fontSize: '24px', flexShrink: 0 }}>{h.emoji}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '700', fontSize: '14px', color: active ? C.greenText : C.text }}>{h.label}</div>
-                  <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '1px' }}>{h.sub}</div>
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: active ? C.greenText : C.text }}>{t(h.labelKey)}</div>
+                  <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '1px' }}>{t(h.subKey)}</div>
                 </div>
                 <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.green : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
                   {active && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />}
@@ -584,16 +869,16 @@ const SellerAddListing = () => {
         <ErrMsg msg={errors.health} />
       </div>
 
-      {/* الصفات المميزة */}
+      {/* Traits */}
       <div>
-        <Lbl>الصفات المميزة <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختر كل ما ينطبق)</span></Lbl>
+        <Lbl>{t('addListing.step2.traits')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('addListing.step2.traitsHint')})</span></Lbl>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {TRAIT_OPTS.map(t => {
-            const active = form.traits.includes(t.key);
+          {traitOpts.map(tr => {
+            const active = form.traits.includes(tr.key);
             return (
-              <button key={t.key} type="button" onClick={() => toggleTrait(t.key)}
+              <button key={tr.key} type="button" onClick={() => toggleTrait(tr.key)}
                 style={{ padding: '8px 14px', borderRadius: '20px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, color: active ? C.greenText : C.text, fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
-                {active && <span style={{ marginLeft: '4px' }}>✓</span>}{t.label}
+                {active && <span style={{ marginLeft: '4px' }}>✓</span>}{t(tr.labelKey)}
               </button>
             );
           })}
@@ -605,16 +890,16 @@ const SellerAddListing = () => {
   // Step 3 ── Documentation
   const renderStep3 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <SectionTitle>رفع المستندات الداعمة</SectionTitle>
+      <SectionTitle>{t('addListing.step3.title')}</SectionTitle>
       <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: C.amberText }}>
-        💡 المستندات اختيارية، لكنها تزيد من ثقة المشترين وقد تُبرر سعراً أعلى.
+        💡 {t('addListing.step3.hint')}
       </div>
 
       {DOC_SLOTS.map(doc => {
         const file = docFiles[doc.key];
         return (
           <div key={doc.key}>
-            <Lbl>{doc.emoji} {doc.label} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختياري)</span></Lbl>
+            <Lbl>{doc.emoji} {t(doc.labelKey)} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')})</span></Lbl>
             <div style={{ border: `1.5px dashed ${file ? C.green : C.border}`, borderRadius: '12px', padding: '14px 16px', background: file ? C.greenBg : '#FDFAF7', transition: 'all 0.2s' }}>
               {file ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -622,13 +907,13 @@ const SellerAddListing = () => {
                   <span style={{ flex: 1, fontSize: '13px', fontWeight: '600', color: C.greenText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
                   <button type="button" onClick={() => setDocFiles(p => ({ ...p, [doc.key]: null }))}
                     style={{ background: 'none', border: 'none', color: C.redText, fontSize: '13px', fontWeight: '700', cursor: 'pointer', flexShrink: 0 }}>
-                    حذف
+                    {t('common.delete')}
                   </button>
                 </div>
               ) : (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                  <span style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, fontSize: '13px', fontWeight: '600', color: C.textMuted, whiteSpace: 'nowrap' }}>اختر ملفاً</span>
-                  <span style={{ fontSize: '12px', color: C.textMuted }}>PDF أو JPG أو PNG</span>
+                  <span style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, fontSize: '13px', fontWeight: '600', color: C.textMuted, whiteSpace: 'nowrap' }}>{t('addListing.step3.chooseFile')}</span>
+                  <span style={{ fontSize: '12px', color: C.textMuted }}>{t('addListing.step3.fileTypes')}</span>
                   <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden onChange={e => setDocFiles(p => ({ ...p, [doc.key]: e.target.files[0] || null }))} />
                 </label>
               )}
@@ -637,14 +922,14 @@ const SellerAddListing = () => {
         );
       })}
 
-      {/* مستندات مخصصة */}
+      {/* Custom docs */}
       <div>
-        <Lbl>📎 مستندات مخصصة <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختياري، رفع متعدد)</span></Lbl>
+        <Lbl>📎 {t('addListing.step3.extraDocs')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')}, {t('addListing.step3.multiUpload')})</span></Lbl>
         <div style={{ border: `1.5px dashed ${C.border}`, borderRadius: '12px', padding: '14px 16px', background: '#FDFAF7' }}>
           {docFiles.extra.length === 0 ? (
             <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <span style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, fontSize: '13px', fontWeight: '600', color: C.textMuted, whiteSpace: 'nowrap' }}>اختر الملفات</span>
-              <span style={{ fontSize: '12px', color: C.textMuted }}>يمكن رفع أكثر من ملف</span>
+              <span style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, fontSize: '13px', fontWeight: '600', color: C.textMuted, whiteSpace: 'nowrap' }}>{t('addListing.step3.chooseFiles')}</span>
+              <span style={{ fontSize: '12px', color: C.textMuted }}>{t('addListing.step3.multiHint')}</span>
               <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple hidden onChange={e => setDocFiles(p => ({ ...p, extra: Array.from(e.target.files) }))} />
             </label>
           ) : (
@@ -657,7 +942,7 @@ const SellerAddListing = () => {
                 </div>
               ))}
               <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', border: `1px solid ${C.border}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', color: C.textMuted }}>
-                + إضافة المزيد
+                + {t('addListing.step3.addMore')}
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple hidden onChange={e => setDocFiles(p => ({ ...p, extra: [...p.extra, ...Array.from(e.target.files)] }))} />
               </label>
             </div>
@@ -670,10 +955,10 @@ const SellerAddListing = () => {
   // Step 4 ── Photos
   const renderStep4 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <SectionTitle>إضافة صور المواشي</SectionTitle>
+      <SectionTitle>{t('addListing.step4.title')}</SectionTitle>
 
       <div style={{ background: C.greenBg, border: `1px solid #BBF7D0`, borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: C.greenText }}>
-        📸 <strong>نصيحة:</strong> الصور الواضحة من جميع الجوانب — الرأس، الجسم، القوائم — تزيد اهتمام المشترين حتى 3×. أول صورة هي الصورة الرئيسية.
+        📸 <strong>{t('addListing.step4.tipLabel')}:</strong> {t('addListing.step4.tip')}
       </div>
 
       {/* منطقة الرفع */}
@@ -690,51 +975,51 @@ const SellerAddListing = () => {
         {photoFiles.length === 0 ? (
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '52px', marginBottom: '12px' }}>📷</div>
-            <div style={{ fontWeight: '800', fontSize: '15px', color: C.text, marginBottom: '6px' }}>اسحب وأفلت الصور هنا</div>
-            <div style={{ fontSize: '13px', color: C.textMuted, marginBottom: '6px' }}>أو انقر للاستعراض — JPG، PNG، WebP</div>
-            <div style={{ fontSize: '12px', color: C.textMuted, marginBottom: '18px' }}>📸 الصور الواضحة تزيد الاهتمام بإعلانك</div>
-            <div style={{ display: 'inline-block', padding: '9px 22px', background: C.green, color: '#fff', borderRadius: '9px', fontSize: '13px', fontWeight: '700', pointerEvents: 'none' }}>استعراض الصور</div>
+            <div style={{ fontWeight: '800', fontSize: '15px', color: C.text, marginBottom: '6px' }}>{t('addListing.step4.dragDrop')}</div>
+            <div style={{ fontSize: '13px', color: C.textMuted, marginBottom: '6px' }}>{t('addListing.step4.orBrowse')}</div>
+            <div style={{ fontSize: '12px', color: C.textMuted, marginBottom: '18px' }}>📸 {t('addListing.step4.photoHint')}</div>
+            <div style={{ display: 'inline-block', padding: '9px 22px', background: C.green, color: '#fff', borderRadius: '9px', fontSize: '13px', fontWeight: '700', pointerEvents: 'none' }}>{t('addListing.step4.browse')}</div>
           </div>
         ) : (
           <>
-            {/* الصورة الرئيسية hero */}
+            {/* Primary photo hero */}
             <div style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.greenText, marginBottom: '7px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ background: C.green, color: '#fff', fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px' }}>الرئيسية</span>
-                الصورة الأولى تظهر كصورة رئيسية للإعلان
+                <span style={{ background: C.green, color: '#fff', fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '10px' }}>{t('addListing.step4.primary')}</span>
+                {t('addListing.step4.primaryNote')}
               </div>
               <div style={{ position: 'relative', borderRadius: '14px', overflow: 'hidden', aspectRatio: '16 / 9', border: `2.5px solid ${C.green}`, maxHeight: '220px' }}>
-                <img src={photoPreviews[0]} alt="الصورة الرئيسية" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={photoPreviews[0]} alt={t('addListing.step4.primary')} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: '5px' }}>
                   <button type="button" onClick={e => { e.stopPropagation(); removePhoto(0); }}
-                    title="حذف" style={{ width: '26px', height: '26px', borderRadius: '6px', border: 'none', background: 'rgba(220,38,38,0.88)', color: '#fff', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                    title={t('common.delete')} style={{ width: '26px', height: '26px', borderRadius: '6px', border: 'none', background: 'rgba(220,38,38,0.88)', color: '#fff', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </div>
               </div>
             </div>
 
-            {/* شبكة الصور الإضافية */}
+            {/* Additional photos grid */}
             {(photoPreviews.length > 1 || photoFiles.length < 5) && (
               <div>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.textMuted, marginBottom: '7px' }}>
-                  صور إضافية <span style={{ fontWeight: 400 }}>— استخدم ◀ ▶ لإعادة الترتيب</span>
+                  {t('addListing.step4.extraPhotos')} <span style={{ fontWeight: 400 }}>— {t('addListing.step4.reorder')}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
                   {photoPreviews.slice(1).map((url, j) => {
                     const i = j + 1;
                     return (
                       <div key={i} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', aspectRatio: '1 / 1', border: `1.5px solid ${C.border}` }}>
-                        <img src={url} alt={`صورة ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <img src={url} alt={`${t('addListing.step4.photoAlt')} ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '5px', background: 'linear-gradient(transparent, rgba(0,0,0,0.55))', display: 'flex', justifyContent: 'flex-end', gap: '3px' }}>
                           {i > 1 && (
                             <button type="button" onClick={e => { e.stopPropagation(); movePhoto(i, -1); }}
-                              title="تحريك لليسار" style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.85)', color: C.text, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>◀</button>
+                              title={t('addListing.step4.moveLeft')} style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.85)', color: C.text, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>◀</button>
                           )}
                           {i < photoFiles.length - 1 && (
                             <button type="button" onClick={e => { e.stopPropagation(); movePhoto(i, 1); }}
-                              title="تحريك لليمين" style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.85)', color: C.text, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▶</button>
+                              title={t('addListing.step4.moveRight')} style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.85)', color: C.text, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▶</button>
                           )}
                           <button type="button" onClick={e => { e.stopPropagation(); removePhoto(i); }}
-                            title="حذف" style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(220,38,38,0.88)', color: '#fff', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            title={t('common.delete')} style={{ width: '22px', height: '22px', borderRadius: '5px', border: 'none', background: 'rgba(220,38,38,0.88)', color: '#fff', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                         </div>
                       </div>
                     );
@@ -747,8 +1032,8 @@ const SellerAddListing = () => {
                       onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'transparent'; }}
                     >
                       <span style={{ fontSize: '20px', color: C.textMuted }}>+</span>
-                      <span style={{ fontSize: '11px', color: C.textMuted, fontWeight: '600' }}>إضافة صورة</span>
-                      <span style={{ fontSize: '10px', color: C.textMuted }}>{5 - photoFiles.length} متبقية</span>
+                      <span style={{ fontSize: '11px', color: C.textMuted, fontWeight: '600' }}>{t('addListing.step4.addPhoto')}</span>
+                      <span style={{ fontSize: '10px', color: C.textMuted }}>{5 - photoFiles.length} {t('addListing.step4.remaining')}</span>
                     </div>
                   )}
                 </div>
@@ -756,7 +1041,7 @@ const SellerAddListing = () => {
             )}
 
             <div style={{ marginTop: '10px', fontSize: '12px', color: C.textMuted, textAlign: 'right' }}>
-              {photoFiles.length} / 5 صور · الأولى هي الصورة الرئيسية
+              {photoFiles.length} / 5 {t('addListing.step4.photosCount')} · {t('addListing.step4.firstIsPrimary')}
             </div>
           </>
         )}
@@ -767,51 +1052,51 @@ const SellerAddListing = () => {
   // Step 5 ── Pricing & Description
   const renderStep5 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      <SectionTitle>السعر والموقع والوصف</SectionTitle>
+      <SectionTitle>{t('addListing.step5.title')}</SectionTitle>
 
-      {/* السعر لكل كيلو */}
+      {/* Price per kg */}
       <div>
-        <Lbl req>السعر لكل كيلوجرام (ج.م / كجم)</Lbl>
+        <Lbl req>{t('addListing.step5.pricePerKg')}</Lbl>
         <div style={{ position: 'relative' }}>
-          <FocusInput type="number" min="0" step="0.01" value={form.pricePerKg} onChange={e => set('pricePerKg', e.target.value)} placeholder="مثال: 120" style={{ paddingRight: '80px' }} />
-          <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م / كجم</span>
+          <FocusInput type="number" min="0" step="0.01" value={form.pricePerKg} onChange={e => set('pricePerKg', e.target.value)} placeholder={t('addListing.step5.pricePlaceholder')} style={{ paddingRight: '80px' }} />
+          <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>{t('common.egp')} / {t('common.kg')}</span>
         </div>
         <ErrMsg msg={errors.pricePerKg} />
 
         {/* Market average hint */}
         {marketAvg && (
           <div style={{ marginTop: '6px', padding: '8px 12px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
-            <span style={{ color: '#92400E', fontWeight: '600' }}>📊 متوسط السوق لهذا النوع</span>
-            <span style={{ fontWeight: '800', color: '#D97706' }}>{Math.round(marketAvg).toLocaleString('ar-EG')} ج.م / كجم</span>
+            <span style={{ color: '#92400E', fontWeight: '600' }}>📊 {t('addListing.step5.marketAvg')}</span>
+            <span style={{ fontWeight: '800', color: '#D97706' }}>{Math.round(marketAvg).toLocaleString('ar-EG')} {t('common.egp')} / {t('common.kg')}</span>
           </div>
         )}
 
         {form.pricePerKg && form.weightValue && (
           <div style={{ marginTop: '8px', padding: '10px 14px', background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: '9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: C.greenText }}>السعر الإجمالي المحسوب</span>
+            <span style={{ fontSize: '13px', color: C.greenText }}>{t('addListing.step5.totalPrice')}</span>
             <span style={{ fontSize: '18px', fontWeight: '800', color: C.greenText }}>
-              {(parseFloat(form.pricePerKg) * toKg(form.weightValue, form.weightUnit)).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م
+              {(parseFloat(form.pricePerKg) * toKg(form.weightValue, form.weightUnit)).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} {t('common.egp')}
             </span>
           </div>
         )}
       </div>
 
-      {/* موقع الاستلام */}
+      {/* Pickup location */}
       <div>
-        <Lbl req>موقع الاستلام</Lbl>
-        <FocusInput type="text" value={form.location} onChange={e => set('location', e.target.value)} placeholder="مثال: القاهرة، الجيزة…" dir="rtl" />
+        <Lbl req>{t('addListing.step5.location')}</Lbl>
+        <FocusInput type="text" value={form.location} onChange={e => set('location', e.target.value)} placeholder={t('addListing.step5.locationPlaceholder')} dir={isRTL ? 'rtl' : 'ltr'} />
         <ErrMsg msg={errors.location} />
       </div>
 
-      {/* خيارات التوصيل */}
+      {/* Delivery options */}
       <div>
-        <Lbl>خيار التوصيل</Lbl>
+        <Lbl>{t('addListing.step5.delivery')}</Lbl>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {[
-            { val: 'none',  label: '🚫 لا يتوفر توصيل',           sub: 'يستلم المشتري بنفسه' },
-            { val: 'farm',  label: '🚛 المزرعة تتولى التوصيل',     sub: 'أنت تحدد التكلفة' },
-            { val: 'admin', label: '📦 الإدارة تتولى التوصيل',     sub: 'تُحدد الإدارة التكلفة لاحقاً' },
-          ].map(({ val, label, sub }) => (
+            { val: 'none',  labelKey: 'addListing.step5.deliveryNone',  subKey: 'addListing.step5.deliveryNoneSub'  },
+            { val: 'farm',  labelKey: 'addListing.step5.deliveryFarm',  subKey: 'addListing.step5.deliveryFarmSub'  },
+            { val: 'admin', labelKey: 'addListing.step5.deliveryAdmin', subKey: 'addListing.step5.deliveryAdminSub' },
+          ].map(({ val, labelKey, subKey }) => (
             <div key={val}
               onClick={() => set('deliveryType', val)}
               style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', border: `1.5px solid ${form.deliveryType === val ? C.green : C.border}`, borderRadius: '10px', cursor: 'pointer', background: form.deliveryType === val ? C.greenBg : '#fff', transition: 'all 0.15s' }}>
@@ -819,8 +1104,8 @@ const SellerAddListing = () => {
                 {form.deliveryType === val && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />}
               </div>
               <div>
-                <div style={{ fontWeight: '700', fontSize: '14px', color: C.text }}>{label}</div>
-                <div style={{ fontSize: '12px', color: C.textMuted }}>{sub}</div>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: C.text }}>{t(labelKey)}</div>
+                <div style={{ fontSize: '12px', color: C.textMuted }}>{t(subKey)}</div>
               </div>
             </div>
           ))}
@@ -829,17 +1114,17 @@ const SellerAddListing = () => {
 
       {form.deliveryType === 'farm' && (
         <div style={{ animation: 'slideDown 0.2s ease' }}>
-          <Lbl>تكلفة التوصيل <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اتركه فارغاً إذا كانت قابلة للتفاوض)</span></Lbl>
+          <Lbl>{t('addListing.step5.deliveryCost')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('addSupply.deliveryCostHint')})</span></Lbl>
           <div style={{ position: 'relative' }}>
-            <FocusInput type="number" min="0" step="1" value={form.deliveryCost} onChange={e => set('deliveryCost', e.target.value)} placeholder="مثال: 150" style={{ paddingRight: '60px' }} />
-            <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
+            <FocusInput type="number" min="0" step="1" value={form.deliveryCost} onChange={e => set('deliveryCost', e.target.value)} placeholder={t('addListing.step5.deliveryCostPlaceholder')} style={{ paddingRight: '60px' }} />
+            <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>{t('common.egp')}</span>
           </div>
         </div>
       )}
 
-      {/* خيارات عيد الأضحى */}
+      {/* Eid options */}
       <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ fontWeight: '800', fontSize: '13px', color: '#15803D', marginBottom: '12px' }}>🌙 خيارات عيد الأضحى</div>
+        <div style={{ fontWeight: '800', fontSize: '13px', color: '#15803D', marginBottom: '12px' }}>🌙 {t('addListing.step5.eidOptions')}</div>
 
         {/* eidAvailable toggle */}
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '10px' }}>
@@ -850,8 +1135,8 @@ const SellerAddListing = () => {
             style={{ marginTop: '2px', accentColor: '#15803D', width: '16px', height: '16px', flexShrink: 0 }}
           />
           <div>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>متاح لعروض العيد</div>
-            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>سيظهر هذا الإعلان في قسم "عروض العيد" الخاص بالمشترين</div>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('addListing.step5.eidAvailable')}</div>
+            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{t('addListing.step5.eidAvailableSub')}</div>
           </div>
         </label>
 
@@ -864,18 +1149,18 @@ const SellerAddListing = () => {
             style={{ marginTop: '2px', accentColor: '#15803D', width: '16px', height: '16px', flexShrink: 0 }}
           />
           <div>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>خدمة الذبح متاحة</div>
-            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>يمكنك تقديم خدمة الذبح مقابل رسوم إضافية</div>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('addListing.step5.slaughter')}</div>
+            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{t('addListing.step5.slaughterSub')}</div>
           </div>
         </label>
 
         {/* slaughterCost input */}
         {form.slaughterService && (
           <div style={{ marginTop: '12px', animation: 'slideDown 0.2s ease' }}>
-            <Lbl>تكلفة الذبح <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اتركه فارغاً إذا كانت قابلة للتفاوض)</span></Lbl>
+            <Lbl>{t('addListing.step5.slaughterCost')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('addSupply.deliveryCostHint')})</span></Lbl>
             <div style={{ position: 'relative' }}>
-              <FocusInput type="number" min="0" step="1" value={form.slaughterCost} onChange={e => set('slaughterCost', e.target.value)} placeholder="مثال: 200" style={{ paddingRight: '60px' }} />
-              <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
+              <FocusInput type="number" min="0" step="1" value={form.slaughterCost} onChange={e => set('slaughterCost', e.target.value)} placeholder={t('addListing.step5.slaughterCostPlaceholder')} style={{ paddingRight: '60px' }} />
+              <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>{t('common.egp')}</span>
             </div>
           </div>
         )}
@@ -890,19 +1175,19 @@ const SellerAddListing = () => {
               style={{ marginTop: '2px', accentColor: '#15803D', width: '16px', height: '16px', flexShrink: 0 }}
             />
             <div>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>دفع عربون مسبق</div>
-              <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>أتِح للمشترين حجز الحيوان بدفع عربون مسبق</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('addListing.step5.deposit')}</div>
+              <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{t('addListing.step5.depositSub')}</div>
             </div>
           </label>
           {form.depositRequired && (
             <div style={{ marginTop: '10px' }}>
-              <Lbl req>نسبة العربون (%)</Lbl>
+              <Lbl req>{t('addListing.step5.depositPct')}</Lbl>
               <div style={{ position: 'relative', maxWidth: '180px' }}>
                 <FocusInput
                   type="number" min="1" max="100" step="1"
                   value={form.depositPercentage}
                   onChange={e => set('depositPercentage', e.target.value)}
-                  placeholder="مثال: 20"
+                  placeholder={t('addListing.step5.depositPlaceholder')}
                   style={{ paddingRight: '40px' }}
                 />
                 <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>%</span>
@@ -911,7 +1196,7 @@ const SellerAddListing = () => {
           )}
         </div>
 
-        {/* Qurbani shares toggle — available for large livestock */}
+        {/* Qurbani shares toggle */}
         {!['poultry','rabbit'].includes(form.type) && (
           <div style={{ marginTop: '14px', borderTop: '1px solid #86EFAC', paddingTop: '14px' }}>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: form.qurbaniEnabled ? '12px' : '0' }}>
@@ -922,18 +1207,18 @@ const SellerAddListing = () => {
                 style={{ marginTop: '2px', accentColor: '#15803D', width: '16px', height: '16px', flexShrink: 0 }}
               />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>نظام الأسهم (الأضحية المشتركة)</div>
-                <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>أتِح للمشترين شراء أسهم: سُبع / ربع / نصف من هذا الرأس</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('addListing.step5.qurbani')}</div>
+                <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{t('addListing.step5.qurbaniSub')}</div>
               </div>
             </label>
 
             {form.qurbaniEnabled && (
               <div style={{ animation: 'slideDown 0.2s ease', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {[
-                  { key: 'seventh', label: 'سُبع (١/٧)', hint: 'البقر والجاموس والإبل' },
-                  { key: 'quarter', label: 'ربع (١/٤)',  hint: '' },
-                  { key: 'half',    label: 'نصف (١/٢)',  hint: '' },
-                ].map(({ key, label, hint }) => {
+                  { key: 'seventh', labelKey: 'addListing.step5.qurbaniSeventh', hintKey: 'addListing.step5.qurbaniSeventhHint' },
+                  { key: 'quarter', labelKey: 'addListing.step5.qurbaniQuarter', hintKey: '' },
+                  { key: 'half',    labelKey: 'addListing.step5.qurbaniHalf',    hintKey: '' },
+                ].map(({ key, labelKey, hintKey }) => {
                   const share = form.qurbaniShares[key];
                   const setShare = (field, val) => set('qurbaniShares', { ...form.qurbaniShares, [key]: { ...share, [field]: val } });
                   return (
@@ -941,21 +1226,21 @@ const SellerAddListing = () => {
                       <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: share.enabled ? '10px' : '0' }}>
                         <input type="checkbox" checked={share.enabled} onChange={e => setShare('enabled', e.target.checked)}
                           style={{ accentColor: '#15803D', width: '14px', height: '14px', flexShrink: 0 }} />
-                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#15803D' }}>{label}</span>
-                        {hint && <span style={{ fontSize: '11px', color: C.textMuted }}>{hint}</span>}
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#15803D' }}>{t(labelKey)}</span>
+                        {hintKey && <span style={{ fontSize: '11px', color: C.textMuted }}>{t(hintKey)}</span>}
                       </label>
                       {share.enabled && (
                         <div style={{ display: 'flex', gap: '10px', animation: 'slideDown 0.15s ease' }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '11px', fontWeight: '700', color: C.textMuted, marginBottom: '4px' }}>سعر السهم (ج.م) *</div>
+                            <div style={{ fontSize: '11px', fontWeight: '700', color: C.textMuted, marginBottom: '4px' }}>{t('addListing.step5.sharePrice')} *</div>
                             <div style={{ position: 'relative' }}>
-                              <FocusInput type="number" min="0" step="1" value={share.pricePerShare} onChange={e => setShare('pricePerShare', e.target.value)} placeholder="مثال: 3500" style={{ paddingRight: '48px' }} />
-                              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
+                              <FocusInput type="number" min="0" step="1" value={share.pricePerShare} onChange={e => setShare('pricePerShare', e.target.value)} placeholder={t('addListing.step5.sharePricePlaceholder')} style={{ paddingRight: '48px' }} />
+                              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>{t('common.egp')}</span>
                             </div>
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '11px', fontWeight: '700', color: C.textMuted, marginBottom: '4px' }}>عدد الأسهم المتاحة *</div>
-                            <FocusInput type="number" min="1" step="1" value={share.totalShares} onChange={e => setShare('totalShares', e.target.value)} placeholder="مثال: 7" />
+                            <div style={{ fontSize: '11px', fontWeight: '700', color: C.textMuted, marginBottom: '4px' }}>{t('addListing.step5.totalShares')} *</div>
+                            <FocusInput type="number" min="1" step="1" value={share.totalShares} onChange={e => setShare('totalShares', e.target.value)} placeholder={t('addListing.step5.totalSharesPlaceholder')} />
                           </div>
                         </div>
                       )}
@@ -968,33 +1253,33 @@ const SellerAddListing = () => {
         )}
       </div>
 
-      {/* الوصف التفصيلي */}
+      {/* Description */}
       <div>
-        <Lbl>الوصف التفصيلي <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>(اختياري)</span></Lbl>
+        <Lbl>{t('addListing.step5.description')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')})</span></Lbl>
         <textarea
           value={form.description}
           onChange={e => set('description', e.target.value)}
-          placeholder="صِف مواشيك بالتفصيل — المزاج، عادات الأكل، التاريخ الصحي، الصفات المميزة…"
+          placeholder={t('addListing.step5.descPlaceholder')}
           rows={6}
-          dir="rtl"
+          dir={isRTL ? 'rtl' : 'ltr'}
           style={{ width: '100%', boxSizing: 'border-box', padding: '13px 15px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: '#fff', fontSize: '14px', color: C.text, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.8, transition: 'border-color 0.15s' }}
           onFocus={e => e.target.style.borderColor = C.green}
           onBlur={e => e.target.style.borderColor = C.border}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-          <span style={{ fontSize: '12px', color: C.textMuted }}>كن محدداً — الأوصاف الدقيقة تُسرّع البيع</span>
-          <span aria-hidden="true" style={{ fontSize: '12px', color: form.description.length > 20 ? C.greenText : C.textMuted }}>{form.description.length} حرف</span>
+          <span style={{ fontSize: '12px', color: C.textMuted }}>{t('addListing.step5.descHint')}</span>
+          <span aria-hidden="true" style={{ fontSize: '12px', color: form.description.length > 20 ? C.greenText : C.textMuted }}>{form.description.length} {t('addListing.step5.chars')}</span>
         </div>
       </div>
 
-      {/* نصائح الوصف */}
+      {/* Description tips */}
       <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: '12px', padding: '14px 16px' }}>
-        <div style={{ fontWeight: '700', fontSize: '13px', color: C.amberText, marginBottom: '9px' }}>💡 نصائح للوصف</div>
+        <div style={{ fontWeight: '700', fontSize: '13px', color: C.amberText, marginBottom: '9px' }}>💡 {t('addListing.step5.tips')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {TIPS.map((tip, i) => (
-            <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: C.amberText, direction: 'rtl' }}>
+          {TIPS_KEYS.map((tipKey, i) => (
+            <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: C.amberText, direction: isRTL ? 'rtl' : 'ltr' }}>
               <span style={{ flexShrink: 0 }}>•</span>
-              <span>{tip}</span>
+              <span>{t(tipKey)}</span>
             </div>
           ))}
         </div>
@@ -1015,7 +1300,7 @@ const SellerAddListing = () => {
   const stepContent = [renderStep1, renderStep2, renderStep3, renderStep4, renderStep5][step - 1];
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
       <style>{`
         @keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
@@ -1025,17 +1310,17 @@ const SellerAddListing = () => {
         <div style={{ position: 'absolute', right: -8, top: -16, fontSize: '110px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🐾</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>إضافة ماشية جديدة</h1>
-            <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>الخطوة {step} من 5</p>
+            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>{pageTitle}</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>{t('addListing.step')} {step} {t('addListing.of')} 5</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" onClick={() => setShowPreview(true)}
               style={{ padding: '8px 15px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-              👁 معاينة
+              👁 {t('addListing.preview')}
             </button>
-            <button type="button" onClick={saveDraft}
-              style={{ padding: '8px 15px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: draftSaved ? 'rgba(58,125,68,0.5)' : 'rgba(255,255,255,0.1)', color: draftSaved ? '#fff' : 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}>
-              {draftSaved ? '✓ تم الحفظ!' : '💾 حفظ المسودة'}
+            <button type="button" onClick={() => handleSubmit(true)} disabled={submitting}
+              style={{ padding: '8px 15px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: submitting ? 'rgba(58,125,68,0.5)' : 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}>
+              {submitting ? '...' : `💾 ${t('addListing.saveDraft')}`}
             </button>
           </div>
         </div>
@@ -1046,10 +1331,10 @@ const SellerAddListing = () => {
         {/* Draft restore banner */}
         {draftBanner && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px', background: C.amberBg, border: '1px solid #FDE68A', borderRadius: '10px', marginBottom: '20px', fontSize: '13px', color: C.amberText }}>
-            <span>📋 <strong>تم استعادة المسودة.</strong> تابع من حيث توقفت.</span>
+            <span>📋 <strong>{t('addListing.draftRestored')}</strong> {t('addListing.draftRestoredSub')}</span>
             <button type="button" onClick={() => { localStorage.removeItem(DRAFT_KEY); setDraftBanner(false); resetAll(); }}
               style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.amberText, cursor: 'pointer', fontSize: '12px', fontWeight: '700', textDecoration: 'underline' }}>
-              تجاهل
+              {t('addListing.draftDiscard')}
             </button>
           </div>
         )}
@@ -1065,7 +1350,7 @@ const SellerAddListing = () => {
                   <div style={{ width: '38px', height: '38px', borderRadius: '50%', border: `2px solid ${done || active ? C.green : C.border}`, background: done ? C.green : active ? C.greenBg : C.card, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: done ? '16px' : '16px', color: done ? '#fff' : active ? C.greenText : C.textMuted, transition: 'all 0.3s', fontWeight: '700' }}>
                     {done ? '✓' : s.icon}
                   </div>
-                  <span style={{ fontSize: '10px', fontWeight: '600', color: done || active ? C.green : C.textMuted, whiteSpace: 'nowrap', textAlign: 'center' }}>{s.label}</span>
+                  <span style={{ fontSize: '10px', fontWeight: '600', color: done || active ? C.green : C.textMuted, whiteSpace: 'nowrap', textAlign: 'center' }}>{t(s.labelKey)}</span>
                 </div>
                 {i < STEPS.length - 1 && (
                   <div style={{ flex: 1, height: '2px', background: step > s.n ? C.green : C.border, margin: '0 4px', marginBottom: '18px', transition: 'background 0.3s' }} />
@@ -1084,7 +1369,7 @@ const SellerAddListing = () => {
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button type="button" onClick={goBack} disabled={step === 1}
             style={{ padding: '12px 20px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: C.card, color: step === 1 ? '#D1D5DB' : C.text, fontSize: '14px', fontWeight: '700', cursor: step === 1 ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}>
-            رجوع →
+            {t('common.back')} →
           </button>
 
           <div style={{ flex: 1 }} />
@@ -1095,13 +1380,19 @@ const SellerAddListing = () => {
               onMouseEnter={e => e.currentTarget.style.background = C.greenDark}
               onMouseLeave={e => e.currentTarget.style.background = C.green}
             >
-              ← متابعة
+              ← {t('addListing.next')}
             </button>
           ) : (
-            <button type="button" onClick={handleSubmit} disabled={submitting}
-              style={{ padding: '12px 28px', borderRadius: '10px', border: 'none', background: submitting ? '#6AAF74' : C.green, color: '#fff', fontSize: '14px', fontWeight: '700', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
-              {submitting ? 'جاري النشر…' : '🚀 نشر الإعلان'}
-            </button>
+            <>
+              <button type="button" onClick={() => handleSubmit(true)} disabled={submitting}
+                style={{ padding: '12px 20px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '14px', fontWeight: '700', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}>
+                💾 حفظ كمسودة
+              </button>
+              <button type="button" onClick={() => handleSubmit(false)} disabled={submitting}
+                style={{ padding: '12px 28px', borderRadius: '10px', border: 'none', background: submitting ? '#6AAF74' : C.green, color: '#fff', fontSize: '14px', fontWeight: '700', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                {submitting ? t('addListing.submitting') : `🚀 ${t('addListing.publish')}`}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1113,7 +1404,7 @@ const SellerAddListing = () => {
           <div style={{ background: C.bg, borderRadius: '20px', padding: '24px', maxWidth: '380px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', animation: 'slideDown 0.2s ease' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: C.text }}>معاينة المشتري</h3>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: C.text }}>{t('addListing.previewTitle')}</h3>
               <button type="button" onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', fontSize: '20px', color: C.textMuted, cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
 
@@ -1126,30 +1417,30 @@ const SellerAddListing = () => {
                 }
                 {form.health && (
                   <div style={{ position: 'absolute', top: 10, right: 10, background: C.greenBg, color: C.greenText, border: `1px solid #BBF7D0`, fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '12px' }}>
-                    {HEALTH_OPTS.find(h => h.key === form.health)?.label || form.health}
+                    {t(HEALTH_OPTS.find(h => h.key === form.health)?.labelKey || '') || form.health}
                   </div>
                 )}
               </div>
               <div style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                   <div>
-                    <div style={{ fontWeight: '800', fontSize: '17px', color: C.text }}>{TYPE_AR[form.type] || '—'}</div>
-                    <div style={{ fontSize: '13px', color: C.textMuted }}>{form.breed || 'السلالة غير محددة'}</div>
+                    <div style={{ fontWeight: '800', fontSize: '17px', color: C.text }}>{t(TYPE_KEY[form.type]) || '—'}</div>
+                    <div style={{ fontSize: '13px', color: C.textMuted }}>{form.breed || t('addListing.previewNoBreed')}</div>
                   </div>
                   <div style={{ fontWeight: '800', fontSize: '18px', color: C.green }}>
-                    {form.pricePerKg ? `${form.pricePerKg} ج.م/كجم` : 'السعر غير محدد'}
+                    {form.pricePerKg ? `${form.pricePerKg} ${t('common.egp')}/${t('common.kg')}` : t('addListing.previewNoPrice')}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   {form.ageValue && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '8px', background: '#F5F0EA', color: C.textMuted }}>{form.ageValue} {form.ageUnit}</span>}
                   {form.weightValue && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '8px', background: '#F5F0EA', color: C.textMuted }}>{form.weightValue} {form.weightUnit}</span>}
                   {form.gender && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '8px', background: '#F5F0EA', color: C.textMuted, textTransform: 'capitalize' }}>{form.gender}</span>}
-                  {form.deliveryType !== 'none' && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '8px', background: C.greenBg, color: C.greenText }}>🚛 {form.deliveryType === 'farm' ? 'توصيل بالمزرعة' : 'توصيل بالإدارة'}</span>}
+                  {form.deliveryType !== 'none' && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '8px', background: C.greenBg, color: C.greenText }}>🚛 {form.deliveryType === 'farm' ? t('addListing.step5.deliveryFarm') : t('addListing.step5.deliveryAdmin')}</span>}
                 </div>
                 {form.location && <div style={{ marginTop: '8px', fontSize: '12px', color: C.textMuted }}>📍 {form.location}</div>}
               </div>
             </div>
-            <p style={{ margin: '12px 0 0', fontSize: '12px', color: C.textMuted, textAlign: 'center' }}>هكذا سيرى المشترون إعلانك بعد الموافقة.</p>
+            <p style={{ margin: '12px 0 0', fontSize: '12px', color: C.textMuted, textAlign: 'center' }}>{t('addListing.previewNote')}</p>
           </div>
         </div>
       )}

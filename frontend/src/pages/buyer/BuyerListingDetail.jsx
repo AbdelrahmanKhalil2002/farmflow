@@ -4,28 +4,18 @@ import { getListingById, getAvailableListings } from '../../services/listingServ
 import { getMarketPrices } from '../../services/marketPricesService';
 import { fmt, getImageUrl } from '../../utils/format';
 import OrderModal from './OrderModal';
+import { useLang } from '../../context/LangContext';
+import { getOrCreate, sendOffer } from '../../services/messageService';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:      '#F8F4EE',
-  white:   '#FFFFFF',
-  green:   '#3A7D44',
-  greenDk: '#2D6235',
-  greenLt: '#F0F7F1',
-  tan:     '#C49A6C',
-  border:  '#E8D5C0',
-  text:    '#2C1810',
-  muted:   '#8B6B5A',
-  shadow:  '0 2px 10px rgba(44,24,16,0.08)',
-};
+import { C } from '../../tokens';
 
 const TYPE_META = {
-  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', label: 'Cattle',  ar: 'أبقار'  },
-  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', label: 'Sheep',   ar: 'أغنام'  },
-  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', label: 'Goat',    ar: 'ماعز'   },
-  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', label: 'Camel',   ar: 'إبل'    },
-  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', label: 'Horse',   ar: 'خيول'   },
-  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', label: 'Other',   ar: 'أخرى'   },
+  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', typeKey: 'herd.type.cattle' },
+  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', typeKey: 'herd.type.sheep'  },
+  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', typeKey: 'herd.type.goat'   },
+  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', typeKey: 'herd.type.camel'  },
+  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', typeKey: 'herd.type.horse'  },
+  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', typeKey: 'herd.type.other'  },
 };
 
 const AVATAR_COLORS = ['#E17055','#00B894','#0984E3','#6C5CE7','#D4A017','#d63031','#74B9FF','#00CEC9'];
@@ -34,41 +24,51 @@ const initials    = (name = '') => name.split(' ').map(w => w[0]).join('').slice
 
 const seed = (id = '') => parseInt(id.slice(-2) || '00', 16);
 
+// Vaccine sets — keyed into translation strings
 const VACCINE_SETS = {
-  cattle: ['تطعيم الحمى القلاعية', 'البروسيلا', 'الجمرة الخبيثة', 'مرض الجلد العقدي'],
-  sheep:  ['تطعيم الحمى القلاعية', 'الطاعون الصغير', 'التسمم المعوي', 'البروسيلا'],
-  goat:   ['طاعون المجترات', 'تطعيم الحمى القلاعية', 'الجدري', 'التسمم المعوي'],
-  camel:  ['التهاب الجمل التنفسي', 'البروسيلا', 'تطعيم الحمى القلاعية'],
-  horse:  ['التهاب الدماغ', 'التيتانوس', 'إنفلونزا الخيول', 'الأنيميا'],
-  other:  ['تطعيم الحمى القلاعية', 'البروسيلا', 'مضادات الطفيليات'],
+  cattle: ['lst.vaccine.fmd', 'lst.vaccine.brucella', 'lst.vaccine.anthrax', 'lst.vaccine.lsd'],
+  sheep:  ['lst.vaccine.fmd', 'lst.vaccine.ppe', 'lst.vaccine.enterotox', 'lst.vaccine.brucella'],
+  goat:   ['lst.vaccine.ppr', 'lst.vaccine.fmd', 'lst.vaccine.pox', 'lst.vaccine.enterotox'],
+  camel:  ['lst.vaccine.mers', 'lst.vaccine.brucella', 'lst.vaccine.fmd'],
+  horse:  ['lst.vaccine.encephalitis', 'lst.vaccine.tetanus', 'lst.vaccine.flu', 'lst.vaccine.anemia'],
+  other:  ['lst.vaccine.fmd', 'lst.vaccine.brucella', 'lst.vaccine.antiparasitic'],
 };
 
+// Color sets — keyed into translation strings
 const COLOR_SETS = {
-  cattle: ['أبيض وأسود', 'بني', 'أحمر', 'أسود', 'أبيض'],
-  sheep:  ['أبيض', 'أسود', 'بني وأبيض', 'رمادي', 'منقط'],
-  goat:   ['أسود', 'بني', 'أبيض وبني', 'رمادي', 'أسود وأبيض'],
-  camel:  ['رملي', 'بني', 'بني داكن', 'كريمي', 'بيج فاتح'],
-  horse:  ['كستنائي', 'أشهب', 'أسود', 'رمادي', 'أبلق'],
-  other:  ['مختلط', 'بني', 'أسود', 'أبيض', 'رمادي'],
+  cattle: ['lst.color.blackWhite', 'lst.color.brown', 'lst.color.red', 'lst.color.black', 'lst.color.white'],
+  sheep:  ['lst.color.white', 'lst.color.black', 'lst.color.brownWhite', 'lst.color.gray', 'lst.color.spotted'],
+  goat:   ['lst.color.black', 'lst.color.brown', 'lst.color.whiteBrown', 'lst.color.gray', 'lst.color.blackWhite'],
+  camel:  ['lst.color.sand', 'lst.color.brown', 'lst.color.darkBrown', 'lst.color.cream', 'lst.color.beige'],
+  horse:  ['lst.color.chestnut', 'lst.color.gray2', 'lst.color.black', 'lst.color.gray', 'lst.color.piebald'],
+  other:  ['lst.color.mixed', 'lst.color.brown', 'lst.color.black', 'lst.color.white', 'lst.color.gray'],
 };
 
-const ORIGINS = [
-  'القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية',
-  'المنوفية', 'البحيرة', 'أسيوط', 'سوهاج', 'قنا',
+// Origins — keyed
+const ORIGIN_KEYS = [
+  'lst.origin.cairo', 'lst.origin.giza', 'lst.origin.alexandria', 'lst.origin.daqahlia',
+  'lst.origin.sharqia', 'lst.origin.monufia', 'lst.origin.buhaira', 'lst.origin.asyut',
+  'lst.origin.sohag', 'lst.origin.qena',
 ];
 
-const FERTILITY_OPTS = ['ذكر للتربية', 'أنثى للتربية', 'ذكر مخصي', 'أنثى حامل', 'صغير'];
+// Fertility options — keyed
+const FERTILITY_KEYS = [
+  'lst.fertility.breedingMale', 'lst.fertility.breedingFemale',
+  'lst.fertility.castratedMale', 'lst.fertility.pregnantFemale', 'lst.fertility.young',
+];
 
 const HEALTH_META = {
-  Excellent: { color: '#166534', bg: '#DCFCE7', icon: '💚', label: 'ممتازة',     sub: 'صحة ممتازة' },
-  Good:      { color: '#0369A1', bg: '#DBEAFE', icon: '💙', label: 'جيدة',       sub: 'حالة جيدة'  },
-  Fair:      { color: '#92400E', bg: '#FEF3C7', icon: '💛', label: 'مقبولة',     sub: 'حالة مقبولة' },
+  Excellent: { color: '#166534', bg: '#DCFCE7', icon: '💚', labelKey: 'lst.health.excellent', subKey: 'lst.health.excellentSub' },
+  Good:      { color: '#0369A1', bg: '#DBEAFE', icon: '💙', labelKey: 'lst.health.good',      subKey: 'lst.health.goodSub'      },
+  Fair:      { color: '#92400E', bg: '#FEF3C7', icon: '💛', labelKey: 'lst.health.fair',      subKey: 'lst.health.fairSub'      },
 };
 
+// Cert pool — keyed
 const CERTS_POOL = [
-  'شهادة صحة بيطرية', 'تصريح نقل رسمي', 'شهادة المنشأ', 'تصريح تصدير',
+  'lst.cert.vetHealth', 'lst.cert.movePermit', 'lst.cert.origin', 'lst.cert.export',
 ];
 
+// Review pool — mock data, kept in Arabic as it simulates user-generated content
 const REVIEW_POOL = [
   { name: 'أحمد محمد الغامدي', city: 'القاهرة',      rating: 5, ago: 'منذ أسبوعين',  text: 'حيوان ممتاز تمامًا كما هو موصوف. البائع شفاف وقدم جميع الأوراق في الوقت المناسب.' },
   { name: 'فاطمة الزهراني',    city: 'الإسكندرية',   rating: 5, ago: 'منذ شهر',       text: 'صحة ممتازة وتغذية جيدة. وثائق البيطري كانت سليمة والسلالة تطابق الإعلان تمامًا.' },
@@ -97,6 +97,7 @@ const Stars = ({ rating, size = 14 }) => (
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const BuyerListingDetail = () => {
+  const { t, isRTL } = useLang();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -106,15 +107,20 @@ const BuyerListingDetail = () => {
   const [related, setRelated]       = useState([]);
   const [imgIdx, setImgIdx]         = useState(0);
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 960);
-  const [showModal, setShowModal]   = useState(false);
-  const [ordered, setOrdered]       = useState(false);
-  const [marketAvg, setMarketAvg]   = useState(null);
+  const [showModal, setShowModal]       = useState(false);
+  const [ordered, setOrdered]           = useState(false);
+  const [marketAvg, setMarketAvg]       = useState(null);
+  const [showOfferInput, setShowOfferInput] = useState(false);
+  const [offerPrice, setOfferPrice]     = useState('');
+  const [offerSent, setOfferSent]       = useState(false);
+  const [sendingOffer, setSendingOffer] = useState(false);
+  const [offerError, setOfferError]     = useState('');
 
   useEffect(() => {
     setLoading(true); setImgIdx(0);
     getListingById(id)
       .then(({ data }) => setListing(data))
-      .catch(() => setFetchError('الإعلان غير موجود أو غير متاح.'))
+      .catch(() => setFetchError(t('lst.notFound')))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -123,7 +129,6 @@ const BuyerListingDetail = () => {
     getAvailableListings()
       .then(({ data }) => setRelated(data.filter(l => l.type === listing.type && l._id !== listing._id).slice(0, 4)))
       .catch(() => {});
-    // Load market price benchmark for this animal type
     if (listing.pricePerKg) {
       getMarketPrices()
         .then(({ data }) => {
@@ -142,9 +147,30 @@ const BuyerListingDetail = () => {
 
   useEffect(() => {
     if (!ordered) return;
-    const t = setTimeout(() => navigate('/buyer/orders'), 2200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => navigate('/buyer/orders'), 2200);
+    return () => clearTimeout(timer);
   }, [ordered, navigate]);
+
+  const handleSendOffer = async () => {
+    const amt = Number(offerPrice);
+    if (!amt || amt <= 0) { setOfferError('أدخل مبلغاً صحيحاً'); return; }
+    setSendingOffer(true); setOfferError('');
+    try {
+      const { data: conv } = await getOrCreate({
+        recipientId: listing.seller._id,
+        contextType: 'listing',
+        contextRefId: listing._id,
+        contextLabel: listing.title || listing.type,
+      });
+      await sendOffer(conv._id, amt);
+      setOfferSent(true);
+      setTimeout(() => navigate('/buyer/messages'), 1500);
+    } catch {
+      setOfferError('تعذّر إرسال العرض، حاول مجدداً');
+    } finally {
+      setSendingOffer(false);
+    }
+  };
 
   useEffect(() => {
     if (!listing) return;
@@ -161,7 +187,7 @@ const BuyerListingDetail = () => {
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '16px', background: C.bg, margin: '-24px', padding: '48px' }}>
       <span style={{ fontSize: '52px' }}>🐄</span>
-      <p style={{ color: C.muted, fontSize: '15px', margin: 0 }}>جارٍ التحميل…</p>
+      <p style={{ color: C.muted, fontSize: '15px', margin: 0 }}>{t('common.loading')}</p>
     </div>
   );
 
@@ -171,7 +197,7 @@ const BuyerListingDetail = () => {
         <div style={{ fontSize: '48px', marginBottom: '12px' }}>⚠️</div>
         <p style={{ color: '#B91C1C', fontSize: '16px', margin: '0 0 20px' }}>{fetchError}</p>
         <Link to="/buyer" style={{ padding: '10px 24px', background: C.green, color: '#fff', textDecoration: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '14px' }}>
-          ← العودة للتصفح
+          ← {t('lst.backToBrowse')}
         </Link>
       </div>
     </div>
@@ -186,13 +212,13 @@ const BuyerListingDetail = () => {
   const s             = seed(listing._id);
   const mockHealth    = ['Excellent', 'Good', 'Fair'][s % 3];
   const hMeta         = HEALTH_META[mockHealth];
-  const mockVaccines  = (VACCINE_SETS[listing.type] || VACCINE_SETS.other).slice(0, 3 + (s % 2));
-  const mockColor     = (COLOR_SETS[listing.type] || COLOR_SETS.other)[s % 5];
-  const mockFertility = FERTILITY_OPTS[s % 5];
-  const mockOrigin    = ORIGINS[s % ORIGINS.length];
+  const mockVaccineKeys = (VACCINE_SETS[listing.type] || VACCINE_SETS.other).slice(0, 3 + (s % 2));
+  const mockColorKey  = (COLOR_SETS[listing.type] || COLOR_SETS.other)[s % 5];
+  const mockFertilityKey = FERTILITY_KEYS[s % 5];
+  const mockOriginKey = ORIGIN_KEYS[s % ORIGIN_KEYS.length];
   const mockRating    = RATINGS_POOL[s % 8];
   const mockSold      = SOLD_POOL[s % 8];
-  const mockCerts     = CERTS_POOL.slice(0, 2 + (s % 2));
+  const mockCertKeys  = CERTS_POOL.slice(0, 2 + (s % 2));
   const mockVetDate   = `${2024 - (s % 2)}-${String((s % 12) + 1).padStart(2, '0')}-${String((s % 25) + 1).padStart(2, '0')}`;
   const mockReviews   = [REVIEW_POOL[s % 6], REVIEW_POOL[(s + 2) % 6], REVIEW_POOL[(s + 4) % 6]];
   const deliveryCost  = parseDeliveryCost(listing.description || '');
@@ -202,18 +228,18 @@ const BuyerListingDetail = () => {
   const Divider = () => <div style={{ height: '1px', background: C.border, margin: '18px 0' }} />;
 
   return (
-    <div style={{ margin: '-24px', padding: 0, background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", paddingBottom: isMobile ? '90px' : 0 }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} style={{ margin: '-24px', padding: 0, background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", paddingBottom: isMobile ? '90px' : 0 }}>
 
       {/* ── Breadcrumb ── */}
       <div style={{ padding: '13px 24px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', borderBottom: `1px solid ${C.border}`, background: C.white, position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 1px 4px rgba(44,24,16,0.06)' }}>
-        <Link to="/buyer" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>← تصفح</Link>
+        <Link to="/buyer" style={{ color: C.green, fontWeight: '700', textDecoration: 'none' }}>← {t('lst.browse')}</Link>
         <span style={{ color: C.border }}>›</span>
         <span style={{ background: meta.bg, color: meta.color, padding: '3px 9px', borderRadius: '8px', fontWeight: '700', fontSize: '12px' }}>
-          {meta.emoji} {meta.ar}
+          {meta.emoji} {t(meta.typeKey)}
         </span>
         <span style={{ color: C.border }}>›</span>
         <span style={{ color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
-          {listing.breed || meta.label}
+          {listing.breed || t(meta.typeKey)}
         </span>
       </div>
 
@@ -229,24 +255,24 @@ const BuyerListingDetail = () => {
                 {images.length > 0 ? (
                   <img
                     src={getImageUrl(images[imgIdx])}
-                    alt={listing.breed || meta.label}
+                    alt={listing.breed || t(meta.typeKey)}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s' }}
                   />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '14px' }}>
                     <span style={{ fontSize: '90px' }}>{meta.emoji}</span>
-                    <span style={{ fontSize: '14px', color: meta.color, fontWeight: '600' }}>لا توجد صور</span>
+                    <span style={{ fontSize: '14px', color: meta.color, fontWeight: '600' }}>{t('lst.noImages')}</span>
                   </div>
                 )}
 
                 {images.length > 1 && (
                   <>
-                    <button type="button" aria-label="السابق"
+                    <button type="button" aria-label={t('lst.prevImage')}
                       onClick={() => setImgIdx(p => p === 0 ? images.length - 1 : p - 1)}
                       style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       ‹
                     </button>
-                    <button type="button" aria-label="التالي"
+                    <button type="button" aria-label={t('lst.nextImage')}
                       onClick={() => setImgIdx(p => (p + 1) % images.length)}
                       style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       ›
@@ -260,10 +286,10 @@ const BuyerListingDetail = () => {
                 {/* Top badges */}
                 <div style={{ position: 'absolute', top: '14px', left: '14px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   <span style={{ background: meta.bg, color: meta.color, fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '20px', boxShadow: '0 1px 6px rgba(0,0,0,0.12)' }}>
-                    {meta.emoji} {meta.ar}
+                    {meta.emoji} {t(meta.typeKey)}
                   </span>
                   <span style={{ background: hMeta.bg, color: hMeta.color, fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '20px', boxShadow: '0 1px 6px rgba(0,0,0,0.12)' }}>
-                    {hMeta.icon} {hMeta.label}
+                    {hMeta.icon} {t(hMeta.labelKey)}
                   </span>
                 </div>
               </div>
@@ -285,7 +311,7 @@ const BuyerListingDetail = () => {
             {listing.description && (
               <div style={{ background: C.white, borderRadius: '16px', padding: '20px', boxShadow: C.shadow }}>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
-                  عن هذا الحيوان
+                  {t('lst.aboutAnimal')}
                 </div>
                 <p style={{ color: C.muted, fontSize: '15px', lineHeight: 1.8, margin: 0 }}>{listing.description}</p>
               </div>
@@ -294,21 +320,21 @@ const BuyerListingDetail = () => {
             {/* Full specs table */}
             <div style={{ background: C.white, borderRadius: '16px', overflow: 'hidden', boxShadow: C.shadow }}>
               <div style={{ padding: '18px 20px 4px', fontSize: '13px', fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                المواصفات الكاملة
+                {t('lst.fullSpecs')}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <tbody>
                   {[
-                    ['🐾', 'النوع',              meta.ar],
-                    ['🏷',  'السلالة',            listing.breed || 'غير محدد'],
-                    ['📅', 'العمر',              `${listing.age} شهر (${(listing.age / 12).toFixed(1)} سنة)`],
-                    ['⚖️', 'الوزن',             `${listing.weight} كجم`],
-                    ['🎨', 'اللون',              mockColor],
-                    ['🧬', 'حالة التكاثر',      mockFertility],
-                    ['📍', 'منطقة المنشأ',      mockOrigin],
-                    ['🗺', 'موقع الإعلان',      listing.location || 'غير محدد'],
-                    [hMeta.icon, 'الحالة الصحية', hMeta.sub],
-                    ['📋', 'تاريخ الإضافة',     new Date(listing.createdAt).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', year: 'numeric' })],
+                    ['🐾', t('lst.spec.type'),        t(meta.typeKey)],
+                    ['🏷',  t('lst.spec.breed'),       listing.breed || t('lst.unknown')],
+                    ['📅', t('lst.spec.age'),          `${listing.age} ${t('common.month')} (${(listing.age / 12).toFixed(1)} ${t('common.year')})`],
+                    ['⚖️', t('lst.spec.weight'),       `${listing.weight} ${t('common.kg')}`],
+                    ['🎨', t('lst.spec.color'),        t(mockColorKey)],
+                    ['🧬', t('lst.spec.fertility'),    t(mockFertilityKey)],
+                    ['📍', t('lst.spec.origin'),       t(mockOriginKey)],
+                    ['🗺', t('lst.spec.location'),     listing.location || t('lst.unknown')],
+                    [hMeta.icon, t('lst.spec.health'), t(hMeta.subKey)],
+                    ['📋', t('lst.spec.addedOn'),      new Date(listing.createdAt).toLocaleDateString('ar-EG', { day: '2-digit', month: 'short', year: 'numeric' })],
                   ].map(([icon, label, value], i) => (
                     <tr key={label} style={{ background: i % 2 === 0 ? '#FDFAF7' : C.white }}>
                       <td style={{ padding: '12px 20px', fontSize: '13px', color: C.muted, fontWeight: '600', whiteSpace: 'nowrap', borderBottom: `1px solid ${C.border}`, width: '42%' }}>
@@ -327,12 +353,12 @@ const BuyerListingDetail = () => {
             <div style={{ background: C.white, borderRadius: '16px', padding: '20px', boxShadow: C.shadow }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                  تقييمات المشترين
+                  {t('lst.buyerReviews')}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Stars rating={mockRating} size={14} />
                   <span style={{ fontSize: '14px', fontWeight: '800', color: C.text }}>{mockRating.toFixed(1)}</span>
-                  <span style={{ fontSize: '12px', color: C.muted }}>· {mockSold} عملية بيع</span>
+                  <span style={{ fontSize: '12px', color: C.muted }}>· {mockSold} {t('lst.sales')}</span>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -363,13 +389,13 @@ const BuyerListingDetail = () => {
               /* ── Success state ── */
               <div style={{ background: C.greenLt, border: `2px solid ${C.green}`, borderRadius: '20px', padding: '36px 24px', textAlign: 'center', boxShadow: C.shadow }}>
                 <div style={{ fontSize: '56px', marginBottom: '14px' }}>✅</div>
-                <h3 style={{ fontSize: '22px', fontWeight: '800', color: C.greenDk, margin: '0 0 8px' }}>تم إرسال الطلب!</h3>
+                <h3 style={{ fontSize: '22px', fontWeight: '800', color: C.greenDk, margin: '0 0 8px' }}>{t('lst.orderSent')}</h3>
                 <p style={{ color: C.green, fontSize: '14px', margin: '0 0 18px', lineHeight: 1.7 }}>
-                  طلبك قيد المعالجة.<br />جارٍ التوجيه لصفحة طلباتك…
+                  {t('lst.orderProcessing')}<br />{t('lst.redirecting')}
                 </p>
                 {[
-                  ['📞', 'سيتواصل معك البائع خلال 24 ساعة لتأكيد الطلب وترتيب التسليم.'],
-                  ['🛡', 'تمت عملية الطلب بأمان. هذه المعاملة مسجلة ومحمية عبر فارم فلو.'],
+                  ['📞', t('lst.sellerContact24h')],
+                  ['🛡', t('lst.platformProtection')],
                 ].map(([icon, text]) => (
                   <div key={icon} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '11px 14px', background: C.white, borderRadius: '12px', border: `1px solid ${C.green}30`, marginBottom: '8px', textAlign: 'left' }}>
                     <span style={{ fontSize: '16px', flexShrink: 0 }}>{icon}</span>
@@ -385,7 +411,7 @@ const BuyerListingDetail = () => {
                 <div style={{ marginBottom: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                     <span style={{ background: meta.bg, color: meta.color, fontSize: '12px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
-                      {meta.emoji} {meta.ar}
+                      {meta.emoji} {t(meta.typeKey)}
                     </span>
                     {listing.location && (
                       <span style={{ background: '#F3F4F6', color: C.muted, fontSize: '12px', fontWeight: '600', padding: '4px 10px', borderRadius: '20px' }}>
@@ -394,9 +420,9 @@ const BuyerListingDetail = () => {
                     )}
                   </div>
                   <h1 style={{ margin: '0 0 2px', fontSize: '22px', fontWeight: '800', color: C.text, letterSpacing: '-0.5px', textTransform: 'capitalize', lineHeight: 1.2 }}>
-                    {listing.breed || meta.label}
+                    {listing.breed || t(meta.typeKey)}
                   </h1>
-                  <div style={{ fontSize: '13px', color: C.muted }}>{listing.age} شهر · {listing.weight} كجم · {mockOrigin}</div>
+                  <div style={{ fontSize: '13px', color: C.muted }}>{listing.age} {t('common.month')} · {listing.weight} {t('common.kg')} · {t(mockOriginKey)}</div>
                 </div>
 
                 <Divider />
@@ -404,16 +430,16 @@ const BuyerListingDetail = () => {
                 {/* ② Price + delivery */}
                 <div style={{ marginBottom: '16px' }}>
                   <div style={{ fontSize: '11px', color: C.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                    السعر
+                    {t('lst.price')}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '38px', fontWeight: '800', color: C.text, letterSpacing: '-1.5px', lineHeight: 1 }}>{fmt(listing.price)}</span>
-                    <span style={{ fontSize: '17px', color: C.muted, fontWeight: '600' }}>ج.م</span>
+                    <span style={{ fontSize: '17px', color: C.muted, fontWeight: '600' }}>{t('common.egp')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#F9F5F0', borderRadius: '10px', fontSize: '13px' }}>
-                    <span style={{ color: C.muted, fontWeight: '600' }}>🚚 رسوم التسليم</span>
+                    <span style={{ color: C.muted, fontWeight: '600' }}>🚚 {t('lst.deliveryFee')}</span>
                     <span style={{ fontWeight: '800', color: hasDelivery ? C.text : C.green }}>
-                      {hasDelivery ? `${fmt(deliveryCost)} ج.م` : 'قابل للتفاوض'}
+                      {hasDelivery ? `${fmt(deliveryCost)} ${t('common.egp')}` : t('lst.negotiable')}
                     </span>
                   </div>
 
@@ -422,16 +448,16 @@ const BuyerListingDetail = () => {
                     const ratio = listing.pricePerKg / marketAvg;
                     const isBelow = ratio < 0.93;
                     const isAbove = ratio > 1.10;
-                    const label  = isBelow ? 'أقل من السوق' : isAbove ? 'أعلى من السوق' : 'سعر عادل';
-                    const bg     = isBelow ? '#DCFCE7' : isAbove ? '#FEF2F2' : '#FEF3C7';
-                    const color  = isBelow ? '#166534' : isAbove ? '#991B1B' : '#92400E';
-                    const icon   = isBelow ? '📉' : isAbove ? '📈' : '✓';
+                    const labelKey = isBelow ? 'lst.mkt.below' : isAbove ? 'lst.mkt.above' : 'lst.mkt.fair';
+                    const bg       = isBelow ? '#DCFCE7' : isAbove ? '#FEF2F2' : '#FEF3C7';
+                    const color    = isBelow ? '#166534' : isAbove ? '#991B1B' : '#92400E';
+                    const icon     = isBelow ? '📉' : isAbove ? '📈' : '✓';
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: bg, borderRadius: '10px', fontSize: '13px', marginTop: '6px' }}>
-                        <span style={{ color, fontWeight: '600' }}>السعر مقارنةً بالسوق</span>
+                        <span style={{ color, fontWeight: '600' }}>{t('lst.mkt.compare')}</span>
                         <span style={{ fontWeight: '800', color, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {icon} {label}
-                          <span style={{ fontSize: '11px', fontWeight: '400', opacity: 0.8 }}>({fmt(marketAvg)} ج.م/كجم متوسط)</span>
+                          {icon} {t(labelKey)}
+                          <span style={{ fontSize: '11px', fontWeight: '400', opacity: 0.8 }}>({fmt(marketAvg)} {t('common.egp')}/{t('common.kg')} {t('lst.mkt.avg')})</span>
                         </span>
                       </div>
                     );
@@ -440,34 +466,38 @@ const BuyerListingDetail = () => {
 
                 {/* Qurbani shares — if available */}
                 {listing.qurbaniShares?.length > 0 && (() => {
-                  const SHARE_LABEL = { seventh: 'سُبع (١/٧)', quarter: 'ربع (١/٤)', half: 'نصف (١/٢)' };
+                  const SHARE_LABEL = {
+                    seventh: t('buyer.share.seventh'),
+                    quarter: t('buyer.share.quarter'),
+                    half:    t('buyer.share.half'),
+                  };
                   return (
                     <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '12px', padding: '14px', marginBottom: '14px' }}>
-                      <div style={{ fontWeight: '800', fontSize: '13px', color: '#92400E', marginBottom: '10px' }}>🌙 أسهم الأضحية المشتركة</div>
+                      <div style={{ fontWeight: '800', fontSize: '13px', color: '#92400E', marginBottom: '10px' }}>🌙 {t('lst.qurbaniShares')}</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {listing.qurbaniShares.map((s) => {
-                          const available = s.totalShares - (s.bookedShares || 0);
-                          const pct = s.totalShares > 0 ? Math.round(((s.bookedShares || 0) / s.totalShares) * 100) : 0;
+                        {listing.qurbaniShares.map((sh) => {
+                          const available = sh.totalShares - (sh.bookedShares || 0);
+                          const pct = sh.totalShares > 0 ? Math.round(((sh.bookedShares || 0) / sh.totalShares) * 100) : 0;
                           const isFull = available <= 0;
                           return (
-                            <div key={s.shareType} style={{ background: isFull ? '#F9FAFB' : '#fff', border: `1px solid ${isFull ? '#E5E7EB' : '#FED7AA'}`, borderRadius: '9px', padding: '10px 12px', opacity: isFull ? 0.6 : 1 }}>
+                            <div key={sh.shareType} style={{ background: isFull ? '#F9FAFB' : '#fff', border: `1px solid ${isFull ? '#E5E7EB' : '#FED7AA'}`, borderRadius: '9px', padding: '10px 12px', opacity: isFull ? 0.6 : 1 }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#92400E' }}>{SHARE_LABEL[s.shareType] || s.shareType}</span>
-                                <span style={{ fontSize: '14px', fontWeight: '800', color: isFull ? '#6B7280' : '#D97706' }}>{s.pricePerShare.toLocaleString('ar-EG')} ج.م</span>
+                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#92400E' }}>{SHARE_LABEL[sh.shareType] || sh.shareType}</span>
+                                <span style={{ fontSize: '14px', fontWeight: '800', color: isFull ? '#6B7280' : '#D97706' }}>{sh.pricePerShare.toLocaleString('ar-EG')} {t('common.egp')}</span>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#FDE68A', overflow: 'hidden' }}>
                                   <div style={{ width: `${pct}%`, height: '100%', background: isFull ? '#9CA3AF' : '#D97706', borderRadius: '3px', transition: 'width 0.3s' }} />
                                 </div>
                                 <span style={{ fontSize: '11px', color: '#92400E', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                  {isFull ? 'مكتمل' : `${available} متبقية`}
+                                  {isFull ? t('lst.shareFull') : `${available} ${t('lst.shareRemaining')}`}
                                 </span>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#92400E', marginTop: '8px' }}>للحجز تواصل مباشرةً مع البائع</div>
+                      <div style={{ fontSize: '11px', color: '#92400E', marginTop: '8px' }}>{t('lst.shareContactSeller')}</div>
                     </div>
                   );
                 })()}
@@ -480,12 +510,65 @@ const BuyerListingDetail = () => {
                   onMouseEnter={e => e.currentTarget.style.background = C.greenDk}
                   onMouseLeave={e => e.currentTarget.style.background = C.green}
                 >
-                  طلب الآن →
+                  {t('lst.orderNow')} →
                 </button>
+
+                {/* ③b Make an offer */}
+                {offerSent ? (
+                  <div style={{ textAlign: 'center', padding: '12px', background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: '12px', marginBottom: '10px', fontSize: '14px', fontWeight: '700', color: '#166534' }}>
+                    ✅ تم إرسال عرضك! جارٍ الانتقال للمحادثة…
+                  </div>
+                ) : showOfferInput ? (
+                  <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: '14px', padding: '14px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#92400E', marginBottom: '10px' }}>💰 عرض سعر للبائع</div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="1"
+                        value={offerPrice}
+                        onChange={e => { setOfferPrice(e.target.value); setOfferError(''); }}
+                        placeholder="أدخل مبلغ العرض (ج.م)"
+                        style={{ flex: 1, padding: '10px 12px', border: `1px solid ${offerError ? '#EF4444' : '#FCD34D'}`, borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', background: '#fff' }}
+                        onKeyDown={e => e.key === 'Enter' && handleSendOffer()}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendOffer}
+                        disabled={sendingOffer}
+                        style={{ padding: '10px 16px', background: '#D97706', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: '800', cursor: sendingOffer ? 'not-allowed' : 'pointer', opacity: sendingOffer ? 0.7 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                      >
+                        {sendingOffer ? '…' : 'إرسال'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowOfferInput(false); setOfferPrice(''); setOfferError(''); }}
+                        style={{ padding: '10px 12px', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: '10px', fontSize: '13px', cursor: 'pointer', color: '#6B7280', fontFamily: 'inherit' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {offerError && <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '6px', fontWeight: '600' }}>{offerError}</div>}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowOfferInput(true)}
+                    style={{ width: '100%', padding: '13px', background: '#FFFBEB', color: '#92400E', border: '1px solid #FCD34D', borderRadius: '14px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', marginBottom: '10px', fontFamily: 'inherit', transition: 'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#FEF3C7'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#FFFBEB'}
+                  >
+                    💰 عرض سعر
+                  </button>
+                )}
 
                 {/* Trust badges */}
                 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '4px' }}>
-                  {[['🔒','آمن'],['✅','بائع موثق'],['📞','تواصل مباشر'],['🛡','محمي']].map(([icon, label]) => (
+                  {[
+                    ['🔒', t('lst.trust.secure')],
+                    ['✅', t('lst.trust.verifiedSeller')],
+                    ['📞', t('lst.trust.directContact')],
+                    ['🛡', t('lst.trust.protected')],
+                  ].map(([icon, label]) => (
                     <span key={label} style={{ fontSize: '11px', color: C.green, fontWeight: '700', background: C.greenLt, padding: '3px 9px', borderRadius: '20px', border: `1px solid ${C.green}30` }}>
                       {icon} {label}
                     </span>
@@ -497,14 +580,14 @@ const BuyerListingDetail = () => {
                 {/* ④ Key specs */}
                 <div style={{ marginBottom: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                    المعلومات الأساسية
+                    {t('lst.keySpecs')}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {[
-                      ['📅', 'العمر',          `${listing.age} شهر`],
-                      ['⚖️', 'الوزن',         `${listing.weight} كجم`],
-                      ['🎨', 'اللون',          mockColor],
-                      ['🧬', 'التكاثر',        mockFertility],
+                      ['📅', t('lst.spec.age'),       `${listing.age} ${t('common.month')}`],
+                      ['⚖️', t('lst.spec.weight'),    `${listing.weight} ${t('common.kg')}`],
+                      ['🎨', t('lst.spec.color'),     t(mockColorKey)],
+                      ['🧬', t('lst.spec.fertility'), t(mockFertilityKey)],
                     ].map(([icon, label, val]) => (
                       <div key={label} style={{ background: '#F9F5F0', borderRadius: '10px', padding: '10px 12px' }}>
                         <div style={{ fontSize: '10px', color: C.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{icon} {label}</div>
@@ -519,39 +602,39 @@ const BuyerListingDetail = () => {
                 {/* ⑤ Health status */}
                 <div style={{ marginBottom: '14px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                    الحالة الصحية
+                    {t('lst.healthStatus')}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', background: hMeta.bg, borderRadius: '12px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '28px' }}>{hMeta.icon}</span>
                     <div>
-                      <div style={{ fontWeight: '800', color: hMeta.color, fontSize: '15px' }}>{hMeta.sub}</div>
+                      <div style={{ fontWeight: '800', color: hMeta.color, fontSize: '15px' }}>{t(hMeta.subKey)}</div>
                       <div style={{ fontSize: '11px', color: hMeta.color, opacity: 0.8, marginTop: '2px' }}>
-                        آخر فحص بيطري: {mockVetDate}
+                        {t('lst.lastVetCheck')}: {mockVetDate}
                       </div>
                     </div>
                   </div>
 
                   {/* Vaccines */}
                   <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '7px' }}>
-                    💉 التطعيمات
+                    💉 {t('lst.vaccines')}
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                    {mockVaccines.map(v => (
-                      <span key={v} style={{ background: C.greenLt, color: C.green, border: `1px solid ${C.green}30`, fontSize: '11px', padding: '4px 10px', borderRadius: '20px', fontWeight: '700' }}>
-                        ✓ {v}
+                    {mockVaccineKeys.map(vk => (
+                      <span key={vk} style={{ background: C.greenLt, color: C.green, border: `1px solid ${C.green}30`, fontSize: '11px', padding: '4px 10px', borderRadius: '20px', fontWeight: '700' }}>
+                        ✓ {t(vk)}
                       </span>
                     ))}
                   </div>
 
                   {/* Certificates */}
                   <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '7px' }}>
-                    📜 الشهادات الصحية
+                    📜 {t('lst.certs')}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {mockCerts.map(cert => (
-                      <div key={cert} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: '#F9F5F0', borderRadius: '10px' }}>
+                    {mockCertKeys.map(ck => (
+                      <div key={ck} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', background: '#F9F5F0', borderRadius: '10px' }}>
                         <span style={{ width: '20px', height: '20px', background: C.greenLt, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.green, fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>✓</span>
-                        <span style={{ fontSize: '12px', color: C.text, fontWeight: '600' }}>{cert}</span>
+                        <span style={{ fontSize: '12px', color: C.text, fontWeight: '600' }}>{t(ck)}</span>
                       </div>
                     ))}
                   </div>
@@ -562,7 +645,7 @@ const BuyerListingDetail = () => {
                 {/* ⑥ Seller */}
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                    البائع
+                    {t('orders.seller')}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
                     <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: avatarColor(seller.name || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '800', color: '#fff', flexShrink: 0 }}>
@@ -570,25 +653,25 @@ const BuyerListingDetail = () => {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: '800', fontSize: '15px', color: C.text, marginBottom: '3px' }}>
-                        {seller.name || 'بائع مجهول'}
+                        {seller.name || t('lst.unknownSeller')}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Stars rating={mockRating} size={12} />
                         <span style={{ fontSize: '12px', color: C.muted, fontWeight: '600' }}>{mockRating.toFixed(1)}</span>
-                        <span style={{ fontSize: '11px', color: C.muted }}>· {mockSold} مبيعات</span>
+                        <span style={{ fontSize: '11px', color: C.muted }}>· {mockSold} {t('lst.sales')}</span>
                       </div>
                     </div>
                     <span style={{ background: '#DCFCE7', color: '#166534', fontSize: '10px', fontWeight: '700', padding: '4px 8px', borderRadius: '8px', flexShrink: 0 }}>
-                      ✓ موثق
+                      ✓ {t('buyer.browse.verified').replace(' ✓', '')}
                     </span>
                   </div>
 
                   {/* Seller stats */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '12px' }}>
                     {[
-                      [mockSold,             'مبيعة'],
-                      ['5+',                 'سنوات'],
-                      [mockRating.toFixed(1),'تقييم'],
+                      [mockSold,             t('lst.sellerStat.sold')],
+                      ['5+',                 t('lst.sellerStat.years')],
+                      [mockRating.toFixed(1),t('lst.sellerStat.rating')],
                     ].map(([val, label]) => (
                       <div key={label} style={{ background: '#F9F5F0', borderRadius: '9px', padding: '8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '16px', fontWeight: '800', color: C.text, lineHeight: 1.2 }}>{val}</div>
@@ -601,16 +684,16 @@ const BuyerListingDetail = () => {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <a href={`tel:${seller.phone}`}
                         style={{ flex: 1, padding: '10px', background: C.greenLt, color: C.green, textDecoration: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '13px', textAlign: 'center', border: `1.5px solid ${C.green}40` }}>
-                        📞 اتصال
+                        📞 {t('orders.call')}
                       </a>
                       <a href={`https://wa.me/${seller.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
                         style={{ flex: 1, padding: '10px', background: '#DCFCE7', color: '#166534', textDecoration: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '13px', textAlign: 'center', border: '1.5px solid #16653440' }}>
-                        💬 واتساب
+                        💬 {t('orders.whatsapp')}
                       </a>
                     </div>
                   ) : (
                     <div style={{ padding: '10px', background: '#F9F5F0', color: C.muted, borderRadius: '10px', fontSize: '13px', textAlign: 'center' }}>
-                      معلومات التواصل غير متاحة
+                      {t('lst.noContactInfo')}
                     </div>
                   )}
                 </div>
@@ -619,9 +702,9 @@ const BuyerListingDetail = () => {
                 <div style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '11px 14px', background: C.greenLt, borderRadius: '12px', border: `1px solid ${C.green}30` }}>
                   <span style={{ fontSize: '18px', flexShrink: 0 }}>🛡</span>
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: C.greenDk, marginBottom: '2px' }}>ضمان المنصة</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: C.greenDk, marginBottom: '2px' }}>{t('lst.platformGuaranteeTitle')}</div>
                     <div style={{ fontSize: '11px', color: C.green, lineHeight: 1.55 }}>
-                      فارم فلو يوثق جميع الطلبات ويتحقق من جميع الأطراف. في حال النزاع، سيتدخل فريق الدعم لحل المشكلة.
+                      {t('lst.platformGuaranteeBody')}
                     </div>
                   </div>
                 </div>
@@ -632,7 +715,7 @@ const BuyerListingDetail = () => {
             {related.length > 0 && (
               <div style={{ background: C.white, borderRadius: '16px', padding: '18px', boxShadow: C.shadow }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                  {meta.ar} مشابهة
+                  {t('lst.similar')} {t(meta.typeKey)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {related.map(r => {
@@ -649,15 +732,15 @@ const BuyerListingDetail = () => {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {r.breed || rm.label}
+                            {r.breed || t(rm.typeKey)}
                           </div>
                           <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>
-                            {r.age} شهر · {r.weight} كجم
+                            {r.age} {t('common.month')} · {r.weight} {t('common.kg')}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           <div style={{ fontSize: '14px', fontWeight: '800', color: C.text }}>{fmt(r.price)}</div>
-                          <div style={{ fontSize: '10px', color: C.muted }}>ج.م</div>
+                          <div style={{ fontSize: '10px', color: C.muted }}>{t('common.egp')}</div>
                         </div>
                       </Link>
                     );
@@ -674,9 +757,9 @@ const BuyerListingDetail = () => {
       {isMobile && !ordered && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: '14px 20px', display: 'flex', gap: '14px', alignItems: 'center', zIndex: 100, boxShadow: '0 -4px 16px rgba(44,24,16,0.10)' }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>السعر</div>
+            <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('lst.price')}</div>
             <div style={{ fontSize: '22px', fontWeight: '800', color: C.text, letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-              {fmt(listing.price)} <span style={{ fontSize: '13px', fontWeight: '400', color: C.muted }}>ج.م</span>
+              {fmt(listing.price)} <span style={{ fontSize: '13px', fontWeight: '400', color: C.muted }}>{t('common.egp')}</span>
             </div>
           </div>
           <button
@@ -684,7 +767,7 @@ const BuyerListingDetail = () => {
             onClick={() => setShowModal(true)}
             style={{ padding: '13px 28px', background: C.green, color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}
           >
-            طلب الآن →
+            {t('lst.orderNow')} →
           </button>
         </div>
       )}

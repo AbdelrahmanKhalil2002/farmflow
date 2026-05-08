@@ -1,24 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { loginUser } from '../services/authService';
 import { useLang, LangToggle } from '../context/LangContext';
+import { useTheme } from '../context/ThemeContext';
+import { COLOR_SCHEMES } from '../themes/presets';
+import ThemePanel from '../components/ThemePanel';
+import { C as _C } from '../tokens';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:          '#FFFDF8',
-  panel:       'linear-gradient(155deg, #1C0E05 0%, #4A2208 48%, #6B3518 100%)',
-  green:       '#3A7D44',
-  greenDk:     '#2D6235',
-  greenLt:     '#F0F7F1',
-  tan:         '#C49A6C',
-  border:      '#E8D5C0',
-  text:        '#1C0E05',
-  muted:       '#8B6B5A',
-  errorBg:     '#FFF5F5',
-  errorBorder: '#FECACA',
-  errorText:   '#B91C1C',
-};
+const C = { ..._C, panel: 'linear-gradient(155deg, #1C0E05 0%, #4A2208 48%, #6B3518 100%)' };
 
 // ─── Bilingual content arrays ─────────────────────────────────────────────────
 const STATS = [
@@ -67,6 +58,60 @@ const parseError = (err, t) => {
   if (!data) return t('common.networkErr');
   if (data.errors?.length) return data.errors[0].msg;
   return data.message || t('common.unknownErr');
+};
+
+// ─── Appearance picker button for login page ──────────────────────────────────
+const AppearanceBtn = () => {
+  const { theme } = useTheme();
+  const { lang }  = useLang();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const scheme = COLOR_SCHEMES[theme.colorScheme] || COLOR_SCHEMES.green;
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(p => !p)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '7px 12px', borderRadius: '9px',
+          background: open ? 'rgba(28,14,5,0.08)' : 'rgba(28,14,5,0.05)',
+          border: '1px solid rgba(28,14,5,0.1)',
+          cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+          color: C.text, fontFamily: 'inherit', transition: 'all 0.15s',
+        }}
+      >
+        <div style={{ width: '11px', height: '11px', borderRadius: '50%', background: scheme.swatch, flexShrink: 0 }} />
+        {lang === 'ar' ? 'المظهر' : 'Appearance'}
+        <span style={{ fontSize: '9px', lineHeight: 1 }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          width: '280px', background: '#fff', borderRadius: '14px',
+          padding: '16px 16px 8px', zIndex: 200,
+          boxShadow: '0 8px 32px rgba(28,14,5,0.14)',
+          border: '1px solid rgba(28,14,5,0.08)',
+          maxHeight: '70vh', overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, marginBottom: '14px' }}>
+            🎨 {lang === 'ar' ? 'تخصيص المظهر' : 'Customize Appearance'}
+          </div>
+          <ThemePanel compact />
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -215,9 +260,10 @@ const Login = () => {
 
         <div style={{ width: '100%', maxWidth: '400px' }}>
 
-          {/* Lang toggle row */}
-          <div style={{ display: 'flex', justifyContent: isRTL ? 'flex-start' : 'flex-end', marginBottom: '20px' }}>
-            <LangToggle dark={false} />
+          {/* Lang toggle + appearance row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            {isRTL ? <AppearanceBtn /> : <LangToggle dark={false} />}
+            {isRTL ? <LangToggle dark={false} /> : <AppearanceBtn />}
           </div>
 
           {/* Heading */}
@@ -235,7 +281,8 @@ const Login = () => {
             {/* Identifier */}
             <FieldRow label={t('auth.identifier')} name="identifier" type="text"
               placeholder={t('auth.idPlaceholder')} value={form.identifier}
-              onChange={handleChange} autoFocus />
+              onChange={handleChange} autoFocus
+              maxLength={/^\d/.test(form.identifier) ? 11 : 100} />
 
             {/* Password + show/hide */}
             <div>
@@ -255,6 +302,16 @@ const Login = () => {
                 ⚠️ {error}
               </div>
             )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px' }}>
+              <Link
+                to="/forgot-password"
+                style={{ fontSize: '13px', color: C.green, fontWeight: '600', textDecoration: 'none' }}
+                onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+                {lang === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot password?'}
+              </Link>
+            </div>
 
             <button type="submit" disabled={submitting} aria-busy={submitting || undefined}
               style={{ padding: '14px', background: submitting ? '#6AAF74' : C.green, color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s', marginTop: '4px', letterSpacing: '-0.2px' }}
@@ -304,7 +361,7 @@ const Login = () => {
 };
 
 // ─── Simple text input ────────────────────────────────────────────────────────
-const FieldRow = ({ label, name, type, placeholder, value, onChange, autoFocus }) => {
+const FieldRow = ({ label, name, type, placeholder, value, onChange, autoFocus, maxLength }) => {
   const { isRTL } = useLang();
   const [focused, setFocused] = useState(false);
   return (
@@ -315,6 +372,7 @@ const FieldRow = ({ label, name, type, placeholder, value, onChange, autoFocus }
       <input
         id={name} name={name} type={type} value={value} onChange={onChange}
         placeholder={placeholder} required autoFocus={autoFocus}
+        maxLength={maxLength}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{
           width: '100%', padding: '12px 14px', boxSizing: 'border-box',

@@ -76,6 +76,14 @@ Payment methods:
 The most important thing is that the app should have Arabic as the default primary language.
 If the user wants to switch the language to English, they should be able to change it either from the registration page or from the settings.
 
+✅ **DONE — Full app i18n implemented (May 2026):**
+- `LangContext` with Arabic/English DICT and `useLang()` / `t()` hook
+- `LangToggle` on Login and Register screens
+- Settings page Language section saves to global context + persists via `localStorage`
+- **All seller pages, buyer pages, and both layout sidebars** wired to `t()` — every nav label, button, heading, empty state, and section title switches when the language changes
+- `dir` attributes switched from hardcoded `"rtl"` to `{isRTL ? 'rtl' : 'ltr'}` throughout
+- 400+ translation keys added covering `dashboard.*`, `listings.*`, `herd.*`, `expenses.*`, `income.*`, `statements.*`, `dairy.*`, `supplies.*`, `buyer.*`, `settings.*`, `nav.*`, `seller.*`, `footer.*`
+
 ---
 
 ## Phase 2 — Enhanced Features
@@ -105,6 +113,8 @@ The merchant has a dedicated financial statements page at /seller/statements:
 * BuyerBrowse farm cards: star row + review count + "موثوق ✓" amber badge (≥4.5) or green "✓ موثّق" badge
 * /api/sellers endpoint: returns averageRating + reviewCount in seller projection
 * AdminReviews page: tab bar (الكل / ⭐ عالية ≥4 / ⚠ منخفضة <3), search + sort, ReviewRow with star display, expand comment, two-step delete; AdminLayout nav link ⭐ Reviews
+* `GET /api/reviews/my-reviewed` (buyer-only) — returns array of order IDs already reviewed; placed before `/:sellerId` param route to avoid Express treating the string as a MongoDB ObjectId; BuyerOrders fetches this on mount via `Promise.all` with orders fetch and stores result in a `Set` so `alreadyReviewed` prop initializes `OrderCard` state correctly across sessions/refreshes
+* BuyerFarmDetail reviews section always rendered: empty state "لا توجد تقييمات بعد — كن أول من يقيّم هذه المزرعة" when no reviews exist; when reviews exist renders rating summary (average score + 5→1 star breakdown bars with proportional widths computed inline via IIFE) followed by review cards
 
 ### 13. Eid Al-Adha Module (موسم العيد) ✅ MOSTLY DONE
 
@@ -508,6 +518,9 @@ Backend: `fcmToken: { type: String, default: null }` on User model + `PATCH /aut
 **Sprint 16 — Backend Deployment ✅**
 Backend deployed to Render (free tier) at `https://farmflow-backend-g07p.onrender.com`. MongoDB Atlas M0 cluster provisioned (Ireland, free forever) at `cluster0.mr7xjcy.mongodb.net/farmflow`. Mobile `.env` updated to Render URL; APK rebuilt (32 MB) and redistributed via Firebase App Distribution. Note: `/uploads` directory is ephemeral on Render — images are lost on redeploy until Cloudinary is integrated.
 
+**Sprint 17 — Full App i18n (M3.8) ✅**
+`l10n.yaml` + `lib/core/l10n/l10n_ext.dart` (`context.l10n` shorthand). `app_en.arb` + `app_ar.arb` expanded to ~200 keys. All 35 feature screens updated — 759 hardcoded strings replaced. `AppLocalizations.delegate` added to `main.dart`. `flutter analyze` 0 errors, 0 warnings. Language toggle (AR↔EN) now switches all screen chrome instantly across buyer/seller/admin.
+
 **Sprint 15 — Release (M23) ✅**
 **Icons:** `dart run flutter_launcher_icons` — adaptive Android icon (green `#3A7D44` bg + `assets/icon/icon_foreground.png`); iOS icon with alpha stripped (`remove_alpha_ios: true`). Assets at `assets/icon/icon.png`.
 **Splash:** `dart run flutter_native_splash:create` — green `#3A7D44` (light) / `#2D6235` (dark) background + centered `assets/images/splash_logo.png`; Android v21/v31 window inset styles + iOS `LaunchScreen.storyboard`.
@@ -528,9 +541,137 @@ Backend deployed to Render (free tier) at `https://farmflow-backend-g07p.onrende
 |------|-------|
 | iOS signed IPA (M23.3/M23.7) | Xcode archive ready; needs Apple Developer account + provisioning profile in Xcode Organizer |
 | Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
-| iOS signed IPA (M23.3/M23.7) | Xcode archive ready; needs Apple Developer account + provisioning profile in Xcode Organizer |
-| Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
 | Backend deployment | ✅ Live at `https://farmflow-backend-g07p.onrender.com` (Render free tier, MongoDB Atlas M0) |
 | Cloud image storage | `/uploads` ephemeral on Render — migrate to Cloudinary before production use |
 | Push activation (M16.4/M16.8) | ✅ `FIREBASE_SERVICE_ACCOUNT_JSON` set in Render env vars — Firebase initialized, server-side push live |
 | Offline degradation (M6.4) | Deferred to v2; online-first acceptable for v1 |
+| Full i18n (M3.8) | ✅ Complete — Sprint 17; all 35 screens updated; `context.l10n` extension; AR/EN toggle fully functional |
+| Sprint 18 features | ✅ VetRecordsScreen, BreedSettingsScreen, buyer order tabs, price-range filter in buyer home |
+
+---
+
+## Electron Desktop App (farmflow_desktop/) ✅
+
+> **Stack:** Electron 32 · electron-builder 25 · electron-store · electron-updater 6 · React frontend (shared with web, served via `app://` custom protocol)
+
+### Phase 1 — Foundation ✅
+- `farmflow_desktop/` bootstrapped with `electron` + `electron-builder` + `electron-store`.
+- `BrowserWindow` with saved bounds/maximized state via `electron-store`.
+- Dev: loads `http://localhost:5173` (Vite HMR). Prod: loads `app://localhost/`.
+- `webSecurity` relaxed in dev only; `contextIsolation: true`, `nodeIntegration: false`.
+- `app://` scheme registered as privileged (standard + secure + fetch + service workers).
+
+### Phase 2 — Production Protocol Handler ✅
+- `protocol.handle('app', …)` serves React SPA from `extraResources/frontend/dist`.
+- `/api/*` and `/uploads/*` proxied to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`; overridable via `FARMFLOW_API_URL` env var).
+- SPA fallback: paths with no file extension → `index.html`.
+
+### Phase 3 — IPC & File Export ✅
+- `src/ipc/file.js`: `save-file` handle — writes Buffer to user-chosen path via `dialog.showSaveDialog`.
+- `preload.js` exposes `window.electron.saveFile({ filename, defaultPath, buffer })`.
+- `isDesktop` flag (`frontend/src/utils/platform.js`): `!!window.electron?.isDesktop`.
+- Seller pages with native save dialog: `SellerStatements`, `SellerExpenses`, `SellerIncome`, `SellerHerd`.
+
+### Phase 4 — OS Notifications & Badge ✅
+- `src/ipc/notify.js`: `notify` handle → `new Notification(…).show()` with app icon.
+- `set-badge` handle: macOS dock badge (`app.setBadgeCount`); Windows taskbar overlay (SVG badge image).
+- Badge forwarded to tray icon via `onBadgeChange` callback.
+
+### Phase 5 — Native App Menu & Keyboard Shortcuts ✅
+- `src/ipc/menu.js`: Arabic native menu (File / Edit / View / Window).
+- File menu broadcasts `menu-action` IPC: `export-csv` (Cmd+Shift+E) and `export-pdf` (Cmd+Shift+P).
+- `preload.js` exposes `window.electron.onMenuAction(cb)` — returns unsubscribe fn for `useEffect` cleanup.
+
+### Phase 6 — System Tray ✅
+- `src/tray.js`: 16×16 tray icon; Arabic context menu (فتح FarmFlow / خروج).
+- Close button hides to tray; `app._quitting` flag distinguishes real quit from hide.
+- `updateBadge(n)`: red SVG circle overlay on tray icon; plain icon restored at 0.
+
+### Phase 7 — Auto-Updater ✅
+- `src/updater.js`: `electron-updater` with `autoDownload + autoInstallOnAppQuit`.
+- Skipped in dev. In prod: `checkForUpdates()` on launch → Arabic dialogs.
+- `publish` config: GitHub Releases (owner: abdelrahmankhalil, repo: FarmFlow).
+- Builds: macOS DMG (arm64 + x64), Windows NSIS (x64).
+
+### Remaining Desktop Items
+
+| Item | Notes |
+|------|-------|
+| Preload IPC activation | ✅ All IPC bridges now live: saveFile, openFile, savePdf, notify, setBadge, onMenuAction, onDeepLink |
+| Code signing (macOS) | Apple Developer certificate + notarization via `electron-builder` `afterSign` hook |
+| Code signing (Windows) | EV certificate or self-signed for NSIS installer |
+| CI/CD release pipeline | GitHub Actions: build DMG + NSIS on tag push, upload to GitHub Releases |
+
+---
+
+### 33. In-App Messaging (الرسائل) ✅ DONE
+
+* `Conversation` model: `participants[]` (always 2 users), `context { type: listing|order|general, refId, label }` for linking thread to a listing/order, `lastMessage { body, sender, at }` denormalized for inbox display without extra queries; compound index `{ participants: 1, updatedAt: -1 }`
+* `Message` model: `conversation` ref, `sender` ref, `body` (max 1000 chars), `read` boolean; indexed on `conversation` + `read` for efficient unread queries
+* Backend `/api/messages` (all routes require `protect` middleware):
+  - `GET /` — inbox: all conversations for current user sorted by `updatedAt` desc, with per-conversation unread count via `countDocuments`
+  - `GET /unread-count` — total unread messages across all conversations (placed before `/:id` param route)
+  - `POST /` — start or retrieve existing conversation with a user (accepts `recipientId`, `contextType`, `contextRefId`, `contextLabel`); uses `{ $all: [myId, recipientId], $size: 2 }` to ensure exactly one conversation per pair
+  - `GET /:id` — paginated message thread (default 50, sorted newest-first then reversed for display)
+  - `POST /:id` — send message; updates `conversation.lastMessage` denormalized field; fires `new_message` notification to recipient via `createNotification`
+  - `PATCH /:id/read` — bulk mark all unread messages in thread as read: `Message.updateMany({ conversation, sender: { $ne: userId }, read: false }, { $set: { read: true } })`
+* `Notification` model: `new_message` added to type enum
+* `messageService.js` frontend service: 6 functions (`getConversations`, `getUnreadCount`, `getOrCreate`, `getMessages`, `sendMessage`, `markRead`)
+* `MessagesPage.jsx` shared component (used by both buyer and seller via `basePath` prop):
+  - Two-panel layout: 320 px conversation list + flex chat panel
+  - `ConvItem`: avatar initials, unread badge dot, last message preview, context label chip
+  - `ChatBubble`: RTL layout, green for sender / white for recipient, read receipts ✓ (sent) / ✓✓ (read)
+  - Active chat: 5 s polling via `setInterval`; `markRead` called on conversation open and whenever poll detects unread messages from the other party
+  - `?with=<userId>&contextType=&contextLabel=` URL params handled on mount to auto-open or create a conversation; params cleared with `navigate({ search: '' }, { replace: true })` after processing
+  - Mobile-responsive: `mobileView` state toggles between `.msg-sidebar` and `.msg-chat` CSS classes; back button returns to list
+  - Empty inbox: role-aware copy for buyer vs seller
+* `BuyerMessages.jsx` + `SellerMessages.jsx` — thin wrappers: `<MessagesPage basePath="/buyer|seller" />`
+* `App.jsx` routes: `/buyer/messages` → `<BuyerMessages />`, `/seller/messages` → `<SellerMessages />`
+* `BuyerLayout`: 💬 الرسائل nav link; `msgUnread` state polled every 30 s via `getUnreadCount`; red badge rendered in desktop nav bar, dropdown menu, and mobile drawer
+* `SellerLayout`: same; collapsed sidebar shows badge as small dot on the icon itself; expanded/mobile shows count pill after label
+* `BuyerFarmDetail`: "💬 رسالة للبائع" button in farm header → `navigate('/buyer/messages?' + URLSearchParams({ with: seller._id, contextType: 'general', contextLabel: farmName }))`
+
+---
+
+### 35. Security Hardening & API Infrastructure ✅ DONE
+
+* `helmet` middleware applied globally — sets secure HTTP response headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.)
+* `express-rate-limit`: auth endpoints 10 req/15 min; all `/api/` routes 300 req/15 min; both limits disabled in dev (`NODE_ENV !== 'production'`)
+* Error handler masks stack traces in production — returns generic "Internal server error" message
+* **Swagger/OpenAPI docs** at `/api/docs` (swagger-ui-express UI) and `/api/docs.json`; disabled in production by default; set `ENABLE_DOCS=true` env var to expose
+* Listing `draft` status — sellers can save without submitting; admin notifications only fire for non-draft (`status !== 'draft'`) submissions
+* Extended Listing animal types: ostrich, gazelle, oryx, deer, llama, alpaca, donkey, mule
+* Listing buyer search: `?type`, `?minPrice`, `?maxPrice`, `?minWeight`, `?maxWeight`, `?location`, `?delivery=true`, `?q`, `?sort`
+* `GET /api/animals/vet/medical` + `GET /api/animals/vet/vaccinations` — cross-herd views of all medical records / all vaccination entries for the seller (admin sees all)
+* `Review.reply: { body, at }` — seller reply field on Review model; `PATCH /api/reviews/:id/reply` (seller-only, max 500 chars)
+* Order `sourceType: 'listing'|'supply'`; `supply` ref + `quantity`; `createOrder` handles supply orders with quantity validation and minOrderQty enforcement
+* Order `timeline[]` — `{status, at, note}` pushed on every status change; initial `pending` entry on creation
+* Expense `recurringDay` (1–28) — scheduler Job 6 auto-creates monthly instances at 08:00 Cairo; deduplicates by seller+category+note
+* `GET /api/finance/analytics?months=N` — monthly trends, income by type, expense by category, top animal types by revenue, order stats; admin `?sellerId=` scoping
+* `GET /api/admin/platform-analytics?weeks=N` — weekly Monday-aligned user/listing/order/GMV buckets; up to 52 weeks
+* Admin users endpoint paginated with per-user listing/order/revenue stats
+
+---
+
+### 36. Email Service & Auth Enhancements ✅ DONE
+
+* `emailService.js` — Nodemailer SMTP lazy-init singleton; fire-and-forget `sendEmail({ to, subject, html })`; silently skipped when SMTP env vars absent
+* `.env.example` updated: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+* **Email verification** on registration: Arabic RTL welcome email + verification link (24-hour token); `POST /auth/verify-email`; `POST /auth/resend-verification`; `User.isEmailVerified` boolean
+* **Password reset**: `POST /auth/forgot-password` (hashed token, 1-hour expiry, Arabic reset email); `POST /auth/reset-password` (validates token, bcrypt-hashes new password)
+* **Admin 2FA (email OTP)**: admin login returns `{ requires2FA: true, token }` and sends 6-digit code via email (10-min validity); `POST /auth/verify-2fa` completes login; `twoFactorCode/Expiry` on User (select: false)
+* **Notification preferences**: `notifPrefs: { orders, reminders, dairy, messages }` on User model (all default true); `GET/PUT /auth/notif-prefs`; `createNotification` skips in-app creation when pref is false
+* **Email triggers for order events**: `new_order` → seller; `order_confirmed/completed/cancelled` → buyer; sent via `EMAIL_TEMPLATES` in `notify.js` when user has an email address; fire-and-forget
+
+> **Activation:** Set `SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM` in Render env vars. Gmail requires an App Password. All email features degrade gracefully — nothing breaks if SMTP is not configured.
+
+---
+
+### 37. Multi-Farm Support (Backend Foundation) ✅ DONE
+
+* `Farm` model — dedicated Farm collection with: owner (User ref), name, type (livestock/horses/poultry/dairy/exotic/mixed/other), governorate, farmPhone, personalPhone, experience, animalTypes, bio, farmDescription, farmBanner (image path), farmLocation ({lat, lng, address}), farmCertificates[], workingHours ({days[], from, to}), typicalPrices[] ({animalType, price}), averageRating, ratingCount, isActive
+* `/api/farms`: `GET /` (my farms, seller-only), `GET /:id` (public), `POST /` + `PUT /:id` (farmBanner upload via Multer), `DELETE /:id`; all seller routes behind `protect + authorizeRoles('seller')`
+* `POST /api/farms/migrate/self` — converts existing profile-level farm fields (farmName, farmPhone, etc.) to a Farm document for legacy sellers
+* Registration: sellers can include a `farms[]` array to create Farm documents on sign-up; `typicalPrices[]` per farm stored at registration time
+* `Listing.farm`, `DairyProduct.farm`, `Supply.farm` — optional Farm ObjectId ref on all marketplace items for per-farm filtering and analytics
+* **Remaining:** Web frontend multi-farm UI — farm switcher in SellerLayout, per-farm listing/dairy/supply creation, per-farm analytics; currently all items default to the first/only farm

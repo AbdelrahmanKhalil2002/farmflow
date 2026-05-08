@@ -3,44 +3,31 @@ import { getIncome, addIncome, updateIncome, deleteIncome } from '../../services
 import { getMyListings } from '../../services/listingService';
 import { fmt } from '../../utils/format';
 import { useToast } from '../../components/Toast';
+import { isDesktop } from '../../utils/platform';
+import { useLang } from '../../context/LangContext';
+
+import { C as _C } from '../../tokens';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg:         '#F0FAF4',
-  card:       '#FFFFFF',
-  green:      '#3A7D44',
-  greenDark:  '#2D6235',
-  greenBg:    '#DCFCE7',
-  greenText:  '#166534',
+  ..._C,
   greenLight: '#D1FAE5',
   teal:       '#0D9488',
   tealBg:     '#CCFBF1',
   tealText:   '#134E4A',
-  amber:      '#D97706',
-  amberBg:    '#FEF3C7',
-  amberText:  '#92400E',
-  red:        '#DC2626',
-  redBg:      '#FEF2F2',
-  redText:    '#B91C1C',
-  tan:        '#C49A6C',
-  border:     '#BBF7D0',
   borderSoft: '#E8D5C0',
-  text:       '#14532D',
   textBody:   '#1F2937',
-  textMuted:  '#4B7A5A',
-  shadow:     '0 1px 3px rgba(20,83,45,0.07), 0 4px 12px rgba(20,83,45,0.05)',
-  shadowMd:   '0 4px 20px rgba(20,83,45,0.10)',
 };
 
 // ─── Source & status metadata ──────────────────────────────────────────────────
 const SOURCE = {
-  sale:    { label: 'بيع',    emoji: '💰', bg: C.greenBg,  color: C.greenText, dot: '#22C55E', donut: '#16A34A' },
-  deposit: { label: 'عربون', emoji: '💳', bg: C.tealBg,   color: C.tealText,  dot: '#14B8A6', donut: '#0F766E' },
+  sale:    { labelKey: 'income.src.sale',    emoji: '💰', bg: C.greenBg,  color: C.greenText, dot: '#22C55E', donut: '#16A34A' },
+  deposit: { labelKey: 'income.src.deposit', emoji: '💳', bg: C.tealBg,   color: C.tealText,  dot: '#14B8A6', donut: '#0F766E' },
 };
 
 const STATUS_META = {
-  received: { label: 'مُستلم', bg: C.greenBg,  color: C.greenText, dot: '#22C55E' },
-  pending:  { label: 'معلّق',  bg: C.amberBg,  color: C.amberText, dot: '#F59E0B' },
+  received: { labelKey: 'income.status.received', bg: C.greenBg,  color: C.greenText, dot: '#22C55E' },
+  pending:  { labelKey: 'income.status.pending',  bg: C.amberBg,  color: C.amberText, dot: '#F59E0B' },
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,13 +79,14 @@ const parseMeta = (note = '') => {
 };
 
 // ─── CSV export ────────────────────────────────────────────────────────────────
-const exportCSV = (rows) => {
+const exportCSV = async (rows, toast, tFn) => {
+  const filename = `farmflow-income-${today()}.csv`;
   const header = ['Date', 'Source', 'Description', 'Buyer', 'Linked Animal', 'Status', 'Amount (EGP)'];
   const lines = rows.map(e => {
     const { buyer, status, cleanNote } = parseMeta(e.note);
     return [
       new Date(e.date).toISOString().slice(0, 10),
-      SOURCE[e.type]?.label || e.type,
+      tFn ? tFn(SOURCE[e.type]?.labelKey || 'income.src.other') : (e.type || ''),
       cleanNote,
       buyer || '',
       e.listing ? `${e.listing.type}${e.listing.breed ? ` — ${e.listing.breed}` : ''}` : '',
@@ -107,12 +95,24 @@ const exportCSV = (rows) => {
     ];
   });
   const csv = [header, ...lines].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `farmflow-income-${today()}.csv`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+
+  if (isDesktop) {
+    const buffer = Array.from(new TextEncoder().encode('﻿' + csv));
+    const res = await window.electron.saveFile({ filename, buffer });
+    if (res?.success) toast?.success(
+      <span>{tFn ? tFn('herd.csv.saved') : 'File saved'}
+        <button onClick={() => window.electron.openFile(res.filePath)}
+          style={{ marginRight:8, background:'none', border:'none', color:'#3A7D44', cursor:'pointer', fontWeight:700, fontSize:13 }}>{tFn ? tFn('herd.csv.open') : 'Open'} ←</button>
+      </span>
+    );
+  } else {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
 };
 
 // ─── SVG Donut chart (Sale vs Deposit) ────────────────────────────────────────
@@ -172,21 +172,21 @@ const DonutChart = ({ saleTotal, depositTotal }) => {
 };
 
 // ─── Badges ────────────────────────────────────────────────────────────────────
-const SourceBadge = ({ type, small }) => {
+const SourceBadge = ({ type, small, t }) => {
   const s = SOURCE[type] || SOURCE.sale;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: small ? '3px 8px' : '4px 10px', borderRadius: '20px', background: s.bg, color: s.color, fontSize: small ? '11px' : '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-      {s.emoji} {s.label}
+      {s.emoji} {t(s.labelKey)}
     </span>
   );
 };
 
-const StatusBadge = ({ status }) => {
+const StatusBadge = ({ status, t }) => {
   const s = STATUS_META[status] || STATUS_META.received;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '20px', background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, display: 'inline-block' }} />
-      {s.label}
+      {t(s.labelKey)}
     </span>
   );
 };
@@ -225,7 +225,8 @@ const FieldLabel = ({ children }) => (
 const EMPTY_FORM = { type: 'sale', amount: '', date: today(), buyer: '', status: 'received', listing: '', note: '' };
 
 const SellerIncome = () => {
-  const toast = useToast();
+  const toast    = useToast();
+  const { t }    = useLang();
   const [incomes,   setIncomes]   = useState([]);
   const [listings,  setListings]  = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -262,7 +263,7 @@ const SellerIncome = () => {
         setIncomes(incRes.data);
         setListings(listRes.data);
       })
-      .catch(() => setFetchErr('Failed to load income data.'))
+      .catch(() => setFetchErr(t('income.loadErr')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -319,6 +320,14 @@ const SellerIncome = () => {
     });
   }, [incomes, typeFilter, dateFrom, dateTo, search]);
 
+  // ── Desktop menu shortcut: Cmd+Shift+E → export CSV ──────────────────────
+  useEffect(() => {
+    if (!window.electron?.onMenuAction) return;
+    return window.electron.onMenuAction(({ type }) => {
+      if (type === 'export-csv') exportCSV(visible, toast);
+    });
+  }, [visible, toast]);
+
   // ── Form helpers ───────────────────────────────────────────────────────────
   const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -348,7 +357,7 @@ const SellerIncome = () => {
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.amount || Number(form.amount) <= 0) { setFormErr('Enter a valid amount.'); return; }
+    if (!form.amount || Number(form.amount) <= 0) { setFormErr(t('income.form.invalidAmount')); return; }
     setFormErr('');
     setSubmitting(true);
 
@@ -365,11 +374,11 @@ const SellerIncome = () => {
         const { data } = await updateIncome(editId, payload);
         setIncomes(prev => prev.map(x => x._id === editId ? data : x));
         setEditId(null);
-        toast.success('Income entry updated.');
+        toast.success(t('income.updateSuccess'));
       } else {
         const { data } = await addIncome(payload);
         setIncomes(prev => [data, ...prev]);
-        toast.success('Income recorded.');
+        toast.success(t('income.addSuccess'));
       }
       setForm(EMPTY_FORM);
     } catch (err) {
@@ -385,9 +394,9 @@ const SellerIncome = () => {
     try {
       await deleteIncome(id);
       setIncomes(prev => prev.filter(x => x._id !== id));
-      toast.success('Income entry deleted.');
+      toast.success(t('income.deleteSuccess'));
     } catch {
-      toast.error('Failed to delete income entry. Please try again.');
+      toast.error(t('income.deleteErr'));
     } finally {
       setDeleting(false);
       setDeletingId(null);
@@ -411,14 +420,14 @@ const SellerIncome = () => {
         <div style={{ position: 'absolute', left: 20, bottom: -30, fontSize: '90px', opacity: 0.04, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🌿</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>Income</h1>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>{t('income.title')}</h1>
             <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>
-              {loading ? 'Loading…' : `${incomes.length} entr${incomes.length !== 1 ? 'ies' : 'y'} · ${fmtSAR(incomes.reduce((s, i) => s + i.amount, 0))} all time`}
+              {loading ? t('common.loading') : `${incomes.length} ${t('income.entryCount')} · ${fmtSAR(incomes.reduce((s, i) => s + i.amount, 0))} ${t('income.allTime')}`}
             </p>
           </div>
-          <button type="button" onClick={() => exportCSV(visible)}
+          <button type="button" onClick={() => exportCSV(visible, toast, t)}
             style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '9px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-            ⬇ Export CSV
+            ⬇ {t('income.downloadCSV')}
           </button>
         </div>
       </div>
@@ -439,18 +448,18 @@ const SellerIncome = () => {
 
             {/* Total this month */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>This Month</p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('income.thisMonth')}</p>
               <p style={{ margin: 0, fontSize: '26px', fontWeight: '800', color: C.greenText, letterSpacing: '-0.5px', lineHeight: 1 }}>
                 {fmtSAR(thisMonthTotal)}
               </p>
-              <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>{thisMonth.length} entr{thisMonth.length !== 1 ? 'ies' : 'y'}</p>
+              <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>{thisMonth.length} {t('income.entryCount')}</p>
             </div>
 
             {/* Trend vs last month */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>vs Last Month</p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('income.vsLastMonth')}</p>
               {trendPct === null ? (
-                <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>No prior data</p>
+                <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>{t('common.noData')}</p>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
@@ -459,7 +468,7 @@ const SellerIncome = () => {
                     </span>
                   </div>
                   <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>
-                    {trendPct >= 0 ? 'Up from' : 'Down from'} {fmtSAR(lastMonthTotal)}
+                    {trendPct >= 0 ? t('income.upFrom') : t('income.downFrom')} {fmtSAR(lastMonthTotal)}
                   </p>
                 </>
               )}
@@ -467,20 +476,20 @@ const SellerIncome = () => {
 
             {/* Sale vs Deposit donut */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '16px 18px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Source Breakdown</p>
+              <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('income.sourceBreakdown')}</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <DonutChart saleTotal={saleTotal} depositTotal={depositTotal} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
-                  {[{ key: 'sale', total: saleTotal }, { key: 'deposit', total: depositTotal }].map(({ key, total: t }) => {
+                  {[{ key: 'sale', total: saleTotal }, { key: 'deposit', total: depositTotal }].map(({ key, total: amt }) => {
                     const s = SOURCE[key];
                     return (
                       <div key={key}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: s.color }}>{s.emoji} {s.label}</span>
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: C.textBody }}>{fmtSAR(t)}</span>
+                          <span style={{ fontSize: '11px', fontWeight: '700', color: s.color }}>{s.emoji} {t(s.labelKey)}</span>
+                          <span style={{ fontSize: '11px', fontWeight: '700', color: C.textBody }}>{fmtSAR(amt)}</span>
                         </div>
                         <div style={{ height: '5px', background: '#E8F5E9', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${(saleTotal + depositTotal) > 0 ? (t / (saleTotal + depositTotal)) * 100 : 0}%`, background: s.donut, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                          <div style={{ height: '100%', width: `${(saleTotal + depositTotal) > 0 ? (amt / (saleTotal + depositTotal)) * 100 : 0}%`, background: s.donut, borderRadius: '3px', transition: 'width 0.6s ease' }} />
                         </div>
                       </div>
                     );
@@ -491,16 +500,16 @@ const SellerIncome = () => {
 
             {/* Average sale price */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '18px 20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
-              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Avg Sale Price</p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{t('income.avgSalePrice')}</p>
               <p style={{ margin: 0, fontSize: '26px', fontWeight: '800', color: C.teal, letterSpacing: '-0.5px', lineHeight: 1 }}>
                 {avgSalePrice != null ? fmtSAR(avgSalePrice) : '—'}
               </p>
               <p style={{ margin: '5px 0 0', fontSize: '12px', color: C.textMuted }}>
                 {avgSalePrice != null
-                  ? `${saleEntries.length} sale${saleEntries.length !== 1 ? 's' : ''} this month`
+                  ? `${saleEntries.length} ${t('income.salesThisMonth')}`
                   : allTimeAvgSale != null
-                    ? `All time: ${fmtSAR(allTimeAvgSale)}`
-                    : 'No sales yet'}
+                    ? `${t('income.allTime')}: ${fmtSAR(allTimeAvgSale)}`
+                    : t('income.noSalesYet')}
               </p>
             </div>
           </div>
@@ -517,9 +526,9 @@ const SellerIncome = () => {
               <span style={{ fontSize: '20px' }}>{editId ? '✏️' : '➕'}</span>
               <div>
                 <span style={{ fontWeight: '700', fontSize: '15px', color: C.text }}>
-                  {editId ? 'Edit Income Entry' : 'Record Income'}
+                  {editId ? t('income.editTitle') : t('income.addTitle')}
                 </span>
-                {editId && <span style={{ fontSize: '12px', color: C.textMuted, marginLeft: '10px' }}>Editing — save to apply changes</span>}
+                {editId && <span style={{ fontSize: '12px', color: C.textMuted, marginLeft: '10px' }}>{t('income.editModeHint')}</span>}
               </div>
             </div>
             {!editId && (
@@ -533,18 +542,18 @@ const SellerIncome = () => {
 
               {/* Type toggle cards */}
               <div>
-                <FieldLabel>Income Source *</FieldLabel>
+                <FieldLabel>{t('income.form.source')} *</FieldLabel>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  {['sale', 'deposit'].map(t => {
-                    const s = SOURCE[t];
-                    const active = form.type === t;
+                  {['sale', 'deposit'].map(srcKey => {
+                    const s = SOURCE[srcKey];
+                    const active = form.type === srcKey;
                     return (
-                      <button key={t} type="button" onClick={() => setF('type', t)}
+                      <button key={srcKey} type="button" onClick={() => setF('type', srcKey)}
                         style={{ flex: 1, padding: '14px 10px', borderRadius: '12px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}>
                         <div style={{ fontSize: '22px', marginBottom: '4px' }}>{s.emoji}</div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: active ? C.greenText : C.textMuted }}>{s.label}</div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: active ? C.greenText : C.textMuted }}>{t(s.labelKey)}</div>
                         <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>
-                          {t === 'sale' ? 'Full sale received' : 'Partial / advance payment'}
+                          {srcKey === 'sale' ? t('income.form.saleDesc') : t('income.form.depositDesc')}
                         </div>
                       </button>
                     );
@@ -555,13 +564,13 @@ const SellerIncome = () => {
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px' }}>
                 {/* Date */}
                 <div>
-                  <FieldLabel>Date *</FieldLabel>
+                  <FieldLabel>{t('income.form.date')} *</FieldLabel>
                   <FI type="date" value={form.date} onChange={e => setF('date', e.target.value)} required max={today()} />
                 </div>
 
                 {/* Amount */}
                 <div>
-                  <FieldLabel>Amount *</FieldLabel>
+                  <FieldLabel>{t('income.form.amount')} *</FieldLabel>
                   <div style={{ position: 'relative' }}>
                     <FI type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setF('amount', e.target.value)} placeholder="0.00" required style={{ paddingRight: '54px' }} />
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '700', color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
@@ -570,9 +579,9 @@ const SellerIncome = () => {
 
                 {/* Linked listing */}
                 <div>
-                  <FieldLabel>Linked Animal <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span></FieldLabel>
+                  <FieldLabel>{t('income.form.linkedAnimal')} <span style={{ fontWeight: 400, textTransform: 'none' }}>{t('common.optional')}</span></FieldLabel>
                   <FSel value={form.listing} onChange={e => setF('listing', e.target.value)}>
-                    <option value="">— None —</option>
+                    <option value="">— {t('income.form.noAnimal')} —</option>
                     {listings.map(l => (
                       <option key={l._id} value={l._id}>
                         {l.type}{l.breed ? ` — ${l.breed}` : ''}
@@ -583,24 +592,23 @@ const SellerIncome = () => {
 
                 {/* Buyer name */}
                 <div>
-                  <FieldLabel>Buyer Name <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span></FieldLabel>
-                  <FI type="text" value={form.buyer} onChange={e => setF('buyer', e.target.value)} placeholder="e.g. Mohammed Al-Rashid" />
+                  <FieldLabel>{t('income.form.buyerName')} <span style={{ fontWeight: 400, textTransform: 'none' }}>{t('common.optional')}</span></FieldLabel>
+                  <FI type="text" value={form.buyer} onChange={e => setF('buyer', e.target.value)} placeholder={t('income.form.buyerPlaceholder')} />
                 </div>
               </div>
 
               {/* Status */}
               <div>
-                <FieldLabel>Payment Status</FieldLabel>
+                <FieldLabel>{t('income.form.paymentStatus')}</FieldLabel>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {[{ k: 'received', icon: '✅', sub: 'Payment in hand' }, { k: 'pending', icon: '⏳', sub: 'Awaiting payment' }].map(({ k, icon, sub }) => {
+                  {[{ k: 'received', icon: '✅', subKey: 'income.form.statusReceivedDesc' }, { k: 'pending', icon: '⏳', subKey: 'income.form.statusPendingDesc' }].map(({ k, icon, subKey }) => {
                     const active = form.status === k;
-                    const sm = STATUS_META[k];
                     return (
                       <button key={k} type="button" onClick={() => setF('status', k)}
                         style={{ flex: 1, padding: '10px 12px', borderRadius: '10px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}>
                         <div style={{ fontSize: '18px', marginBottom: '3px' }}>{icon}</div>
-                        <div style={{ fontSize: '12px', fontWeight: '700', color: active ? C.greenText : C.textMuted, textTransform: 'capitalize' }}>{k}</div>
-                        <div style={{ fontSize: '10px', color: C.textMuted, marginTop: '1px' }}>{sub}</div>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: active ? C.greenText : C.textMuted }}>{t(STATUS_META[k].labelKey)}</div>
+                        <div style={{ fontSize: '10px', color: C.textMuted, marginTop: '1px' }}>{t(subKey)}</div>
                       </button>
                     );
                   })}
@@ -609,11 +617,11 @@ const SellerIncome = () => {
 
               {/* Notes */}
               <div>
-                <FieldLabel>Notes <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span></FieldLabel>
+                <FieldLabel>{t('income.form.notes')} <span style={{ fontWeight: 400, textTransform: 'none' }}>{t('common.optional')}</span></FieldLabel>
                 <textarea
                   value={form.note}
                   onChange={e => setF('note', e.target.value)}
-                  placeholder="e.g. 'Sold 3 Najdi sheep to Al-Rashid farm, transport arranged for Friday'"
+                  placeholder={t('income.form.notesPlaceholder')}
                   rows={3}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: '#fff', fontSize: '14px', color: C.textBody, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, transition: 'border-color 0.15s' }}
                   onFocus={e => e.target.style.borderColor = C.green}
@@ -631,7 +639,7 @@ const SellerIncome = () => {
                 {editId && (
                   <button type="button" onClick={cancelEdit}
                     style={{ padding: '10px 18px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 )}
                 <button type="submit" disabled={submitting}
@@ -639,7 +647,7 @@ const SellerIncome = () => {
                   onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = C.greenDark; }}
                   onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.green; }}
                 >
-                  {submitting ? 'Saving…' : editId ? '✓ Update Entry' : '+ Record Income'}
+                  {submitting ? t('common.saving') : editId ? `✓ ${t('income.form.update')}` : `+ ${t('income.form.submit')}`}
                 </button>
               </div>
             </form>
@@ -652,9 +660,9 @@ const SellerIncome = () => {
           <div style={{ position: 'relative', flex: '1 1 180px', minWidth: '140px' }}>
             <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: C.textMuted, pointerEvents: 'none' }}>🔍</span>
             <input
-              type="text" placeholder="Search by buyer, notes…" value={search}
+              type="text" placeholder={t('income.filter.searchPlaceholder')} value={search}
               onChange={e => setSearch(e.target.value)}
-              aria-label="Search income by buyer or notes"
+              aria-label={t('income.filter.searchLabel')}
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 30px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '13px', color: C.textBody, transition: 'border-color 0.15s' }}
               onFocus={e => e.target.style.borderColor = C.green}
               onBlur={e => e.target.style.borderColor = C.border}
@@ -666,7 +674,7 @@ const SellerIncome = () => {
 
           {/* Type pills */}
           <div style={{ display: 'flex', gap: '5px' }}>
-            {[{ k: 'all', label: 'All' }, { k: 'sale', label: '🤝 Sales' }, { k: 'deposit', label: '💰 Deposits' }].map(({ k, label }) => (
+            {[{ k: 'all', label: t('common.all') }, { k: 'sale', label: `${SOURCE.sale.emoji} ${t('income.src.sale')}` }, { k: 'deposit', label: `${SOURCE.deposit.emoji} ${t('income.src.deposit')}` }].map(({ k, label }) => (
               <button key={k} type="button" onClick={() => setTypeFilter(k)}
                 aria-pressed={typeFilter === k}
                 style={{ padding: '7px 12px', borderRadius: '20px', border: `1.5px solid ${typeFilter === k ? C.green : C.border}`, background: typeFilter === k ? C.green : C.card, color: typeFilter === k ? '#fff' : C.textMuted, fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
@@ -682,7 +690,7 @@ const SellerIncome = () => {
               onFocus={e => e.target.style.borderColor = C.green}
               onBlur={e => e.target.style.borderColor = C.border}
             />
-            <span aria-hidden="true" style={{ fontSize: '12px', color: C.textMuted }}>to</span>
+            <span aria-hidden="true" style={{ fontSize: '12px', color: C.textMuted }}>{t('common.to')}</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={today()}
               style={{ padding: '8px 10px', borderRadius: '9px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '12px', color: C.textBody }}
               onFocus={e => e.target.style.borderColor = C.green}
@@ -691,7 +699,7 @@ const SellerIncome = () => {
             {(dateFrom || dateTo) && (
               <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); }}
                 style={{ padding: '6px 10px', borderRadius: '9px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                Clear
+                {t('common.clear')}
               </button>
             )}
           </div>
@@ -701,7 +709,7 @@ const SellerIncome = () => {
         {!loading && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', color: C.textMuted }}>
-              {visible.length} result{visible.length !== 1 ? 's' : ''}{visible.length !== incomes.length ? ` (filtered from ${incomes.length})` : ''}
+              {visible.length} {t('income.results')}{visible.length !== incomes.length ? ` (${t('income.filteredFrom').replace('{total}', incomes.length)})` : ''}
             </span>
             {visible.length > 0 && (
               <span style={{ fontSize: '13px', fontWeight: '800', color: C.greenText }}>
@@ -725,17 +733,17 @@ const SellerIncome = () => {
           <div style={{ textAlign: 'center', padding: '56px 24px', background: C.card, borderRadius: '16px', border: `1.5px dashed ${C.border}` }}>
             <div style={{ fontSize: '52px', marginBottom: '12px' }}>{search || typeFilter !== 'all' || dateFrom || dateTo ? '🔍' : '🌱'}</div>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '700', color: C.text }}>
-              {search || typeFilter !== 'all' || dateFrom || dateTo ? 'No income entries match your filters' : 'No income recorded yet'}
+              {search || typeFilter !== 'all' || dateFrom || dateTo ? t('income.empty.filteredTitle') : t('income.empty.title')}
             </h3>
             <p style={{ margin: '0 0 20px', fontSize: '14px', color: C.textMuted }}>
               {search || typeFilter !== 'all' || dateFrom || dateTo
-                ? 'Try clearing your filters to see all entries.'
-                : 'Start recording your first sale or deposit above.'}
+                ? t('income.empty.filteredHint')
+                : t('income.empty.hint')}
             </p>
             {(search || typeFilter !== 'all' || dateFrom || dateTo) && (
               <button type="button" onClick={() => { setSearch(''); setTypeFilter('all'); setDateFrom(''); setDateTo(''); }}
                 style={{ padding: '9px 18px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: C.card, color: C.textBody, fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                Clear all filters
+                {t('income.empty.clearAll')}
               </button>
             )}
           </div>
@@ -749,7 +757,7 @@ const SellerIncome = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#F0FDF4', borderBottom: `2px solid ${C.border}` }}>
-                  {['Date', 'Source', 'Description & Buyer', 'Animal', 'Status', 'Amount', 'Actions'].map((h, i) => (
+                  {[t('income.col.date'), t('income.col.source'), t('income.col.description'), t('income.col.animal'), t('income.col.status'), t('income.col.amount'), t('income.col.actions')].map((h, i) => (
                     <th key={h} style={{ padding: '12px 14px', textAlign: i >= 5 ? 'right' : 'left', fontSize: '11px', fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.6px', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -772,13 +780,13 @@ const SellerIncome = () => {
 
                       {/* Source */}
                       <td style={{ padding: '12px 14px' }}>
-                        <SourceBadge type={entry.type} small />
+                        <SourceBadge type={entry.type} small t={t} />
                       </td>
 
                       {/* Description & buyer */}
                       <td style={{ padding: '12px 14px', maxWidth: '220px' }}>
                         <div style={{ fontSize: '13px', color: C.textBody, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {cleanNote || <span style={{ color: C.textMuted, fontStyle: 'italic' }}>No description</span>}
+                          {cleanNote || <span style={{ color: C.textMuted, fontStyle: 'italic' }}>{t('income.noDescription')}</span>}
                         </div>
                         {buyer && <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>👤 {buyer}</div>}
                       </td>
@@ -792,7 +800,7 @@ const SellerIncome = () => {
 
                       {/* Status */}
                       <td style={{ padding: '12px 14px' }}>
-                        <StatusBadge status={status} />
+                        <StatusBadge status={status} t={t} />
                       </td>
 
                       {/* Amount */}
@@ -804,14 +812,14 @@ const SellerIncome = () => {
                       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {isDelConfirm ? (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '600' }}>Delete?</span>
+                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '600' }}>{t('income.delete.confirm')}</span>
                             <button type="button" onClick={() => confirmDelete(entry._id)} disabled={deleting}
                               style={{ padding: '5px 10px', borderRadius: '7px', border: 'none', background: C.red, color: '#fff', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer' }}>
-                              {deleting ? '…' : 'Yes'}
+                              {deleting ? '…' : t('common.yes')}
                             </button>
                             <button type="button" onClick={() => setDeletingId(null)}
                               style={{ padding: '5px 10px', borderRadius: '7px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                              No
+                              {t('common.no')}
                             </button>
                           </div>
                         ) : (
@@ -820,7 +828,7 @@ const SellerIncome = () => {
                               style={{ padding: '6px 11px', borderRadius: '7px', border: `1px solid ${C.border}`, background: C.card, color: C.textBody, fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = C.green; e.currentTarget.style.color = C.green; }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textBody; }}>
-                              ✏ Edit
+                              ✏ {t('common.edit')}
                             </button>
                             <button type="button" onClick={() => setDeletingId(entry._id)}
                               style={{ padding: '6px 11px', borderRadius: '7px', border: '1px solid #FECACA', background: C.redBg, color: C.redText, fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
@@ -837,7 +845,7 @@ const SellerIncome = () => {
 
             {/* Footer total */}
             <div style={{ padding: '12px 16px', background: '#F0FDF4', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: C.textMuted }}>Total shown:</span>
+              <span style={{ fontSize: '13px', color: C.textMuted }}>{t('income.displayedTotal')}:</span>
               <span style={{ fontSize: '16px', fontWeight: '800', color: C.greenText }}>
                 +{fmtSAR(visible.reduce((s, i) => s + i.amount, 0))}
               </span>
@@ -858,13 +866,13 @@ const SellerIncome = () => {
                   <div style={{ padding: '14px 14px 10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '7px' }}>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <SourceBadge type={entry.type} />
-                        <StatusBadge status={status} />
+                        <SourceBadge type={entry.type} t={t} />
+                        <StatusBadge status={status} t={t} />
                       </div>
                       <span style={{ fontWeight: '800', fontSize: '17px', color: C.greenText }}>+{fmtSAR(entry.amount)}</span>
                     </div>
                     <div style={{ fontSize: '14px', color: cleanNote ? C.textBody : C.textMuted, fontStyle: cleanNote ? 'normal' : 'italic', marginBottom: '5px' }}>
-                      {cleanNote || 'No description'}
+                      {cleanNote || t('income.noDescription')}
                     </div>
                     <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: C.textMuted, flexWrap: 'wrap' }}>
                       <span>📅 {fmtDate(entry.date)}</span>
@@ -875,25 +883,25 @@ const SellerIncome = () => {
                   <div style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}` }}>
                     {isDelConfirm ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ flex: 1, fontSize: '13px', color: C.redText, fontWeight: '600' }}>Delete this entry?</span>
+                        <span style={{ flex: 1, fontSize: '13px', color: C.redText, fontWeight: '600' }}>{t('income.delete.confirmMsg')}</span>
                         <button type="button" onClick={() => confirmDelete(entry._id)} disabled={deleting}
                           style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', background: C.red, color: '#fff', fontSize: '12px', fontWeight: '700', cursor: deleting ? 'not-allowed' : 'pointer' }}>
-                          {deleting ? '…' : 'Delete'}
+                          {deleting ? '…' : t('common.delete')}
                         </button>
                         <button type="button" onClick={() => setDeletingId(null)}
                           style={{ padding: '7px 12px', borderRadius: '8px', border: `1px solid ${C.border}`, background: C.card, color: C.textMuted, fontSize: '12px', cursor: 'pointer' }}>
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button type="button" onClick={() => startEdit(entry)}
                           style={{ flex: 1, padding: '7px 0', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.textBody, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                          ✏ Edit
+                          ✏ {t('common.edit')}
                         </button>
                         <button type="button" onClick={() => setDeletingId(entry._id)}
                           style={{ flex: 1, padding: '7px 0', borderRadius: '8px', border: '1px solid #FECACA', background: C.redBg, color: C.redText, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                          🗑 Delete
+                          🗑 {t('common.delete')}
                         </button>
                       </div>
                     )}

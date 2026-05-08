@@ -6,54 +6,37 @@ import {
   addVaccinationEntry, deleteVaccinationEntry,
   getMedicalRecords, addMedicalRecord, deleteMedicalRecord,
 } from '../../services/animalService';
+import { useLang } from '../../context/LangContext';
 
-const C = {
-  bg:       '#F7FBF7',
-  card:     '#FFFFFF',
-  green:    '#3A7D44',
-  greenDk:  '#2D6235',
-  greenLt:  '#F0F7F1',
-  greenBg:  '#DCFCE7',
-  greenText:'#166534',
-  border:   '#D4E8D6',
-  text:     '#1A2E1C',
-  muted:    '#4B6B4E',
-  textMuted:'#6B8F71',
-  shadow:   '0 2px 8px rgba(26,46,28,0.08)',
-  red:      '#DC2626',
-  redBg:    '#FEF2F2',
-  amber:    '#D97706',
-  amberBg:  '#FEF9C3',
-  amberText:'#92400E',
-};
+import { C } from '../../tokens';
 
-const TYPE_AR    = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
+const TYPE_KEY   = { cattle:'herd.type.cattle', buffalo:'herd.type.buffalo', sheep:'herd.type.sheep', goat:'herd.type.goat', camel:'herd.type.camel', horse:'herd.type.horse', poultry:'herd.type.poultry', rabbit:'herd.type.rabbit', other:'herd.type.other' };
 const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
-const HEALTH_AR  = { healthy:'بصحة جيدة', sick:'مريض', quarantine:'حجر صحي', deceased:'متوفي' };
+const HEALTH_KEY = { healthy:'animalDetail.health.healthy', sick:'animalDetail.health.sick', quarantine:'animalDetail.health.quarantine', deceased:'animalDetail.health.deceased' };
 const HEALTH_COLOR = { healthy: C.green, sick: C.red, quarantine: C.amber, deceased: '#94A3B8' };
-const GENDER_AR    = { male:'ذكر', female:'أنثى', unknown:'—' };
-const STATUS_AR    = { active:'نشط', sold:'مُباع', deceased:'متوفي' };
-const PREGNANCY_AR = { none:'غير حامل', pregnant:'حامل 🤰', recently_gave_birth:'وضعت مؤخرًا 🐣' };
+const GENDER_KEY   = { male:'herd.gender.male', female:'herd.gender.female', unknown:'—' };
+const STATUS_KEY   = { active:'animalDetail.status.active', sold:'animalDetail.status.sold', deceased:'animalDetail.status.deceased' };
+const PREGNANCY_KEY = { none:'animalDetail.pregnancy.none', pregnant:'animalDetail.pregnancy.pregnant', recently_gave_birth:'animalDetail.pregnancy.recentBirth' };
 
 const PREGNANCY_OPTIONS = [
-  { val: 'none',                label: 'غير حامل',      color: '#6B7280' },
-  { val: 'pregnant',            label: '🤰 حامل',        color: '#D97706' },
-  { val: 'recently_gave_birth', label: '🐣 وضعت مؤخرًا', color: '#16A34A' },
+  { val: 'none',                labelKey: 'animalDetail.pregnancy.none',        color: '#6B7280' },
+  { val: 'pregnant',            labelKey: 'animalDetail.pregnancy.pregnant',    color: '#D97706' },
+  { val: 'recently_gave_birth', labelKey: 'animalDetail.pregnancy.recentBirth', color: '#16A34A' },
 ];
 
-const ageLabel = (dob) => {
+const ageLabel = (dob, t) => {
   if (!dob) return null;
   const months = Math.floor((Date.now() - new Date(dob).getTime()) / (30.44 * 24 * 3600 * 1000));
-  return months < 24 ? `${months} شهر` : `${Math.floor(months / 12)} سنة`;
+  return months < 24 ? `${months} ${t('common.month')}` : `${Math.floor(months / 12)} ${t('common.year')}`;
 };
 
 const fmtDate = (d) => new Date(d).toLocaleDateString('ar-EG', { year:'numeric', month:'short', day:'numeric' });
 
 // ── Mini SVG Weight Chart ─────────────────────────────────────────────────────
-const WeightChart = ({ entries }) => {
+const WeightChart = ({ entries, tFn }) => {
   if (entries.length < 2) return (
     <div style={{ textAlign: 'center', padding: '24px', color: C.textMuted, fontSize: 13 }}>
-      سجّل قياسين أو أكثر لعرض مخطط النمو
+      {tFn('animalDetail.chartHint')}
     </div>
   );
 
@@ -101,7 +84,7 @@ const WeightChart = ({ entries }) => {
         <g key={i}>
           <circle cx={px(i)} cy={py(e.weightKg)} r={4} fill={C.green} stroke="#fff" strokeWidth={2} />
           {i === sorted.length - 1 && (
-            <text x={px(i)} y={py(e.weightKg) - 10} textAnchor="middle" fontSize={10} fontWeight="700" fill={C.green}>{e.weightKg} كجم</text>
+            <text x={px(i)} y={py(e.weightKg) - 10} textAnchor="middle" fontSize={10} fontWeight="700" fill={C.green}>{e.weightKg} {tFn('common.kg')}</text>
           )}
           {sorted.length <= 8 && (
             <text x={px(i)} y={PAD.top + cH + 18} textAnchor="middle" fontSize={8} fill={C.textMuted}>
@@ -115,7 +98,7 @@ const WeightChart = ({ entries }) => {
 };
 
 // ─── Weight goal editor ───────────────────────────────────────────────────────
-const WeightGoalEditor = ({ animal, animalId, onSaved }) => {
+const WeightGoalEditor = ({ animal, animalId, onSaved, tFn }) => {
   const [open,   setOpen]   = useState(false);
   const [target, setTarget] = useState(animal?.targetWeight    || '');
   const [nextDt, setNextDt] = useState(animal?.nextWeighingDate ? new Date(animal.nextWeighingDate).toISOString().slice(0,10) : '');
@@ -140,10 +123,10 @@ const WeightGoalEditor = ({ animal, animalId, onSaved }) => {
   return (
     <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '18px 20px', boxShadow: C.shadow }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: open ? 16 : 0 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, color: C.text }}>🎯 أهداف النمو والوزن</div>
+        <div style={{ fontWeight: 800, fontSize: 14, color: C.text }}>🎯 {tFn('animalDetail.weightGoals')}</div>
         <button type="button" onClick={() => setOpen(p => !p)}
           style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 12px', fontSize: 12, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
-          {open ? 'إغلاق' : 'تعديل'}
+          {open ? tFn('common.close') : tFn('common.edit')}
         </button>
       </div>
 
@@ -152,25 +135,25 @@ const WeightGoalEditor = ({ animal, animalId, onSaved }) => {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 12 }}>
           {animal?.targetWeight && (
             <div style={{ flex: 1, minWidth: 140 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 4 }}>الوزن المستهدف</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{animal.targetWeight} كجم</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 4 }}>{tFn('animalDetail.targetWeight')}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{animal.targetWeight} {tFn('common.kg')}</div>
               {pct !== null && (
                 <div style={{ marginTop: 6 }}>
                   <div style={{ height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ height: '100%', background: C.green, borderRadius: 3, width: `${pct}%` }} />
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{pct}% من الهدف</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{pct}% {tFn('animalDetail.ofGoal')}</div>
                 </div>
               )}
             </div>
           )}
           {animal?.nextWeighingDate && (
             <div style={{ flex: 1, minWidth: 140 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 4 }}>موعد الوزن القادم</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 4 }}>{tFn('animalDetail.nextWeigh')}</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{fmtDate(animal.nextWeighingDate)}</div>
               {(() => {
                 const d = Math.ceil((new Date(animal.nextWeighingDate) - Date.now()) / (24 * 3600 * 1000));
-                return <div style={{ fontSize: 11, color: d <= 0 ? C.red : d <= 3 ? C.amber : C.muted, marginTop: 3 }}>{d <= 0 ? 'متأخر!' : `خلال ${d} يوم`}</div>;
+                return <div style={{ fontSize: 11, color: d <= 0 ? C.red : d <= 3 ? C.amber : C.muted, marginTop: 3 }}>{d <= 0 ? tFn('animalDetail.overdue') : `${tFn('animalDetail.inDays')} ${d} ${tFn('animalDetail.day')}`}</div>;
               })()}
             </div>
           )}
@@ -178,24 +161,24 @@ const WeightGoalEditor = ({ animal, animalId, onSaved }) => {
       )}
 
       {!open && !animal?.targetWeight && !animal?.nextWeighingDate && (
-        <p style={{ margin: '10px 0 0', fontSize: 13, color: C.muted }}>لم يُحدد وزن مستهدف أو موعد وزن بعد.</p>
+        <p style={{ margin: '10px 0 0', fontSize: 13, color: C.muted }}>{tFn('animalDetail.noGoals')}</p>
       )}
 
       {open && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: 1, minWidth: 120 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الوزن المستهدف (كجم)</label>
-            <input type="number" min="0" step="1" value={target} onChange={e => setTarget(e.target.value)} placeholder="مثال: 120"
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{tFn('animalDetail.targetWeightKg')}</label>
+            <input type="number" min="0" step="1" value={target} onChange={e => setTarget(e.target.value)} placeholder={tFn('animalDetail.targetWeightPlaceholder')}
               style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
           </div>
           <div style={{ flex: 1, minWidth: 150 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>موعد الوزن القادم</label>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{tFn('animalDetail.nextWeigh')}</label>
             <input type="date" value={nextDt} onChange={e => setNextDt(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
           </div>
           <button type="button" onClick={handleSave} disabled={saving}
             style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? '#A7C4AD' : C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
-            {saving ? '…' : 'حفظ'}
+            {saving ? '…' : tFn('common.save')}
           </button>
         </div>
       )}
@@ -207,6 +190,7 @@ const WeightGoalEditor = ({ animal, animalId, onSaved }) => {
 const SellerAnimalDetail = () => {
   const { id }   = useParams();
   const navigate = useNavigate();
+  const { t, isRTL } = useLang();
 
   const [animal,   setAnimal]   = useState(null);
   const [loading,  setLoading]  = useState(true);
@@ -244,7 +228,7 @@ const SellerAnimalDetail = () => {
   useEffect(() => {
     getAnimalById(id)
       .then(r => setAnimal(r.data))
-      .catch(() => setLoadErr('الحيوان غير موجود أو ليس لديك صلاحية عرضه.'))
+      .catch(() => setLoadErr(t('animalDetail.loadErr')))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -272,7 +256,7 @@ const SellerAnimalDetail = () => {
   }, [activeTab, id, animal]);
 
   const handleAddMedical = async () => {
-    if (!medForm.diagnosis.trim()) { setMedErr('أدخل التشخيص'); return; }
+    if (!medForm.diagnosis.trim()) { setMedErr(t('animalDetail.errDiagnosis')); return; }
     setMedErr(''); setSavingMed(true);
     try {
       const payload = { ...medForm };
@@ -282,7 +266,7 @@ const SellerAnimalDetail = () => {
       const r = await getMedicalRecords(id);
       setMedRecords(r.data);
       setMedForm({ date: new Date().toISOString().slice(0,10), diagnosis: '', treatment: '', medication: '', vet: '', cost: '', followUpDate: '', notes: '' });
-    } catch (err) { setMedErr(err?.response?.data?.message || 'خطأ'); }
+    } catch (err) { setMedErr(err?.response?.data?.message || t('common.unknownErr')); }
     finally { setSavingMed(false); }
   };
 
@@ -295,14 +279,14 @@ const SellerAnimalDetail = () => {
   };
 
   const handleAddWeight = async () => {
-    if (!weightForm.weightKg || Number(weightForm.weightKg) <= 0) { setWeightErr('أدخل وزنًا صحيحًا'); return; }
+    if (!weightForm.weightKg || Number(weightForm.weightKg) <= 0) { setWeightErr(t('animalDetail.errWeight')); return; }
     setWeightErr(''); setSavingWeight(true);
     try {
       await addWeightEntry(id, weightForm);
       const r = await getAnimalById(id);
       setAnimal(r.data);
       setWeightForm({ weightKg: '', date: new Date().toISOString().slice(0,10), notes: '' });
-    } catch (err) { setWeightErr(err?.response?.data?.message || 'خطأ'); }
+    } catch (err) { setWeightErr(err?.response?.data?.message || t('common.unknownErr')); }
     finally { setSavingWeight(false); }
   };
 
@@ -314,14 +298,14 @@ const SellerAnimalDetail = () => {
   };
 
   const handleAddVaccination = async () => {
-    if (!vacForm.vaccine.trim()) { setVacErr('أدخل اسم اللقاح'); return; }
+    if (!vacForm.vaccine.trim()) { setVacErr(t('animalDetail.errVaccine')); return; }
     setVacErr(''); setSavingVac(true);
     try {
       await addVaccinationEntry(id, vacForm);
       const r = await getAnimalById(id);
       setAnimal(r.data);
       setVacForm({ vaccine: '', date: new Date().toISOString().slice(0,10), nextDueDate: '', vet: '', notes: '' });
-    } catch (err) { setVacErr(err?.response?.data?.message || 'خطأ'); }
+    } catch (err) { setVacErr(err?.response?.data?.message || t('common.unknownErr')); }
     finally { setSavingVac(false); }
   };
 
@@ -365,7 +349,7 @@ const SellerAnimalDetail = () => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الحيوان نهائيًا؟')) return;
+    if (!window.confirm(t('animalDetail.confirmDelete'))) return;
     try { await deleteAnimal(id); navigate('/seller/herd'); } catch {}
   };
 
@@ -382,7 +366,7 @@ const SellerAnimalDetail = () => {
   };
 
   if (loading) return (
-    <div style={{ textAlign: 'center', padding: '60px 24px', color: C.muted }}>جاري التحميل…</div>
+    <div style={{ textAlign: 'center', padding: '60px 24px', color: C.muted }}>{t('common.loading')}</div>
   );
   if (loadErr) return (
     <div style={{ textAlign: 'center', padding: '60px 24px', background: C.redBg, borderRadius: 16, color: C.red }}>{loadErr}</div>
@@ -396,7 +380,7 @@ const SellerAnimalDetail = () => {
     .sort((a, b) => new Date(a.nextDueDate) - new Date(b.nextDueDate));
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", maxWidth: 760 }} dir="rtl">
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", maxWidth: 760 }} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* Header card */}
       <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 20, boxShadow: C.shadow }}>
@@ -412,21 +396,21 @@ const SellerAnimalDetail = () => {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                 <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text }}>
-                  {TYPE_AR[animal.type] || animal.type}
+                  {t(TYPE_KEY[animal.type]) || animal.type}
                   {animal.breed && ` — ${animal.breed}`}
                 </h1>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 8, background: `${healthColor}18`, color: healthColor }}>
-                  {HEALTH_AR[animal.healthStatus]}
+                  {t(HEALTH_KEY[animal.healthStatus])}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 8, background: C.greenLt, color: C.greenText }}>
-                  {STATUS_AR[animal.status] || animal.status}
+                  {t(STATUS_KEY[animal.status]) || animal.status}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, color: C.muted }}>
                 {animal.tagId && <span>🏷 {animal.tagId}</span>}
-                {animal.gender !== 'unknown' && <span>{animal.gender === 'male' ? '♂' : '♀'} {GENDER_AR[animal.gender]}</span>}
-                {ageLabel(animal.dob) && <span>📅 {ageLabel(animal.dob)}</span>}
-                {animal.currentWeight && <span>⚖️ {animal.currentWeight} كجم</span>}
+                {animal.gender !== 'unknown' && <span>{animal.gender === 'male' ? '♂' : '♀'} {t(GENDER_KEY[animal.gender])}</span>}
+                {ageLabel(animal.dob, t) && <span>📅 {ageLabel(animal.dob, t)}</span>}
+                {animal.currentWeight && <span>⚖️ {animal.currentWeight} {t('common.kg')}</span>}
               </div>
             </div>
 
@@ -435,22 +419,22 @@ const SellerAnimalDetail = () => {
               {animal.status === 'active' && (
                 <button type="button" onClick={handleListForSale}
                   style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  عرض للبيع ←
+                  {t('animalDetail.listForSale')} ←
                 </button>
               )}
               <button type="button" onClick={() => setStatusEdit(p => !p)}
                 style={{ padding: '9px 14px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.card, color: C.muted, fontSize: 13, cursor: 'pointer' }}>
-                تغيير الحالة
+                {t('animalDetail.changeStatus')}
               </button>
               {animal.gender === 'female' && (
                 <button type="button" onClick={() => setPregnancyEdit(p => !p)}
                   style={{ padding: '9px 14px', borderRadius: 9, border: `1px solid #FED7AA`, background: '#FFF7ED', color: '#92400E', fontSize: 13, cursor: 'pointer' }}>
-                  🤰 تحديث الحمل
+                  🤰 {t('animalDetail.updatePregnancy')}
                 </button>
               )}
               <button type="button" onClick={handleDelete}
                 style={{ padding: '9px 14px', borderRadius: 9, border: '1px solid #FECACA', background: C.redBg, color: C.red, fontSize: 13, cursor: 'pointer' }}>
-                حذف
+                {t('common.delete')}
               </button>
             </div>
           </div>
@@ -458,10 +442,10 @@ const SellerAnimalDetail = () => {
           {/* Status picker */}
           {statusEdit && (
             <div style={{ marginTop: 14, display: 'flex', gap: 8, animation: 'slideDown 0.2s ease' }}>
-              {[['active','نشط','#3A7D44'],['sold','مُباع','#D97706'],['deceased','متوفي','#94A3B8']].map(([v, l, color]) => (
+              {[['active','animalDetail.status.active','#3A7D44'],['sold','animalDetail.status.sold','#D97706'],['deceased','animalDetail.status.deceased','#94A3B8']].map(([v, lKey, color]) => (
                 <button key={v} type="button" onClick={() => handleStatusChange(v)} disabled={savingStatus || animal.status === v}
                   style={{ padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${animal.status === v ? color : C.border}`, background: animal.status === v ? `${color}18` : C.card, color: animal.status === v ? color : C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {l}
+                  {t(lKey)}
                 </button>
               ))}
             </div>
@@ -470,14 +454,14 @@ const SellerAnimalDetail = () => {
           {/* Pregnancy editor */}
           {pregnancyEdit && animal.gender === 'female' && (
             <div style={{ marginTop: 14, padding: '14px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 12, animation: 'slideDown 0.2s ease' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 10 }}>تحديث حالة الحمل</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 10 }}>{t('animalDetail.updatePregnancyTitle')}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                {PREGNANCY_OPTIONS.map(p => {
-                  const active = pregnancyForm.pregnancyStatus === p.val;
+                {PREGNANCY_OPTIONS.map(po => {
+                  const active = pregnancyForm.pregnancyStatus === po.val;
                   return (
-                    <button key={p.val} type="button" onClick={() => setPregnancyForm(f => ({ ...f, pregnancyStatus: p.val }))}
-                      style={{ padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${active ? p.color : '#FED7AA'}`, background: active ? `${p.color}18` : '#fff', color: active ? p.color : '#92400E', fontSize: 12, fontWeight: active ? 800 : 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {p.label}
+                    <button key={po.val} type="button" onClick={() => setPregnancyForm(f => ({ ...f, pregnancyStatus: po.val }))}
+                      style={{ padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${active ? po.color : '#FED7AA'}`, background: active ? `${po.color}18` : '#fff', color: active ? po.color : '#92400E', fontSize: 12, fontWeight: active ? 800 : 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {t(po.labelKey)}
                     </button>
                   );
                 })}
@@ -486,12 +470,12 @@ const SellerAnimalDetail = () => {
               {pregnancyForm.pregnancyStatus === 'pregnant' && (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
                   <div style={{ flex: 1, minWidth: 140 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>تاريخ بداية الحمل</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>{t('animalDetail.pregnancyStart')}</label>
                     <input type="date" value={pregnancyForm.pregnancyDate} onChange={e => setPregnancyForm(f => ({ ...f, pregnancyDate: e.target.value }))}
                       style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 8, border: '1.5px solid #FED7AA', background: '#fff', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 140 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>الموعد المتوقع للولادة</label>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>{t('animalDetail.expectedBirth')}</label>
                     <input type="date" value={pregnancyForm.expectedBirthDate} onChange={e => setPregnancyForm(f => ({ ...f, expectedBirthDate: e.target.value }))}
                       style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 8, border: '1.5px solid #FED7AA', background: '#fff', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                   </div>
@@ -500,7 +484,7 @@ const SellerAnimalDetail = () => {
 
               {pregnancyForm.pregnancyStatus === 'recently_gave_birth' && (
                 <div style={{ marginBottom: 12, maxWidth: 180 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>عدد المواليد</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>{t('animalDetail.birthCount')}</label>
                   <input type="number" min="0" step="1" value={pregnancyForm.birthCount} onChange={e => setPregnancyForm(f => ({ ...f, birthCount: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 8, border: '1.5px solid #FED7AA', background: '#fff', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
@@ -508,7 +492,7 @@ const SellerAnimalDetail = () => {
 
               <button type="button" onClick={handlePregnancyUpdate} disabled={savingPregnancy}
                 style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: savingPregnancy ? '#A7C4AD' : C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: savingPregnancy ? 'not-allowed' : 'pointer' }}>
-                {savingPregnancy ? '…' : 'حفظ'}
+                {savingPregnancy ? '…' : t('common.save')}
               </button>
             </div>
           )}
@@ -520,12 +504,12 @@ const SellerAnimalDetail = () => {
         <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>💉</span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 13, color: C.amberText }}>تطعيم قادم</div>
+            <div style={{ fontWeight: 800, fontSize: 13, color: C.amberText }}>{t('animalDetail.upcomingVac')}</div>
             {upcomingVacs.slice(0, 2).map(v => {
               const days = Math.ceil((new Date(v.nextDueDate) - Date.now()) / (24 * 3600 * 1000));
               return (
                 <div key={v._id} style={{ fontSize: 12, color: C.amberText, marginTop: 2 }}>
-                  {v.vaccine} — {fmtDate(v.nextDueDate)} ({days} يوم)
+                  {v.vaccine} — {fmtDate(v.nextDueDate)} ({days} {t('animalDetail.day')})
                 </div>
               );
             })}
@@ -538,18 +522,18 @@ const SellerAnimalDetail = () => {
         <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>🤰</span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 13, color: '#92400E' }}>هذا الحيوان حامل</div>
+            <div style={{ fontWeight: 800, fontSize: 13, color: '#92400E' }}>{t('animalDetail.isPregnant')}</div>
             {animal.pregnancyDate && (
               <div style={{ fontSize: 12, color: '#92400E', marginTop: 2 }}>
-                بداية الحمل: {fmtDate(animal.pregnancyDate)}
+                {t('animalDetail.pregnancyStart')}: {fmtDate(animal.pregnancyDate)}
               </div>
             )}
             {animal.expectedBirthDate && (() => {
               const days = Math.ceil((new Date(animal.expectedBirthDate) - Date.now()) / (24 * 3600 * 1000));
               return (
                 <div style={{ fontSize: 12, color: '#92400E', marginTop: 2 }}>
-                  الموعد المتوقع للولادة: {fmtDate(animal.expectedBirthDate)}
-                  {days > 0 ? ` (خلال ${days} يوم)` : ' (موعد متجاوز)'}
+                  {t('animalDetail.expectedBirth')}: {fmtDate(animal.expectedBirthDate)}
+                  {days > 0 ? ` (${t('animalDetail.inDays')} ${days} ${t('animalDetail.day')})` : ` (${t('animalDetail.overdueBirth')})`}
                 </div>
               );
             })()}
@@ -559,10 +543,10 @@ const SellerAnimalDetail = () => {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.card, borderRadius: 12, padding: 4, border: `1px solid ${C.border}`, width: 'fit-content' }}>
-        {[['weight','📈 النمو والوزن'],['vaccination','💉 التطعيمات'],['medical','🏥 السجل الطبي'],['info','📋 معلومات']].map(([tab, label]) => (
+        {[['weight','animalDetail.tab.weight'],['vaccination','animalDetail.tab.vaccination'],['medical','animalDetail.tab.medical'],['info','animalDetail.tab.info']].map(([tab, labelKey]) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
             style={{ padding: '9px 18px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: activeTab === tab ? C.green : 'transparent', color: activeTab === tab ? '#fff' : C.muted, transition: 'all 0.15s' }}>
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
@@ -572,35 +556,35 @@ const SellerAnimalDetail = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Chart */}
           <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px', boxShadow: C.shadow }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 12 }}>📈 مخطط النمو</div>
-            <WeightChart entries={weightLog} />
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 12 }}>📈 {t('animalDetail.growthChart')}</div>
+            <WeightChart entries={weightLog} tFn={t} />
           </div>
 
           {/* Weight goals */}
-          <WeightGoalEditor animal={animal} animalId={id} onSaved={setAnimal} />
+          <WeightGoalEditor animal={animal} animalId={id} onSaved={setAnimal} tFn={t} />
 
           {/* Add weight form */}
           <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px', boxShadow: C.shadow }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ تسجيل قياس وزن جديد</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ {t('animalDetail.addWeight')}</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={{ flex: 1, minWidth: 120 }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الوزن (كجم) *</label>
-                <input type="number" min="0" step="0.1" value={weightForm.weightKg} onChange={e => setWeightForm(p => ({ ...p, weightKg: e.target.value }))} placeholder="مثال: 48"
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.weightKg')} *</label>
+                <input type="number" min="0" step="0.1" value={weightForm.weightKg} onChange={e => setWeightForm(p => ({ ...p, weightKg: e.target.value }))} placeholder={t('animalDetail.weightPlaceholder')}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
               </div>
               <div style={{ flex: 1, minWidth: 140 }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>التاريخ</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('common.date')}</label>
                 <input type="date" value={weightForm.date} onChange={e => setWeightForm(p => ({ ...p, date: e.target.value }))}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
               </div>
               <div style={{ flex: 2, minWidth: 160 }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>ملاحظة</label>
-                <input value={weightForm.notes} onChange={e => setWeightForm(p => ({ ...p, notes: e.target.value }))} placeholder="اختياري"
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.notes')}</label>
+                <input value={weightForm.notes} onChange={e => setWeightForm(p => ({ ...p, notes: e.target.value }))} placeholder={t('common.optional')}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
               </div>
               <button type="button" onClick={handleAddWeight} disabled={savingWeight}
                 style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: savingWeight ? '#A7C4AD' : C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: savingWeight ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                {savingWeight ? '…' : 'تسجيل'}
+                {savingWeight ? '…' : t('animalDetail.record')}
               </button>
             </div>
             {weightErr && <p style={{ color: C.red, fontSize: 12, margin: '6px 0 0' }}>{weightErr}</p>}
@@ -609,11 +593,11 @@ const SellerAnimalDetail = () => {
           {/* Weight log table */}
           {weightLog.length > 0 && (
             <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontWeight: 800, fontSize: 14, color: C.text }}>سجل القياسات ({weightLog.length})</div>
+              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontWeight: 800, fontSize: 14, color: C.text }}>{t('animalDetail.weightLog')} ({weightLog.length})</div>
               {[...weightLog].reverse().map((e, i) => (
                 <div key={e._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: i < weightLog.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                   <div style={{ flex: 1 }}>
-                    <span style={{ fontWeight: 800, fontSize: 15, color: C.text }}>{e.weightKg} كجم</span>
+                    <span style={{ fontWeight: 800, fontSize: 15, color: C.text }}>{e.weightKg} {t('common.kg')}</span>
                     {e.notes && <span style={{ fontSize: 12, color: C.muted, marginRight: 8 }}>{e.notes}</span>}
                   </div>
                   <span style={{ fontSize: 12, color: C.muted }}>{fmtDate(e.date)}</span>
@@ -631,39 +615,39 @@ const SellerAnimalDetail = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Add vaccination form */}
           <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px', boxShadow: C.shadow }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ تسجيل تطعيم جديد</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ {t('animalDetail.addVaccination')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 2, minWidth: 160 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>اسم اللقاح *</label>
-                  <input value={vacForm.vaccine} onChange={e => setVacForm(p => ({ ...p, vaccine: e.target.value }))} placeholder="مثال: لقاح الجمرة الخبيثة"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.vaccineName')} *</label>
+                  <input value={vacForm.vaccine} onChange={e => setVacForm(p => ({ ...p, vaccine: e.target.value }))} placeholder={t('animalDetail.vaccinePlaceholder')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>تاريخ التطعيم</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.vacDate')}</label>
                   <input type="date" value={vacForm.date} onChange={e => setVacForm(p => ({ ...p, date: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الجرعة القادمة</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.nextDose')}</label>
                   <input type="date" value={vacForm.nextDueDate} onChange={e => setVacForm(p => ({ ...p, nextDueDate: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div style={{ flex: 1, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الطبيب البيطري</label>
-                  <input value={vacForm.vet} onChange={e => setVacForm(p => ({ ...p, vet: e.target.value }))} placeholder="اختياري"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.vet')}</label>
+                  <input value={vacForm.vet} onChange={e => setVacForm(p => ({ ...p, vet: e.target.value }))} placeholder={t('common.optional')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 2, minWidth: 160 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>ملاحظات</label>
-                  <input value={vacForm.notes} onChange={e => setVacForm(p => ({ ...p, notes: e.target.value }))} placeholder="اختياري"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.notes')}</label>
+                  <input value={vacForm.notes} onChange={e => setVacForm(p => ({ ...p, notes: e.target.value }))} placeholder={t('common.optional')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <button type="button" onClick={handleAddVaccination} disabled={savingVac}
                   style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: savingVac ? '#A7C4AD' : C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: savingVac ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                  {savingVac ? '…' : 'تسجيل'}
+                  {savingVac ? '…' : t('animalDetail.record')}
                 </button>
               </div>
             </div>
@@ -673,11 +657,11 @@ const SellerAnimalDetail = () => {
           {/* Vaccination log */}
           {vacLog.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '36px', background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, color: C.muted, fontSize: 13 }}>
-              لا توجد تطعيمات مسجّلة بعد
+              {t('animalDetail.noVaccinations')}
             </div>
           ) : (
             <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
-              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontWeight: 800, fontSize: 14, color: C.text }}>سجل التطعيمات ({vacLog.length})</div>
+              <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontWeight: 800, fontSize: 14, color: C.text }}>{t('animalDetail.vacLog')} ({vacLog.length})</div>
               {vacLog.map((v, i) => {
                 const isDue = v.nextDueDate && new Date(v.nextDueDate) <= new Date();
                 const daysToNext = v.nextDueDate ? Math.ceil((new Date(v.nextDueDate) - Date.now()) / (24 * 3600 * 1000)) : null;
@@ -689,12 +673,12 @@ const SellerAnimalDetail = () => {
                         <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{v.vaccine}</div>
                         <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
                           {fmtDate(v.date)}
-                          {v.vet && ` · د. ${v.vet}`}
+                          {v.vet && ` · ${t('animalDetail.dr')} ${v.vet}`}
                           {v.notes && ` · ${v.notes}`}
                         </div>
                         {v.nextDueDate && (
                           <div style={{ fontSize: 11, marginTop: 4, fontWeight: 700, color: isDue ? C.red : daysToNext <= 14 ? C.amber : C.green }}>
-                            {isDue ? `⚠ متأخر — كان موعده ${fmtDate(v.nextDueDate)}` : `الجرعة القادمة: ${fmtDate(v.nextDueDate)} (${daysToNext} يوم)`}
+                            {isDue ? `⚠ ${t('animalDetail.overdue')} — ${t('animalDetail.wasScheduled')} ${fmtDate(v.nextDueDate)}` : `${t('animalDetail.nextDose')}: ${fmtDate(v.nextDueDate)} (${daysToNext} ${t('animalDetail.day')})`}
                           </div>
                         )}
                       </div>
@@ -715,18 +699,18 @@ const SellerAnimalDetail = () => {
 
           {/* Add medical record form */}
           <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px', boxShadow: C.shadow }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ تسجيل حادثة طبية</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 14 }}>+ {t('animalDetail.addMedical')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
               {/* Row 1: diagnosis + date */}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 3, minWidth: 180 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>التشخيص *</label>
-                  <input value={medForm.diagnosis} onChange={e => setMedForm(p => ({ ...p, diagnosis: e.target.value }))} placeholder="مثال: إسهال حاد"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.diagnosis')} *</label>
+                  <input value={medForm.diagnosis} onChange={e => setMedForm(p => ({ ...p, diagnosis: e.target.value }))} placeholder={t('animalDetail.diagnosisPlaceholder')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>تاريخ الحادثة</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.incidentDate')}</label>
                   <input type="date" value={medForm.date} onChange={e => setMedForm(p => ({ ...p, date: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
@@ -735,13 +719,13 @@ const SellerAnimalDetail = () => {
               {/* Row 2: treatment + medication */}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>العلاج</label>
-                  <input value={medForm.treatment} onChange={e => setMedForm(p => ({ ...p, treatment: e.target.value }))} placeholder="مثال: محاليل وريدية"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.treatment')}</label>
+                  <input value={medForm.treatment} onChange={e => setMedForm(p => ({ ...p, treatment: e.target.value }))} placeholder={t('animalDetail.treatmentPlaceholder')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الأدوية</label>
-                  <input value={medForm.medication} onChange={e => setMedForm(p => ({ ...p, medication: e.target.value }))} placeholder="مثال: أموكسيسيلين"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.medications')}</label>
+                  <input value={medForm.medication} onChange={e => setMedForm(p => ({ ...p, medication: e.target.value }))} placeholder={t('animalDetail.medicationsPlaceholder')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
               </div>
@@ -749,17 +733,17 @@ const SellerAnimalDetail = () => {
               {/* Row 3: vet + cost + followUpDate */}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div style={{ flex: 2, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>الطبيب البيطري</label>
-                  <input value={medForm.vet} onChange={e => setMedForm(p => ({ ...p, vet: e.target.value }))} placeholder="اختياري"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.vet')}</label>
+                  <input value={medForm.vet} onChange={e => setMedForm(p => ({ ...p, vet: e.target.value }))} placeholder={t('common.optional')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 110 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>التكلفة (ج.م)</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.cost')}</label>
                   <input type="number" min="0" step="1" value={medForm.cost} onChange={e => setMedForm(p => ({ ...p, cost: e.target.value }))} placeholder="0"
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>موعد المتابعة</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.followupDate')}</label>
                   <input type="date" value={medForm.followUpDate} onChange={e => setMedForm(p => ({ ...p, followUpDate: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
@@ -768,13 +752,13 @@ const SellerAnimalDetail = () => {
               {/* Row 4: notes + submit */}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>ملاحظات إضافية</label>
-                  <input value={medForm.notes} onChange={e => setMedForm(p => ({ ...p, notes: e.target.value }))} placeholder="اختياري"
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 5 }}>{t('animalDetail.extraNotes')}</label>
+                  <input value={medForm.notes} onChange={e => setMedForm(p => ({ ...p, notes: e.target.value }))} placeholder={t('common.optional')}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: 'none', fontFamily: 'inherit' }} />
                 </div>
                 <button type="button" onClick={handleAddMedical} disabled={savingMed}
                   style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: savingMed ? '#A7C4AD' : C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: savingMed ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                  {savingMed ? '…' : 'حفظ'}
+                  {savingMed ? '…' : t('common.save')}
                 </button>
               </div>
             </div>
@@ -793,14 +777,14 @@ const SellerAnimalDetail = () => {
           {!medLoading && medRecords.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px', background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, color: C.muted, fontSize: 13 }}>
               <div style={{ fontSize: 36, marginBottom: 10 }}>🏥</div>
-              لا توجد سجلات طبية بعد
+              {t('animalDetail.noMedical')}
             </div>
           )}
 
           {!medLoading && medRecords.length > 0 && (
             <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
               <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontWeight: 800, fontSize: 14, color: C.text }}>
-                السجل الطبي ({medRecords.length})
+                {t('animalDetail.medLog')} ({medRecords.length})
               </div>
               {medRecords.map((rec, i) => {
                 const hasFollowUp = rec.followUpDate && new Date(rec.followUpDate) > new Date();
@@ -818,22 +802,22 @@ const SellerAnimalDetail = () => {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                           <span style={{ fontWeight: 800, fontSize: 14, color: C.text }}>{rec.diagnosis}</span>
-                          {rec.resolved && <span style={{ fontSize: 10, fontWeight: 700, color: C.green, background: C.greenLt, padding: '2px 7px', borderRadius: 6 }}>تعافى</span>}
+                          {rec.resolved && <span style={{ fontSize: 10, fontWeight: 700, color: C.green, background: C.greenLt, padding: '2px 7px', borderRadius: 6 }}>{t('animalDetail.recovered')}</span>}
                         </div>
 
                         <div style={{ fontSize: 12, color: C.muted, display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginBottom: 4 }}>
                           <span>📅 {fmtDate(rec.date)}</span>
-                          {rec.vet     && <span>👨‍⚕️ د. {rec.vet}</span>}
-                          {rec.cost > 0 && <span>💰 {rec.cost.toLocaleString('ar-EG')} ج.م</span>}
+                          {rec.vet     && <span>👨‍⚕️ {t('animalDetail.dr')} {rec.vet}</span>}
+                          {rec.cost > 0 && <span>💰 {rec.cost.toLocaleString('ar-EG')} {t('common.egp')}</span>}
                         </div>
 
-                        {rec.treatment && <div style={{ fontSize: 12, color: C.text, marginBottom: 2 }}><strong>العلاج:</strong> {rec.treatment}</div>}
-                        {rec.medication && <div style={{ fontSize: 12, color: C.text, marginBottom: 2 }}><strong>الأدوية:</strong> {rec.medication}</div>}
+                        {rec.treatment && <div style={{ fontSize: 12, color: C.text, marginBottom: 2 }}><strong>{t('animalDetail.treatment')}:</strong> {rec.treatment}</div>}
+                        {rec.medication && <div style={{ fontSize: 12, color: C.text, marginBottom: 2 }}><strong>{t('animalDetail.medications')}:</strong> {rec.medication}</div>}
                         {rec.notes     && <div style={{ fontSize: 12, color: C.muted }}>{rec.notes}</div>}
 
                         {hasFollowUp && (
                           <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: followDays <= 3 ? C.red : C.amber }}>
-                            ⏰ متابعة: {fmtDate(rec.followUpDate)} ({followDays} يوم)
+                            ⏰ {t('animalDetail.followupDate')}: {fmtDate(rec.followUpDate)} ({followDays} {t('animalDetail.day')})
                           </div>
                         )}
                       </div>
@@ -844,11 +828,11 @@ const SellerAnimalDetail = () => {
                           <>
                             <button type="button" onClick={() => handleDeleteMedical(rec._id)}
                               style={{ padding: '5px 11px', borderRadius: 7, border: 'none', background: C.red, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                              تأكيد
+                              {t('common.confirm')}
                             </button>
                             <button type="button" onClick={() => setMedDeleting(null)}
                               style={{ padding: '5px 11px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: C.muted, fontSize: 12, cursor: 'pointer' }}>
-                              إلغاء
+                              {t('common.cancel')}
                             </button>
                           </>
                         ) : (
@@ -868,25 +852,25 @@ const SellerAnimalDetail = () => {
       {/* ── Info tab ── */}
       {activeTab === 'info' && (
         <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px 24px', boxShadow: C.shadow }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 16 }}>📋 معلومات الحيوان</div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 16 }}>📋 {t('animalDetail.info')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 24px' }}>
             {[
-              ['النوع',           TYPE_AR[animal.type] || animal.type],
-              ['السلالة',         animal.breed || '—'],
-              ['رقم الأذن',       animal.tagId || '—'],
-              ['الجنس',           GENDER_AR[animal.gender] || '—'],
-              ['تاريخ الميلاد',   animal.dob ? fmtDate(animal.dob) : '—'],
-              ['العمر',           ageLabel(animal.dob) || '—'],
-              ['الوزن الحالي',    animal.currentWeight ? `${animal.currentWeight} كجم` : '—'],
-              ['اللون',           animal.color || '—'],
-              ['الحالة الصحية',   HEALTH_AR[animal.healthStatus]],
-              ['الحالة',          STATUS_AR[animal.status]],
-              ['تسجيل قياسات',   `${(animal.weightLog || []).length} قياس`],
-              ['التطعيمات',       `${(animal.vaccinationLog || []).length} تطعيم`],
+              [t('animalDetail.infoType'),    t(TYPE_KEY[animal.type]) || animal.type],
+              [t('animalDetail.infoBreed'),   animal.breed || '—'],
+              [t('animalDetail.infoTagId'),   animal.tagId || '—'],
+              [t('animalDetail.infoGender'),  t(GENDER_KEY[animal.gender]) || '—'],
+              [t('animalDetail.infoDob'),     animal.dob ? fmtDate(animal.dob) : '—'],
+              [t('animalDetail.infoAge'),     ageLabel(animal.dob, t) || '—'],
+              [t('animalDetail.infoWeight'),  animal.currentWeight ? `${animal.currentWeight} ${t('common.kg')}` : '—'],
+              [t('animalDetail.infoColor'),   animal.color || '—'],
+              [t('animalDetail.infoHealth'),  t(HEALTH_KEY[animal.healthStatus])],
+              [t('animalDetail.infoStatus'),  t(STATUS_KEY[animal.status])],
+              [t('animalDetail.infoWeighings'), `${(animal.weightLog || []).length} ${t('animalDetail.measurements')}`],
+              [t('animalDetail.infoVaccinations'), `${(animal.vaccinationLog || []).length} ${t('animalDetail.vacCount')}`],
               ...(animal.gender === 'female' ? [
-                ['حالة الحمل', PREGNANCY_AR[animal.pregnancyStatus] || '—'],
-                ...(animal.pregnancyStatus === 'pregnant' && animal.expectedBirthDate ? [['موعد الولادة المتوقع', fmtDate(animal.expectedBirthDate)]] : []),
-                ...(animal.pregnancyStatus === 'recently_gave_birth' && animal.birthCount ? [['عدد المواليد', String(animal.birthCount)]] : []),
+                [t('animalDetail.infoPregnancy'), t(PREGNANCY_KEY[animal.pregnancyStatus]) || '—'],
+                ...(animal.pregnancyStatus === 'pregnant' && animal.expectedBirthDate ? [[t('animalDetail.infoExpectedBirth'), fmtDate(animal.expectedBirthDate)]] : []),
+                ...(animal.pregnancyStatus === 'recently_gave_birth' && animal.birthCount ? [[t('animalDetail.infoBirthCount'), String(animal.birthCount)]] : []),
               ] : []),
             ].map(([k, v]) => (
               <div key={k}>
@@ -897,13 +881,13 @@ const SellerAnimalDetail = () => {
           </div>
           {animal.notes && (
             <div style={{ marginTop: 16, padding: '12px 14px', background: C.greenLt, borderRadius: 10, fontSize: 13, color: C.muted }}>
-              <strong style={{ color: C.text }}>ملاحظات: </strong>{animal.notes}
+              <strong style={{ color: C.text }}>{t('animalDetail.notesLabel')}: </strong>{animal.notes}
             </div>
           )}
           {/* Images */}
           {animal.images?.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>الصور</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>{t('animalDetail.photos')}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {animal.images.map((src, i) => (
                   <img key={i} src={`http://localhost:5000${src}`} alt="" style={{ width: 80, height: 80, borderRadius: 10, objectFit: 'cover', border: `2px solid ${C.border}` }} />
@@ -912,7 +896,7 @@ const SellerAnimalDetail = () => {
             </div>
           )}
 
-          {/* QR Code — 30.2 */}
+          {/* QR Code */}
           {(() => {
             const qrUrl = `${window.location.origin}/buyer/farm/${animal.seller}/listing/${animal._id}`;
             const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrUrl)}&bgcolor=ffffff&color=2C1810&margin=6`;
@@ -920,12 +904,12 @@ const SellerAnimalDetail = () => {
               <div style={{ marginTop: 20, borderTop: `1px solid ${C.border}`, paddingTop: 16, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
                 <img
                   src={qrImgSrc}
-                  alt="QR code للحيوان"
+                  alt="QR code"
                   style={{ width: 120, height: 120, borderRadius: 10, border: `2px solid ${C.border}`, flexShrink: 0 }}
                 />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>📲 رمز QR للمشاركة</div>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>امسح رمز الـ QR للوصول لصفحة هذا الحيوان أو مشاركته مع المشترين</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>📲 {t('animalDetail.qrShare')}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.6 }}>{t('animalDetail.qrHint')}</div>
                   <a
                     href={qrImgSrc}
                     download={`animal-qr-${animal._id}.png`}
@@ -933,7 +917,7 @@ const SellerAnimalDetail = () => {
                     rel="noreferrer"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: C.greenBg, color: C.greenText, borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: 'none', border: `1px solid ${C.green}40` }}
                   >
-                    ⬇️ تحميل QR
+                    ⬇️ {t('animalDetail.downloadQr')}
                   </a>
                 </div>
               </div>

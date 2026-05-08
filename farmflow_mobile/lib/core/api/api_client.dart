@@ -1,15 +1,17 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/token_storage.dart';
 import '../utils/scaffold_messenger_key.dart';
 
-/// Base URL — override via dart-define: --dart-define=API_BASE_URL=https://...
-/// Falls back to platform-aware localhost: 10.0.2.2 on Android emulator, localhost on iOS.
+/// Priority: .env file → --dart-define → platform localhost fallback.
 String get _kBaseUrl {
-  const envUrl = String.fromEnvironment('API_BASE_URL');
-  if (envUrl.isNotEmpty) return envUrl;
+  final dotenvUrl = dotenv.maybeGet('API_BASE_URL') ?? '';
+  if (dotenvUrl.isNotEmpty) return dotenvUrl;
+  const compileUrl = String.fromEnvironment('API_BASE_URL');
+  if (compileUrl.isNotEmpty) return compileUrl;
   return Platform.isAndroid
       ? 'http://10.0.2.2:5001/api'
       : 'http://localhost:5001/api';

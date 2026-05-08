@@ -1,74 +1,118 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import { ToastProvider } from './components/Toast';
-import { CartProvider } from './context/CartContext';
+import { AuthProvider }      from './context/AuthContext';
+import { FarmProvider }      from './context/FarmContext';
+import { MsgUnreadProvider } from './context/MsgUnreadContext';
+import { ToastProvider }     from './components/Toast';
+import { CartProvider }      from './context/CartContext';
+import { ThemeProvider }     from './context/ThemeContext';
 
-// Guards
-import ProtectedRoute from './components/ProtectedRoute';
-import RoleRouter     from './components/RoleRouter';
+// Guards & layouts load eagerly (tiny, needed immediately)
+import ProtectedRoute  from './components/ProtectedRoute';
+import RoleRouter      from './components/RoleRouter';
+import SellerLayout    from './layouts/SellerLayout';
+import BuyerLayout     from './layouts/BuyerLayout';
+import AdminLayout     from './layouts/AdminLayout';
+import DeepLinkHandler from './components/DeepLinkHandler';
+import CommandPalette  from './components/CommandPalette';
+import OfflineBanner   from './components/OfflineBanner';
 
-// Layouts
-import SellerLayout from './layouts/SellerLayout';
-import BuyerLayout  from './layouts/BuyerLayout';
-import AdminLayout  from './layouts/AdminLayout';
+// ── Lazy-loaded pages (each becomes its own chunk) ────────────────────────────
 
-// Public pages
-import Login      from './pages/Login';
-import Register   from './pages/Register';
-import AdminLogin from './pages/AdminLogin';
+// Public
+const Login            = lazy(() => import('./pages/Login'));
+const Register         = lazy(() => import('./pages/Register'));
+const AdminLogin       = lazy(() => import('./pages/AdminLogin'));
+const ForgotPassword   = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword    = lazy(() => import('./pages/ResetPassword'));
+const VerifyEmail      = lazy(() => import('./pages/VerifyEmail'));
 
-// Seller pages
-import SellerDashboard  from './pages/seller/SellerDashboard';
-import SellerListings   from './pages/seller/SellerListings';
-import SellerAddListing from './pages/seller/SellerAddListing';
-import SellerExpenses    from './pages/seller/SellerExpenses';
-import SellerIncome      from './pages/seller/SellerIncome';
-import SellerEditListing from './pages/seller/SellerEditListing';
-import SellerDairy       from './pages/seller/SellerDairy';
-import SellerAddDairy    from './pages/seller/SellerAddDairy';
-import SellerEditDairy    from './pages/seller/SellerEditDairy';
-import SellerStatements   from './pages/seller/SellerStatements';
-import SellerHerd         from './pages/seller/SellerHerd';
-import SellerAddAnimal    from './pages/seller/SellerAddAnimal';
-import SellerAnimalDetail from './pages/seller/SellerAnimalDetail';
-import SellerSupplies     from './pages/seller/SellerSupplies';
-import SellerAddSupply    from './pages/seller/SellerAddSupply';
-import SellerEditSupply   from './pages/seller/SellerEditSupply';
-import SellerBudget       from './pages/seller/SellerBudget';
+// Shared
+const Settings = lazy(() => import('./pages/Settings'));
 
-// Buyer pages
-import BuyerBrowse        from './pages/buyer/BuyerBrowse';
-import BuyerListingDetail from './pages/buyer/BuyerListingDetail';
-import BuyerOrders        from './pages/buyer/BuyerOrders';
-import BuyerFarmDetail    from './pages/buyer/BuyerFarmDetail';
-import BuyerFavorites     from './pages/buyer/BuyerFavorites';
-import BuyerSupplyDetail  from './pages/buyer/BuyerSupplyDetail';
-import BuyerCart          from './pages/buyer/BuyerCart';
+// Seller
+const SellerDashboard   = lazy(() => import('./pages/seller/SellerDashboard'));
+const SellerListings    = lazy(() => import('./pages/seller/SellerListings'));
+const SellerAddListing  = lazy(() => import('./pages/seller/SellerAddListing'));
+const SellerEditListing = lazy(() => import('./pages/seller/SellerEditListing'));
+const SellerFinance     = lazy(() => import('./pages/seller/SellerFinance'));
+const SellerExpenses    = lazy(() => import('./pages/seller/SellerExpenses'));
+const SellerIncome      = lazy(() => import('./pages/seller/SellerIncome'));
+const SellerDairy       = lazy(() => import('./pages/seller/SellerDairy'));
+const SellerAddDairy    = lazy(() => import('./pages/seller/SellerAddDairy'));
+const SellerEditDairy   = lazy(() => import('./pages/seller/SellerEditDairy'));
+const SellerStatements  = lazy(() => import('./pages/seller/SellerStatements'));
+const SellerHerd        = lazy(() => import('./pages/seller/SellerHerd'));
+const SellerAddAnimal   = lazy(() => import('./pages/seller/SellerAddAnimal'));
+const SellerAnimalDetail= lazy(() => import('./pages/seller/SellerAnimalDetail'));
+const SellerSupplies    = lazy(() => import('./pages/seller/SellerSupplies'));
+const SellerAddSupply   = lazy(() => import('./pages/seller/SellerAddSupply'));
+const SellerEditSupply  = lazy(() => import('./pages/seller/SellerEditSupply'));
+const SellerBudget      = lazy(() => import('./pages/seller/SellerBudget'));
+const SellerOrders      = lazy(() => import('./pages/seller/SellerOrders'));
+const SellerAnalytics   = lazy(() => import('./pages/seller/SellerAnalytics'));
+const SellerMessages    = lazy(() => import('./pages/seller/SellerMessages'));
+const SellerFarms       = lazy(() => import('./pages/seller/SellerFarms'));
 
-// Shared pages
-import Settings from './pages/Settings';
+// Buyer
+const BuyerBrowse        = lazy(() => import('./pages/buyer/BuyerBrowse'));
+const BuyerListingDetail = lazy(() => import('./pages/buyer/BuyerListingDetail'));
+const BuyerFarmDetail    = lazy(() => import('./pages/buyer/BuyerFarmDetail'));
+const BuyerSupplyDetail  = lazy(() => import('./pages/buyer/BuyerSupplyDetail'));
+const BuyerOrders        = lazy(() => import('./pages/buyer/BuyerOrders'));
+const BuyerFavorites     = lazy(() => import('./pages/buyer/BuyerFavorites'));
+const BuyerCart          = lazy(() => import('./pages/buyer/BuyerCart'));
+const BuyerMessages      = lazy(() => import('./pages/buyer/BuyerMessages'));
 
-// Admin pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminUsers     from './pages/admin/AdminUsers';
-import AdminListings  from './pages/admin/AdminListings';
-import AdminOrders    from './pages/admin/AdminOrders';
-import AdminDairy     from './pages/admin/AdminDairy';
-import AdminSupplies  from './pages/admin/AdminSupplies';
-import AdminReviews   from './pages/admin/AdminReviews';
+// Admin
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminUsers     = lazy(() => import('./pages/admin/AdminUsers'));
+const AdminListings  = lazy(() => import('./pages/admin/AdminListings'));
+const AdminOrders    = lazy(() => import('./pages/admin/AdminOrders'));
+const AdminDairy     = lazy(() => import('./pages/admin/AdminDairy'));
+const AdminSupplies  = lazy(() => import('./pages/admin/AdminSupplies'));
+const AdminReviews   = lazy(() => import('./pages/admin/AdminReviews'));
+const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'));
 
+// ── Page loading fallback ─────────────────────────────────────────────────────
+const PageLoader = () => (
+  <div style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    minHeight: '100vh', background: 'var(--bg-page, #F8F4EE)',
+  }}>
+    <div style={{
+      width: '32px', height: '32px', borderRadius: '50%',
+      border: '3px solid var(--primary-light, #BBF7D0)',
+      borderTopColor: 'var(--primary, #3A7D44)',
+      animation: 'ff-spin 0.7s linear infinite',
+    }} />
+    <style>{`@keyframes ff-spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+// ── App ───────────────────────────────────────────────────────────────────────
 const App = () => (
+  <ThemeProvider>
   <BrowserRouter>
     <ToastProvider>
     <CartProvider>
     <AuthProvider>
+    <FarmProvider>
+    <MsgUnreadProvider>
+      <DeepLinkHandler />
+      <CommandPalette />
+      <OfflineBanner />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
 
         {/* ── Public ─────────────────────────────────────────────────────── */}
-        <Route path="/"         element={<Navigate to="/login" replace />} />
-        <Route path="/login"        element={<Login />} />
-        <Route path="/register"     element={<Register />} />
-        <Route path="/admin-login"  element={<AdminLogin />} />
+        <Route path="/"                  element={<Navigate to="/login" replace />} />
+        <Route path="/login"             element={<Login />} />
+        <Route path="/register"          element={<Register />} />
+        <Route path="/admin-login"       element={<AdminLogin />} />
+        <Route path="/forgot-password"   element={<ForgotPassword />} />
+        <Route path="/reset-password"    element={<ResetPassword />} />
+        <Route path="/verify-email"      element={<VerifyEmail />} />
 
         {/* ── Role entry point ─────────────────────────────────────────── */}
         <Route
@@ -89,12 +133,13 @@ const App = () => (
             </ProtectedRoute>
           }
         >
-          <Route index               element={<SellerDashboard />} />
-          <Route path="listings"     element={<SellerListings />} />
-          <Route path="add-listing"  element={<SellerAddListing />} />
+          <Route index                    element={<SellerDashboard />} />
+          <Route path="listings"          element={<SellerListings />} />
+          <Route path="add-listing"       element={<SellerAddListing />} />
+          <Route path="edit-listing/:id"  element={<SellerEditListing />} />
+          <Route path="finance"           element={<SellerFinance />} />
           <Route path="expenses"          element={<SellerExpenses />} />
           <Route path="income"            element={<SellerIncome />} />
-          <Route path="edit-listing/:id"  element={<SellerEditListing />} />
           <Route path="dairy"             element={<SellerDairy />} />
           <Route path="add-dairy"         element={<SellerAddDairy />} />
           <Route path="edit-dairy/:id"    element={<SellerEditDairy />} />
@@ -106,6 +151,10 @@ const App = () => (
           <Route path="supplies/add"      element={<SellerAddSupply />} />
           <Route path="supplies/edit/:id" element={<SellerEditSupply />} />
           <Route path="budget"            element={<SellerBudget />} />
+          <Route path="orders"            element={<SellerOrders />} />
+          <Route path="analytics"         element={<SellerAnalytics />} />
+          <Route path="messages"          element={<SellerMessages />} />
+          <Route path="farms"             element={<SellerFarms />} />
           <Route path="settings"          element={<Settings />} />
         </Route>
 
@@ -125,6 +174,7 @@ const App = () => (
           <Route path="orders"          element={<BuyerOrders />} />
           <Route path="favorites"       element={<BuyerFavorites />} />
           <Route path="cart"            element={<BuyerCart />} />
+          <Route path="messages"        element={<BuyerMessages />} />
           <Route path="settings"        element={<Settings />} />
         </Route>
 
@@ -137,23 +187,28 @@ const App = () => (
             </ProtectedRoute>
           }
         >
-          <Route index              element={<AdminDashboard />} />
-          <Route path="users"       element={<AdminUsers />} />
-          <Route path="listings"    element={<AdminListings />} />
-          <Route path="dairy"       element={<AdminDairy />} />
-          <Route path="orders"      element={<AdminOrders />} />
-          <Route path="supplies"    element={<AdminSupplies />} />
-          <Route path="reviews"     element={<AdminReviews />} />
+          <Route index             element={<AdminDashboard />} />
+          <Route path="users"      element={<AdminUsers />} />
+          <Route path="listings"   element={<AdminListings />} />
+          <Route path="dairy"      element={<AdminDairy />} />
+          <Route path="orders"     element={<AdminOrders />} />
+          <Route path="supplies"   element={<AdminSupplies />} />
+          <Route path="reviews"    element={<AdminReviews />} />
+          <Route path="analytics"  element={<AdminAnalytics />} />
         </Route>
 
         {/* ── Catch-all ───────────────────────────────────────────────────*/}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
       </Routes>
+      </Suspense>
+    </MsgUnreadProvider>
+    </FarmProvider>
     </AuthProvider>
     </CartProvider>
     </ToastProvider>
   </BrowserRouter>
+  </ThemeProvider>
 );
 
 export default App;

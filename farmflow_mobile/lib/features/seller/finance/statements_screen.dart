@@ -10,10 +10,47 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
 import 'finance_service.dart';
+
+// ── Odoo-style design tokens ──────────────────────────────────────────────────
+const _kBg      = Color(0xFFF7F8FA);
+const _kCard    = Colors.white;
+const _kDivider = Color(0xFFEEEEEE);
+const _kMuted   = Color(0xFF6B7280);
+const _kBorder  = Color(0xFFE5E7EB);
+const _kText    = Color(0xFF111827);
+
+// ── Category metadata ─────────────────────────────────────────────────────────
+const _catAr = {
+  'feed': 'علف', 'doctor': 'بيطري', 'transport': 'نقل',
+  'electricity': 'كهرباء', 'salary': 'رواتب', 'rent': 'إيجار',
+  'water': 'مياه', 'maintenance': 'صيانة', 'other': 'أخرى',
+};
+const _catColors = {
+  'feed': Color(0xFF22C55E), 'doctor': Color(0xFFEF4444),
+  'transport': Color(0xFF3B82F6), 'electricity': Color(0xFFF59E0B),
+  'salary': Color(0xFF8B5CF6), 'rent': Color(0xFF06B6D4),
+  'water': Color(0xFF0EA5E9), 'maintenance': Color(0xFF6B7280),
+  'other': Color(0xFFD97706),
+};
+const _catIcons = {
+  'feed': Icons.grass_outlined,
+  'doctor': Icons.medical_services_outlined,
+  'transport': Icons.local_shipping_outlined,
+  'electricity': Icons.bolt_outlined,
+  'salary': Icons.people_outline,
+  'rent': Icons.home_outlined,
+  'water': Icons.water_drop_outlined,
+  'maintenance': Icons.build_outlined,
+  'other': Icons.more_horiz,
+};
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 class StatementsScreen extends ConsumerStatefulWidget {
   const StatementsScreen({super.key});
@@ -29,13 +66,75 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _tabs.dispose();
     super.dispose();
+  }
+
+  void _invalidateFinanceProviders() {
+    ref.invalidate(recentExpensesProvider);
+    ref.invalidate(recentIncomeProvider);
+    ref.invalidate(financeSummaryProvider);
+    ref.invalidate(currentYearStatementsProvider);
+    ref.invalidate(currentYearBudgetProvider);
+  }
+
+  void _showAddExpense() {
+    showAddExpenseSheet(context, onCreated: _invalidateFinanceProviders);
+  }
+
+  void _showAddIncome() {
+    showAddIncomeSheet(context, onCreated: _invalidateFinanceProviders);
+  }
+
+  void _showQuickAddFinance() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _kCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            Text(
+              context.l10n.addFinanceTitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
+                  fontWeight: FontWeight.w800, color: _kText),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: _AddChoiceCard(
+                icon: Icons.remove_circle_outline,
+                label: context.l10n.quickAddExpense,
+                color: AppColors.red,
+                bg: AppColors.redBg,
+                onTap: () { Navigator.pop(context); _showAddExpense(); },
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _AddChoiceCard(
+                icon: Icons.add_circle_outline,
+                label: context.l10n.quickAddIncome,
+                color: AppColors.green,
+                bg: AppColors.greenBg,
+                onTap: () { Navigator.pop(context); _showAddIncome(); },
+              )),
+            ]),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _exportCsv() async {
@@ -49,16 +148,13 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
       buf.writeln('مصروف,${dateFmt.format(e.date)},${e.categoryAr},${e.amount.toStringAsFixed(2)},${e.note ?? ''}');
     }
     for (final i in income) {
-      buf.writeln('إيراد,${dateFmt.format(i.date)},${i.source ?? 'بيع'},${i.amount.toStringAsFixed(2)},${i.note ?? ''}');
+      buf.writeln('إيراد,${dateFmt.format(i.date)},${i.sourceAr},${i.amount.toStringAsFixed(2)},${i.note ?? ''}');
     }
 
     final dir  = await getTemporaryDirectory();
     final file = File('${dir.path}/farmflow_accounts.csv');
     await file.writeAsString(buf.toString(), encoding: utf8);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'كشف حسابات FarmFlow',
-    );
+    await Share.shareXFiles([XFile(file.path)], text: 'كشف حسابات FarmFlow');
   }
 
   Future<void> _exportPdf() async {
@@ -73,18 +169,16 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
 
     final doc = pw.Document();
 
-    // Load Arabic-compatible font (falls back to built-in if not available)
     pw.Font? arabicFont;
     try {
       final fontData = await rootBundle.load('assets/fonts/Cairo-Regular.ttf');
       arabicFont = pw.Font.ttf(fontData);
     } catch (_) {}
 
-    final baseStyle = pw.TextStyle(font: arabicFont, fontSize: 10);
-    final boldStyle = pw.TextStyle(font: arabicFont, fontSize: 10, fontWeight: pw.FontWeight.bold);
-    final titleStyle = pw.TextStyle(font: arabicFont, fontSize: 16, fontWeight: pw.FontWeight.bold);
-    final headerStyle = pw.TextStyle(font: arabicFont, fontSize: 10, fontWeight: pw.FontWeight.bold,
-        color: PdfColors.white);
+    final baseStyle   = pw.TextStyle(font: arabicFont, fontSize: 10);
+    final boldStyle   = pw.TextStyle(font: arabicFont, fontSize: 10, fontWeight: pw.FontWeight.bold);
+    final titleStyle  = pw.TextStyle(font: arabicFont, fontSize: 16, fontWeight: pw.FontWeight.bold);
+    final headerStyle = pw.TextStyle(font: arabicFont, fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
     doc.addPage(
       pw.MultiPage(
@@ -92,20 +186,11 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
         textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(32),
         build: (ctx) => [
-          // Title
-          pw.Center(
-            child: pw.Text('كشف حسابات FarmFlow', style: titleStyle),
-          ),
+          pw.Center(child: pw.Text('كشف حسابات FarmFlow', style: titleStyle)),
           pw.SizedBox(height: 4),
-          pw.Center(
-            child: pw.Text(
-              DateFormat('yyyy/MM/dd').format(DateTime.now()),
-              style: baseStyle.copyWith(color: PdfColors.grey600),
-            ),
-          ),
+          pw.Center(child: pw.Text(DateFormat('yyyy/MM/dd').format(DateTime.now()),
+              style: baseStyle.copyWith(color: PdfColors.grey600))),
           pw.SizedBox(height: 16),
-
-          // KPI strip
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
@@ -122,46 +207,28 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
             ),
           ),
           pw.SizedBox(height: 20),
-
-          // Expenses table
           if (expenses.isNotEmpty) ...[
             pw.Text('المصروفات', style: boldStyle.copyWith(fontSize: 13)),
             pw.SizedBox(height: 8),
             pw.TableHelper.fromTextArray(
               headers: ['الملاحظة', 'المبلغ (ج.م)', 'الفئة', 'التاريخ'],
-              data: expenses.map((e) => [
-                e.note ?? '',
-                fmt.format(e.amount),
-                e.categoryAr,
-                dateFmt.format(e.date),
-              ]).toList(),
+              data: expenses.map((e) => [e.note ?? '', fmt.format(e.amount), e.categoryAr, dateFmt.format(e.date)]).toList(),
               headerStyle: headerStyle,
               headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF3A7D44)),
               cellStyle: baseStyle,
-              cellAlignments: {0: pw.Alignment.centerRight, 1: pw.Alignment.centerLeft,
-                               2: pw.Alignment.centerRight, 3: pw.Alignment.centerLeft},
               border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             ),
             pw.SizedBox(height: 20),
           ],
-
-          // Income table
           if (income.isNotEmpty) ...[
             pw.Text('الإيرادات', style: boldStyle.copyWith(fontSize: 13)),
             pw.SizedBox(height: 8),
             pw.TableHelper.fromTextArray(
               headers: ['الملاحظة', 'المبلغ (ج.م)', 'المصدر', 'التاريخ'],
-              data: income.map((i) => [
-                i.note ?? '',
-                fmt.format(i.amount),
-                i.source ?? 'بيع',
-                dateFmt.format(i.date),
-              ]).toList(),
+              data: income.map((i) => [i.note ?? '', fmt.format(i.amount), i.sourceAr, dateFmt.format(i.date)]).toList(),
               headerStyle: headerStyle,
               headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF3A7D44)),
               cellStyle: baseStyle,
-              cellAlignments: {0: pw.Alignment.centerRight, 1: pw.Alignment.centerLeft,
-                               2: pw.Alignment.centerRight, 3: pw.Alignment.centerLeft},
               border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             ),
           ],
@@ -169,40 +236,41 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
       ),
     );
 
-    await Printing.sharePdf(
-      bytes: await doc.save(),
-      filename: 'farmflow_accounts.pdf',
-    );
+    await Printing.sharePdf(bytes: await doc.save(), filename: 'farmflow_accounts.pdf');
   }
 
   static pw.Widget _pdfKpi(String label, String value, pw.TextStyle style) =>
-    pw.Column(
-      children: [
+      pw.Column(children: [
         pw.Text(label, style: style.copyWith(fontSize: 9)),
         pw.SizedBox(height: 4),
         pw.Text(value, style: style.copyWith(fontSize: 11)),
-      ],
-    );
+      ]);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: _kBg,
+      floatingActionButton: _tabs.index != 3
+          ? FloatingActionButton.extended(
+              heroTag: 'add_finance',
+              onPressed: _showQuickAddFinance,
+              backgroundColor: AppColors.green,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(context.l10n.addButton,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white)),
+            )
+          : null,
       appBar: AppBar(
         backgroundColor: AppColors.green,
         elevation: 0,
-        title: const Text(
-          'الحسابات',
-          style: TextStyle(
-            fontFamily: 'Cairo',
-            fontWeight: FontWeight.w800,
-            color: AppColors.white,
-          ),
+        title: Text(
+          context.l10n.statementsTitle,
+          style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800, color: Colors.white),
         ),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.download_outlined, color: AppColors.white),
-            color: AppColors.card,
+            icon: const Icon(Icons.download_outlined, color: Colors.white),
+            color: _kCard,
             onSelected: (v) {
               if (v == 'csv') _exportCsv();
               if (v == 'pdf') _exportPdf();
@@ -210,18 +278,18 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'csv',
-                child: Row(children: const [
-                  Icon(Icons.table_chart_outlined, size: 18, color: AppColors.green),
-                  SizedBox(width: 8),
-                  Text('تصدير CSV', style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                child: Row(children: [
+                  const Icon(Icons.table_chart_outlined, size: 18, color: AppColors.green),
+                  const SizedBox(width: 8),
+                  Text(context.l10n.exportCsv, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14)),
                 ]),
               ),
               PopupMenuItem(
                 value: 'pdf',
-                child: Row(children: const [
-                  Icon(Icons.picture_as_pdf_outlined, size: 18, color: AppColors.red),
-                  SizedBox(width: 8),
-                  Text('تصدير PDF', style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                child: Row(children: [
+                  const Icon(Icons.picture_as_pdf_outlined, size: 18, color: AppColors.red),
+                  const SizedBox(width: 8),
+                  Text(context.l10n.exportPdf, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14)),
                 ]),
               ),
             ],
@@ -229,29 +297,24 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
         ],
         bottom: TabBar(
           controller: _tabs,
-          labelColor: AppColors.white,
-          unselectedLabelColor: AppColors.white.withValues(alpha: 0.6),
-          indicatorColor: AppColors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
+          indicatorColor: Colors.white,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(
-            fontFamily: 'Cairo',
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-          tabs: const [
-            Tab(text: 'الملخص'),
-            Tab(text: 'المصروفات'),
-            Tab(text: 'الإيرادات'),
+          labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12),
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: [
+            Tab(text: context.l10n.tabSummary),
+            Tab(text: context.l10n.tabExpenses),
+            Tab(text: context.l10n.tabIncome),
+            Tab(text: context.l10n.tabBudget),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabs,
-        children: const [
-          _SummaryTab(),
-          _ExpensesTab(),
-          _IncomeTab(),
-        ],
+        children: const [_SummaryTab(), _ExpensesTab(), _IncomeTab(), _BudgetTab()],
       ),
     );
   }
@@ -259,67 +322,198 @@ class _StatementsScreenState extends ConsumerState<StatementsScreen>
 
 // ── Summary tab ───────────────────────────────────────────────────────────────
 
-class _SummaryTab extends ConsumerWidget {
+// ── Year + Quarter selector providers ────────────────────────────────────────
+
+final statementsYearProvider   = StateProvider<int>((ref) => DateTime.now().year);
+final statementsQuarterProvider = StateProvider<int?>((ref) => null); // null = all
+
+final statementsForYearProvider =
+    FutureProvider.family<List<StatementMonth>, int>((ref, year) async {
+  final dio = ref.watch(dioProvider);
+  final res = await dio.get(ApiEndpoints.statements, queryParameters: {'year': year});
+  final data = res.data as List? ?? [];
+  return data.map((e) => StatementMonth.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+class _SummaryTab extends ConsumerStatefulWidget {
   const _SummaryTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final asyncSummary = ref.watch(financeSummaryProvider);
+  ConsumerState<_SummaryTab> createState() => _SummaryTabState();
+}
 
-    return asyncSummary.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            ShimmerCard(height: 100),
-            SizedBox(height: 16),
-            ShimmerCard(height: 260),
-          ],
+class _SummaryTabState extends ConsumerState<_SummaryTab> {
+  @override
+  Widget build(BuildContext context) {
+    final year            = ref.watch(statementsYearProvider);
+    final quarter         = ref.watch(statementsQuarterProvider);
+    final asyncSummary    = ref.watch(financeSummaryProvider);
+    final asyncStatements = ref.watch(statementsForYearProvider(year));
+    final currentYear     = DateTime.now().year;
+
+    return Column(
+      children: [
+        // ── Year / Quarter selector ──────────────────────────────────────
+        Container(
+          color: AppColors.card,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          child: Column(children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  color: AppColors.green,
+                  onPressed: () =>
+                      ref.read(statementsYearProvider.notifier).state = year - 1,
+                ),
+                Text('$year',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text)),
+                IconButton(
+                  icon: Icon(Icons.chevron_left_rounded,
+                      color: year < currentYear ? AppColors.green : AppColors.muted),
+                  onPressed: year < currentYear
+                      ? () => ref.read(statementsYearProvider.notifier).state = year + 1
+                      : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _QChip(
+                    label: 'كل السنة',
+                    selected: quarter == null,
+                    onTap: () =>
+                        ref.read(statementsQuarterProvider.notifier).state = null,
+                  ),
+                  for (var q = 1; q <= 4; q++) ...[
+                    const SizedBox(width: 6),
+                    _QChip(
+                      label: 'ر $q',
+                      selected: quarter == q,
+                      onTap: () => ref.read(statementsQuarterProvider.notifier).state =
+                          quarter == q ? null : q,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ]),
         ),
-      ),
-      error: (e, _) => EmptyState(
-        icon: Icons.wifi_off_rounded,
-        title: 'تعذّر التحميل',
-        subtitle: e.toString(),
-        actionLabel: 'إعادة المحاولة',
-        action: () => ref.invalidate(financeSummaryProvider),
-      ),
-      data: (summary) => RefreshIndicator(
-        color: AppColors.green,
-        onRefresh: () async => ref.invalidate(financeSummaryProvider),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TotalsCard(summary: summary),
-              const SizedBox(height: 16),
-              if (summary.monthly.isNotEmpty) ...[
-                const Text(
-                  'آخر 6 أشهر',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
+        const Divider(height: 1),
+        // ── Content ──────────────────────────────────────────────────────
+        Expanded(
+          child: asyncSummary.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(children: [
+                ShimmerCard(height: 96),
+                SizedBox(height: 12),
+                ShimmerCard(height: 240),
+              ]),
+            ),
+            error: (e, _) => EmptyState(
+              icon: Icons.wifi_off_rounded,
+              title: context.l10n.loadingFailed,
+              subtitle: e.toString(),
+              actionLabel: context.l10n.retry,
+              action: () {
+                ref.invalidate(financeSummaryProvider);
+                ref.invalidate(statementsForYearProvider(year));
+              },
+            ),
+            data: (summary) {
+              final stmtList = asyncStatements.valueOrNull ?? [];
+              final filtered = quarter == null
+                  ? stmtList
+                  : stmtList.where((s) {
+                      final m = s.month + 1;
+                      return m >= (quarter - 1) * 3 + 1 && m <= quarter * 3;
+                    }).toList();
+              final chartPoints = filtered
+                  .where((s) => s.income > 0 || s.totalExpenses > 0)
+                  .map((s) => s.toMonthlyPoint(year))
+                  .toList();
+              final displayPoints = chartPoints.length > 6
+                  ? chartPoints.sublist(chartPoints.length - 6)
+                  : chartPoints;
+
+              return RefreshIndicator(
+                color: AppColors.green,
+                onRefresh: () async {
+                  ref.invalidate(financeSummaryProvider);
+                  ref.invalidate(statementsForYearProvider(year));
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _KpiStrip(summary: summary),
+                      const SizedBox(height: 16),
+                      if (displayPoints.isNotEmpty) ...[
+                        _SectionHeader(title: context.l10n.last6Months),
+                        const SizedBox(height: 10),
+                        _MonthlyChart(points: displayPoints),
+                        const SizedBox(height: 12),
+                        const _ProfitLegend(),
+                      ] else
+                        EmptyState(
+                          icon: Icons.bar_chart_outlined,
+                          title: 'لا توجد بيانات',
+                          subtitle: 'لا توجد معاملات لهذه الفترة',
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                _MonthlyChart(points: summary.monthly),
-                const SizedBox(height: 16),
-                const _ProfitLegend(),
-              ],
-            ],
+              );
+            },
           ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _TotalsCard extends StatelessWidget {
-  const _TotalsCard({required this.summary});
+class _QChip extends StatelessWidget {
+  const _QChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.green : AppColors.bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: selected ? AppColors.green : AppColors.border),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? AppColors.white : AppColors.text)),
+    ),
+  );
+}
+
+// ── KPI strip (3 separate tiles) ──────────────────────────────────────────────
+
+class _KpiStrip extends StatelessWidget {
+  const _KpiStrip({required this.summary});
   final FinanceSummary summary;
 
   @override
@@ -327,46 +521,33 @@ class _TotalsCard extends StatelessWidget {
     final fmt = NumberFormat('#,##0', 'ar');
     final profitColor = summary.netProfit >= 0 ? AppColors.green : AppColors.red;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
-          BoxShadow(color: Color(0x08000000), blurRadius: 8, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(child: _TotalItem(
-            label: 'الإيرادات',
-            value: '${fmt.format(summary.totalIncome)} ج.م',
-            color: AppColors.green,
-            icon: Icons.trending_up,
-          )),
-          Container(width: 1, height: 48, color: AppColors.border),
-          Expanded(child: _TotalItem(
-            label: 'المصروفات',
-            value: '${fmt.format(summary.totalExpenses)} ج.م',
-            color: AppColors.red,
-            icon: Icons.trending_down,
-          )),
-          Container(width: 1, height: 48, color: AppColors.border),
-          Expanded(child: _TotalItem(
-            label: 'الربح الصافي',
-            value: '${fmt.format(summary.netProfit)} ج.م',
-            color: profitColor,
-            icon: Icons.account_balance_wallet_outlined,
-          )),
-        ],
-      ),
-    );
+    return Row(children: [
+      Expanded(child: _KpiTile(
+        label: context.l10n.incomeLabel,
+        value: fmt.format(summary.totalIncome),
+        color: AppColors.green,
+        icon: Icons.arrow_upward_rounded,
+      )),
+      const SizedBox(width: 8),
+      Expanded(child: _KpiTile(
+        label: context.l10n.expensesLabel,
+        value: fmt.format(summary.totalExpenses),
+        color: AppColors.red,
+        icon: Icons.arrow_downward_rounded,
+      )),
+      const SizedBox(width: 8),
+      Expanded(child: _KpiTile(
+        label: context.l10n.netProfitLabel,
+        value: fmt.format(summary.netProfit),
+        color: profitColor,
+        icon: Icons.account_balance_wallet_outlined,
+      )),
+    ]);
   }
 }
 
-class _TotalItem extends StatelessWidget {
-  const _TotalItem({
+class _KpiTile extends StatelessWidget {
+  const _KpiTile({
     required this.label,
     required this.value,
     required this.color,
@@ -378,29 +559,36 @@ class _TotalItem extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Icon(icon, size: 18, color: color),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          color: color,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: _kCard,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 15, color: color),
         ),
-      ),
-      Text(
-        label,
-        style: const TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 10,
-          color: AppColors.muted,
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w800, color: color),
         ),
-      ),
-    ],
+        Text(
+          label,
+          style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted),
+        ),
+        const Text('ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: _kMuted)),
+      ],
+    ),
   );
 }
 
@@ -420,9 +608,9 @@ class _MonthlyChart extends StatelessWidget {
       height: 220,
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: _kCard,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
       ),
       child: BarChart(
         BarChartData(
@@ -432,19 +620,13 @@ class _MonthlyChart extends StatelessWidget {
             drawHorizontalLine: true,
             drawVerticalLine: false,
             horizontalInterval: maxY > 0 ? maxY / 4 : 1,
-            getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.border,
-              strokeWidth: 1,
-            ),
+            getDrawingHorizontalLine: (_) => const FlLine(color: _kDivider, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -453,21 +635,12 @@ class _MonthlyChart extends StatelessWidget {
                   if (i < 0 || i >= points.length) return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      points[i].label,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 9,
-                        color: AppColors.muted,
-                      ),
-                    ),
+                    child: Text(points[i].label,
+                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 9, color: _kMuted)),
                   );
                 },
                 reservedSize: 22,
               ),
-            ),
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
             ),
           ),
           barGroups: List.generate(points.length, (i) {
@@ -476,20 +649,10 @@ class _MonthlyChart extends StatelessWidget {
               x: i,
               barsSpace: 4,
               barRods: [
-                BarChartRodData(
-                  toY: p.income,
-                  color: AppColors.green,
-                  width: 8,
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(4)),
-                ),
-                BarChartRodData(
-                  toY: p.expenses,
-                  color: AppColors.red.withValues(alpha: 0.7),
-                  width: 8,
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(4)),
-                ),
+                BarChartRodData(toY: p.income, color: AppColors.green, width: 8,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+                BarChartRodData(toY: p.expenses, color: AppColors.red.withValues(alpha: 0.7), width: 8,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
               ],
             );
           }),
@@ -506,11 +669,9 @@ class _ProfitLegend extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
-      _LegendDot(color: AppColors.green, label: 'الإيرادات'),
+      _LegendDot(color: AppColors.green, label: context.l10n.incomeLabel),
       const SizedBox(width: 20),
-      _LegendDot(
-          color: AppColors.red.withValues(alpha: 0.7),
-          label: 'المصروفات'),
+      _LegendDot(color: AppColors.red.withValues(alpha: 0.7), label: context.l10n.expensesLabel),
     ],
   );
 }
@@ -524,60 +685,351 @@ class _LegendDot extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
+      Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 4),
-      Text(label,
-          style: const TextStyle(
-              fontFamily: 'Cairo', fontSize: 12, color: AppColors.muted)),
+      Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: _kMuted)),
     ],
   );
 }
 
 // ── Expenses tab ──────────────────────────────────────────────────────────────
 
-void _showCategoryDrill(
-    BuildContext context, String category, List<ExpenseEntry> all) {
+class _ExpensesTab extends ConsumerStatefulWidget {
+  const _ExpensesTab();
+
+  @override
+  ConsumerState<_ExpensesTab> createState() => _ExpensesTabState();
+}
+
+class _ExpensesTabState extends ConsumerState<_ExpensesTab> {
+  String? _catFilter;
+
+  void _invalidate() {
+    ref.invalidate(recentExpensesProvider);
+    ref.invalidate(financeSummaryProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final asyncExpenses = ref.watch(recentExpensesProvider);
+
+    return asyncExpenses.when(
+      loading: () => const Padding(padding: EdgeInsets.all(16), child: ShimmerList(count: 5, cardHeight: 64)),
+      error: (_, __) => EmptyState(icon: Icons.trending_down_outlined, title: context.l10n.loadExpensesFailed),
+      data: (allExpenses) {
+        final expenses = _catFilter == null
+            ? allExpenses
+            : allExpenses.where((e) => e.category == _catFilter).toList();
+
+        if (allExpenses.isEmpty) {
+          return EmptyState(
+            icon: Icons.receipt_outlined,
+            title: context.l10n.noExpenses,
+            subtitle: context.l10n.noExpensesSubtitle,
+          );
+        }
+
+        final totals = <String, double>{};
+        for (final e in allExpenses) {
+          totals[e.category] = (totals[e.category] ?? 0) + e.amount;
+        }
+        final grandTotal = totals.values.fold<double>(0, (a, b) => a + b);
+
+        return RefreshIndicator(
+          color: AppColors.green,
+          onRefresh: () async => ref.invalidate(recentExpensesProvider),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            children: [
+              _CatFilterRow(
+                selected: _catFilter,
+                onChanged: (cat) => setState(() => _catFilter = cat),
+              ),
+              const SizedBox(height: 16),
+              if (_catFilter == null && grandTotal > 0) ...[
+                _SectionHeader(title: context.l10n.expensesBreakdown),
+                const SizedBox(height: 10),
+                _CategoryBreakdown(
+                  totals: totals,
+                  grandTotal: grandTotal,
+                  onCategoryTap: (cat) => _showCategoryDrill(context, cat, allExpenses),
+                ),
+                const SizedBox(height: 20),
+              ],
+              _SectionHeader(
+                title: _catFilter == null
+                    ? context.l10n.recentExpenses
+                    : _catAr[_catFilter] ?? _catFilter!,
+              ),
+              const SizedBox(height: 10),
+              if (expenses.isEmpty)
+                EmptyState(icon: Icons.receipt_outlined, title: 'لا توجد نتائج')
+              else
+                _TransactionList(
+                  children: List.generate(expenses.length, (i) => _ExpenseRow(
+                    expense: expenses[i],
+                    color: _catColors[expenses[i].category] ?? _kMuted,
+                    isLast: i == expenses.length - 1,
+                    onMutated: _invalidate,
+                  )),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+void _showCategoryDrill(BuildContext context, String category, List<ExpenseEntry> all) {
   final filtered = all.where((e) => e.category == category).toList();
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.card,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
+    backgroundColor: _kCard,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (_) => _CategoryDrillSheet(category: category, entries: filtered),
   );
 }
 
-class _CategoryDrillSheet extends StatelessWidget {
-  const _CategoryDrillSheet(
-      {required this.category, required this.entries});
-  final String category;
-  final List<ExpenseEntry> entries;
-
-  static const _catAr = {
-    'feed': 'علف', 'doctor': 'بيطري', 'transport': 'نقل',
-    'electricity': 'كهرباء', 'salary': 'رواتب', 'rent': 'إيجار',
-    'water': 'مياه', 'maintenance': 'صيانة', 'other': 'أخرى',
-  };
-  static const _catColors = {
-    'feed': Color(0xFF22C55E), 'doctor': Color(0xFFEF4444),
-    'transport': Color(0xFF3B82F6), 'electricity': Color(0xFFF59E0B),
-    'salary': Color(0xFF8B5CF6), 'rent': Color(0xFF06B6D4),
-    'water': Color(0xFF0EA5E9), 'maintenance': Color(0xFF6B7280),
-    'other': Color(0xFFD97706),
-  };
+class _CategoryBreakdown extends StatelessWidget {
+  const _CategoryBreakdown({required this.totals, required this.grandTotal, this.onCategoryTap});
+  final Map<String, double> totals;
+  final double grandTotal;
+  final void Function(String)? onCategoryTap;
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0', 'ar');
+    final sorted = totals.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        children: List.generate(sorted.length, (idx) {
+          final entry = sorted[idx];
+          final pct   = entry.value / grandTotal;
+          final color = _catColors[entry.key] ?? _kMuted;
+          final isLast = idx == sorted.length - 1;
+          return GestureDetector(
+            onTap: onCategoryTap != null ? () => onCategoryTap!(entry.key) : null,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text(_catAr[entry.key] ?? entry.key,
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText)),
+                        const Spacer(),
+                        Text('${fmt.format(entry.value)} ج.م  (${(pct * 100).toStringAsFixed(0)}%)',
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: _kMuted)),
+                      ]),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: pct,
+                          backgroundColor: color.withValues(alpha: 0.12),
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                          minHeight: 5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isLast) const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16, color: _kDivider),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _ExpenseRow extends StatelessWidget {
+  const _ExpenseRow({required this.expense, required this.color, required this.isLast, this.onMutated});
+  final ExpenseEntry expense;
+  final Color color;
+  final bool isLast;
+  final VoidCallback? onMutated;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt     = NumberFormat('#,##0', 'ar');
+    final dateFmt = DateFormat('d MMM', 'ar');
+
+    return Column(children: [
+      InkWell(
+        onLongPress: () => _showExpenseActions(context, expense, onMutated),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(_catIcons[expense.category] ?? Icons.receipt_outlined, size: 17, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(expense.categoryAr,
+                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w700, color: _kText)),
+                if (expense.note != null)
+                  Text(expense.note!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: _kMuted)),
+              ],
+            )),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${fmt.format(expense.amount)} ج.م',
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.red)),
+              Text(dateFmt.format(expense.date),
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted)),
+            ]),
+          ]),
+        ),
+      ),
+      if (!isLast) const Divider(height: 1, thickness: 1, indent: 66, color: _kDivider),
+    ]);
+  }
+}
+
+void _showExpenseActions(BuildContext outerCtx, ExpenseEntry expense, VoidCallback? onMutated) {
+  showModalBottomSheet(
+    context: outerCtx,
+    backgroundColor: _kCard,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (sheetCtx) => Consumer(
+      builder: (_, ref, __) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            Text(expense.categoryAr,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 2),
+            Text('${NumberFormat('#,##0', 'ar').format(expense.amount)} ج.م',
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(sheetCtx);
+                if (!outerCtx.mounted) return;
+                showModalBottomSheet(
+                  context: outerCtx,
+                  isScrollControlled: true,
+                  backgroundColor: _kCard,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => _EditExpenseSheet(expense: expense, onUpdated: onMutated ?? () {}),
+                );
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('تعديل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.green,
+                side: const BorderSide(color: AppColors.green),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(sheetCtx);
+                if (!outerCtx.mounted) return;
+                final confirmed = await showDialog<bool>(
+                  context: outerCtx,
+                  builder: (dCtx) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('حذف المصروف',
+                        style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800, color: _kText)),
+                    content: const Text('هل أنت متأكد من حذف هذا المصروف؟',
+                        style: TextStyle(fontFamily: 'Cairo', color: _kMuted)),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dCtx, false),
+                          child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo', color: _kMuted))),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dCtx, true),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.red,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        child: const Text('حذف',
+                            style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  try {
+                    await deleteExpense(ref.read(dioProvider), expense.id);
+                    onMutated?.call();
+                  } catch (_) {}
+                }
+              },
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('حذف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _CatFilterRow extends StatelessWidget {
+  const _CatFilterRow({required this.selected, required this.onChanged});
+  final String? selected;
+  final void Function(String?) onChanged;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(
+      children: [
+        _QChip(label: 'الكل', selected: selected == null, onTap: () => onChanged(null)),
+        ..._catAr.entries.map((e) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: _QChip(
+            label: e.value,
+            selected: selected == e.key,
+            onTap: () => onChanged(selected == e.key ? null : e.key),
+          ),
+        )),
+      ],
+    ),
+  );
+}
+
+class _CategoryDrillSheet extends StatelessWidget {
+  const _CategoryDrillSheet({required this.category, required this.entries});
+  final String category;
+  final List<ExpenseEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt     = NumberFormat('#,##0', 'ar');
     final dateFmt = DateFormat('d MMM yyyy', 'ar');
-    final total = entries.fold<double>(0, (s, e) => s + e.amount);
-    final color = _catColors[category] ?? AppColors.muted;
+    final total   = entries.fold<double>(0, (s, e) => s + e.amount);
+    final color   = _catColors[category] ?? _kMuted;
     final titleAr = _catAr[category] ?? category;
 
     return DraggableScrollableSheet(
@@ -590,392 +1042,55 @@ class _CategoryDrillSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  titleAr,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${fmt.format(total)} ج.م',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
+            Center(child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: _kDivider, borderRadius: BorderRadius.circular(2)),
+            )),
+            Row(children: [
+              Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Text(titleAr, style: const TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+              const Spacer(),
+              Text('${fmt.format(total)} ج.م',
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w800, color: color)),
+            ]),
             const SizedBox(height: 14),
             Expanded(
-              child: ListView.separated(
-                controller: scrollCtrl,
-                itemCount: entries.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final e = entries[i];
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.bg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                e.note ?? titleAr,
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.text,
-                                ),
-                              ),
-                              Text(
-                                dateFmt.format(e.date),
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 11,
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          '${fmt.format(e.amount)} ج.م',
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _kCard,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+                ),
+                child: ListView.separated(
+                  controller: scrollCtrl,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16, color: _kDivider),
+                  itemBuilder: (_, i) {
+                    final e = entries[i];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(children: [
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(e.note ?? titleAr,
+                                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w600, color: _kText)),
+                            Text(dateFmt.format(e.date),
+                                style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted)),
+                          ],
+                        )),
+                        Text('${fmt.format(e.amount)} ج.م',
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.red)),
+                      ]),
+                    );
+                  },
+                ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ExpensesTab extends ConsumerWidget {
-  const _ExpensesTab();
-
-  static const _catColors = {
-    'feed':        Color(0xFF22C55E),
-    'doctor':      Color(0xFFEF4444),
-    'transport':   Color(0xFF3B82F6),
-    'electricity': Color(0xFFF59E0B),
-    'salary':      Color(0xFF8B5CF6),
-    'rent':        Color(0xFF06B6D4),
-    'water':       Color(0xFF0EA5E9),
-    'maintenance': Color(0xFF6B7280),
-    'other':       Color(0xFFD97706),
-  };
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final asyncExpenses = ref.watch(recentExpensesProvider);
-
-    return asyncExpenses.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.all(16),
-        child: ShimmerList(count: 5, cardHeight: 64),
-      ),
-      error: (_, __) => const EmptyState(
-        icon: Icons.trending_down_outlined,
-        title: 'تعذّر تحميل المصروفات',
-      ),
-      data: (expenses) {
-        if (expenses.isEmpty) {
-          return const EmptyState(
-            icon: Icons.receipt_outlined,
-            title: 'لا توجد مصروفات مسجّلة',
-          );
-        }
-
-        // Category totals for mini chart
-        final totals = <String, double>{};
-        for (final e in expenses) {
-          totals[e.category] = (totals[e.category] ?? 0) + e.amount;
-        }
-        final grandTotal = totals.values.fold<double>(0, (a, b) => a + b);
-
-        return RefreshIndicator(
-          color: AppColors.green,
-          onRefresh: () async => ref.invalidate(recentExpensesProvider),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Category breakdown
-              if (grandTotal > 0) ...[
-                const Text(
-                  'توزيع المصروفات',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _CategoryBreakdown(
-                  totals: totals,
-                  grandTotal: grandTotal,
-                  onCategoryTap: (cat) => _showCategoryDrill(context, cat, expenses),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'آخر المصروفات',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              ...expenses.map((e) => _ExpenseRow(
-                    expense: e,
-                    color: _catColors[e.category] ?? AppColors.muted,
-                  )),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CategoryBreakdown extends StatelessWidget {
-  const _CategoryBreakdown({
-    required this.totals,
-    required this.grandTotal,
-    this.onCategoryTap,
-  });
-  final Map<String, double> totals;
-  final double grandTotal;
-  final void Function(String category)? onCategoryTap;
-
-  static const _catAr = {
-    'feed':        'علف',
-    'doctor':      'بيطري',
-    'transport':   'نقل',
-    'electricity': 'كهرباء',
-    'salary':      'رواتب',
-    'rent':        'إيجار',
-    'water':       'مياه',
-    'maintenance': 'صيانة',
-    'other':       'أخرى',
-  };
-
-  static const _catColors = {
-    'feed':        Color(0xFF22C55E),
-    'doctor':      Color(0xFFEF4444),
-    'transport':   Color(0xFF3B82F6),
-    'electricity': Color(0xFFF59E0B),
-    'salary':      Color(0xFF8B5CF6),
-    'rent':        Color(0xFF06B6D4),
-    'water':       Color(0xFF0EA5E9),
-    'maintenance': Color(0xFF6B7280),
-    'other':       Color(0xFFD97706),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final fmt = NumberFormat('#,##0', 'ar');
-    final sorted = totals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: sorted.map((entry) {
-          final pct = entry.value / grandTotal;
-          final color = _catColors[entry.key] ?? AppColors.muted;
-          return GestureDetector(
-            onTap: onCategoryTap != null
-                ? () => onCategoryTap!(entry.key)
-                : null,
-            child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _catAr[entry.key] ?? entry.key,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 12,
-                            color: AppColors.text,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      '${fmt.format(entry.value)} ج.م  (${(pct * 100).toStringAsFixed(0)}%)',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 11,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: color.withValues(alpha: 0.15),
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                    minHeight: 6,
-                  ),
-                ),
-              ],
-            ),
-          ));
-        }).toList(),
-      ),
-    );
-  }
-}
-
-class _ExpenseRow extends StatelessWidget {
-  const _ExpenseRow({required this.expense, required this.color});
-  final ExpenseEntry expense;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final fmt    = NumberFormat('#,##0', 'ar');
-    final dateFmt = DateFormat('d MMM', 'ar');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.receipt_outlined, size: 16, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  expense.categoryAr,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-                if (expense.note != null)
-                  Text(
-                    expense.note!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      color: AppColors.muted,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${fmt.format(expense.amount)} ج.م',
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.red,
-                ),
-              ),
-              Text(
-                dateFmt.format(expense.date),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 10,
-                  color: AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -991,67 +1106,55 @@ class _IncomeTab extends ConsumerWidget {
     final asyncIncome = ref.watch(recentIncomeProvider);
 
     return asyncIncome.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.all(16),
-        child: ShimmerList(count: 5, cardHeight: 64),
-      ),
-      error: (_, __) => const EmptyState(
-        icon: Icons.trending_up_outlined,
-        title: 'تعذّر تحميل الإيرادات',
-      ),
+      loading: () => const Padding(padding: EdgeInsets.all(16), child: ShimmerList(count: 5, cardHeight: 64)),
+      error: (_, __) => EmptyState(icon: Icons.trending_up_outlined, title: context.l10n.loadIncomeFailed),
       data: (income) {
         if (income.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.payments_outlined,
-            title: 'لا توجد إيرادات مسجّلة',
+            title: context.l10n.noIncome,
+            subtitle: context.l10n.noIncomeSubtitle,
           );
         }
 
-        final fmt = NumberFormat('#,##0', 'ar');
+        final fmt   = NumberFormat('#,##0', 'ar');
         final total = income.fold<double>(0, (s, e) => s + e.amount);
 
         return RefreshIndicator(
           color: AppColors.green,
           onRefresh: () async => ref.invalidate(recentIncomeProvider),
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
-              // Total header
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.greenBg,
+                  color: AppColors.green,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.greenBorder),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.trending_up,
-                        color: AppColors.green, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'إجمالي الإيرادات',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                        color: AppColors.greenText,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${fmt.format(total)} ج.م',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.green,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Row(children: [
+                  const Icon(Icons.trending_up, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Text(context.l10n.totalIncome,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.white)),
+                  const Spacer(),
+                  Text('${fmt.format(total)} ج.م',
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                ]),
               ),
               const SizedBox(height: 16),
-              ...income.map((e) => _IncomeRow(entry: e)),
+              _SectionHeader(title: context.l10n.recentIncome),
+              const SizedBox(height: 10),
+              _TransactionList(
+                children: List.generate(income.length, (i) => _IncomeRow(
+                  entry: income[i],
+                  isLast: i == income.length - 1,
+                  onMutated: () {
+                    ref.invalidate(recentIncomeProvider);
+                    ref.invalidate(financeSummaryProvider);
+                  },
+                )),
+              ),
             ],
           ),
         );
@@ -1061,86 +1164,1533 @@ class _IncomeTab extends ConsumerWidget {
 }
 
 class _IncomeRow extends StatelessWidget {
-  const _IncomeRow({required this.entry});
+  const _IncomeRow({required this.entry, required this.isLast, this.onMutated});
   final IncomeEntry entry;
+  final bool isLast;
+  final VoidCallback? onMutated;
 
   @override
   Widget build(BuildContext context) {
     final fmt     = NumberFormat('#,##0', 'ar');
     final dateFmt = DateFormat('d MMM', 'ar');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: AppColors.green.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+    return Column(children: [
+      InkWell(
+        onLongPress: () => _showIncomeActions(context, entry, onMutated),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: const Icon(Icons.payments_outlined, size: 17, color: AppColors.green),
             ),
-            child: const Icon(Icons.payments_outlined,
-                size: 16, color: AppColors.green),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
+            const SizedBox(width: 12),
+            Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  entry.source ?? 'بيع ماشية',
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-                if (entry.note != null)
-                  Text(
-                    entry.note!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      color: AppColors.muted,
-                    ),
-                  ),
+                Row(children: [
+                  Text(entry.sourceAr,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w700, color: _kText)),
+                  const SizedBox(width: 6),
+                  _PayStatusChip(isPending: entry.isPending),
+                ]),
+                if (entry.buyerName != null && entry.buyerName!.isNotEmpty)
+                  Text(entry.buyerName!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: _kMuted))
+                else if (entry.note != null)
+                  Text(entry.note!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: _kMuted)),
               ],
+            )),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${fmt.format(entry.amount)} ج.م',
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.green)),
+              Text(dateFmt.format(entry.date),
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted)),
+            ]),
+          ]),
+        ),
+      ),
+      if (!isLast) const Divider(height: 1, thickness: 1, indent: 66, color: _kDivider),
+    ]);
+  }
+}
+
+class _PayStatusChip extends StatelessWidget {
+  const _PayStatusChip({required this.isPending});
+  final bool isPending;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: isPending ? const Color(0xFFFFF3E0) : AppColors.green.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      isPending ? 'معلق' : 'مُستلم',
+      style: TextStyle(
+        fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.w700,
+        color: isPending ? const Color(0xFFF57C00) : AppColors.green,
+      ),
+    ),
+  );
+}
+
+void _showIncomeActions(BuildContext outerCtx, IncomeEntry entry, VoidCallback? onMutated) {
+  showModalBottomSheet(
+    context: outerCtx,
+    backgroundColor: _kCard,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (sheetCtx) => Consumer(
+      builder: (_, ref, __) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            Text(entry.sourceAr,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 2),
+            Text('${NumberFormat('#,##0', 'ar').format(entry.amount)} ج.م',
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(sheetCtx);
+                if (!outerCtx.mounted) return;
+                showModalBottomSheet(
+                  context: outerCtx,
+                  isScrollControlled: true,
+                  backgroundColor: _kCard,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => _EditIncomeSheet(entry: entry, onUpdated: onMutated ?? () {}),
+                );
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('تعديل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.green,
+                side: const BorderSide(color: AppColors.green),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${fmt.format(entry.amount)} ج.م',
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.green,
-                ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(sheetCtx);
+                if (!outerCtx.mounted) return;
+                final confirmed = await showDialog<bool>(
+                  context: outerCtx,
+                  builder: (dCtx) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('حذف الإيراد',
+                        style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800, color: _kText)),
+                    content: const Text('هل أنت متأكد من حذف هذا الإيراد؟',
+                        style: TextStyle(fontFamily: 'Cairo', color: _kMuted)),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dCtx, false),
+                          child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo', color: _kMuted))),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dCtx, true),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.red,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        child: const Text('حذف',
+                            style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  try {
+                    await deleteIncome(ref.read(dioProvider), entry.id);
+                    onMutated?.call();
+                  } catch (_) {}
+                }
+              },
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('حذف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              Text(
-                dateFmt.format(entry.date),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 10,
-                  color: AppColors.muted,
-                ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+// ── Shared layout helpers ─────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Container(width: 3, height: 16, decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(2))),
+    const SizedBox(width: 8),
+    Text(title, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w800, color: _kText)),
+  ]);
+}
+
+class _TransactionList extends StatelessWidget {
+  const _TransactionList({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: _kCard,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+    ),
+    child: Column(children: children),
+  );
+}
+
+// ── Add Expense sheet ─────────────────────────────────────────────────────────
+
+class _AddExpenseSheet extends ConsumerStatefulWidget {
+  const _AddExpenseSheet({required this.onCreated});
+  final VoidCallback onCreated;
+
+  @override
+  ConsumerState<_AddExpenseSheet> createState() => _AddExpenseSheetState();
+}
+
+class _AddExpenseSheetState extends ConsumerState<_AddExpenseSheet> {
+  final _amountCtrl = TextEditingController();
+  final _noteCtrl   = TextEditingController();
+  String   _category = 'feed';
+  DateTime _date     = DateTime.now();
+  bool     _loading  = false;
+  String?  _error;
+
+  static const _categories = [
+    ('feed',        'علف',     Icons.grass_outlined),
+    ('doctor',      'بيطري',   Icons.medical_services_outlined),
+    ('transport',   'نقل',     Icons.local_shipping_outlined),
+    ('electricity', 'كهرباء',  Icons.bolt_outlined),
+    ('salary',      'رواتب',   Icons.people_outline),
+    ('rent',        'إيجار',   Icons.home_outlined),
+    ('water',       'مياه',    Icons.water_drop_outlined),
+    ('maintenance', 'صيانة',   Icons.build_outlined),
+    ('other',       'أخرى',    Icons.more_horiz),
+  ];
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim().replaceAll(',', ''));
+    if (amount == null || amount <= 0) {
+      setState(() => _error = context.l10n.amountInvalid);
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await addExpense(ref.read(dioProvider), {
+        'category': _category,
+        'amount':   amount,
+        'date':     _date.toIso8601String(),
+        if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+      });
+      widget.onCreated();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      setState(() { _error = context.l10n.addExpenseFailed; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            Text(context.l10n.addExpenseTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 16),
+
+            // Amount
+            _FieldLabel(context.l10n.amountLabel),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.red),
+              decoration: InputDecoration(
+                hintText: '0.00',
+                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.red.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: AppColors.redBg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // Category
+            _FieldLabel(context.l10n.categoryLabel),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: _categories.map((c) => GestureDetector(
+                onTap: () => setState(() => _category = c.$1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _category == c.$1 ? AppColors.red : _kBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _category == c.$1 ? AppColors.red : _kBorder),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(c.$3, size: 13, color: _category == c.$1 ? Colors.white : _kMuted),
+                    const SizedBox(width: 4),
+                    Text(c.$2, style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                        color: _category == c.$1 ? Colors.white : _kText)),
+                  ]),
+                ),
+              )).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Date
+            _FieldLabel(context.l10n.dateLabel2),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kBorder),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16, color: _kMuted),
+                  const SizedBox(width: 8),
+                  Text(dateFmt.format(_date),
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Note
+            _FieldLabel(context.l10n.noteOptional),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteCtrl,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText),
+              decoration: InputDecoration(
+                hintText: context.l10n.noteHint,
+                hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted),
+                filled: true,
+                fillColor: _kBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+              ),
+            ),
+
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.red)),
             ],
+            const SizedBox(height: 20),
+
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _loading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(context.l10n.submitExpense,
+                      style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white, fontSize: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Add Income sheet ──────────────────────────────────────────────────────────
+
+class _AddIncomeSheet extends ConsumerStatefulWidget {
+  const _AddIncomeSheet({required this.onCreated});
+  final VoidCallback onCreated;
+
+  @override
+  ConsumerState<_AddIncomeSheet> createState() => _AddIncomeSheetState();
+}
+
+class _AddIncomeSheetState extends ConsumerState<_AddIncomeSheet> {
+  final _amountCtrl = TextEditingController();
+  final _noteCtrl   = TextEditingController();
+  String   _type    = 'sale';
+  DateTime _date    = DateTime.now();
+  bool     _loading = false;
+  String?  _error;
+
+  static const _types = [
+    ('sale',    'بيع ماشية',  Icons.storefront_outlined),
+    ('deposit', 'إيداع / تحويل', Icons.account_balance_outlined),
+  ];
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim().replaceAll(',', ''));
+    if (amount == null || amount <= 0) {
+      setState(() => _error = context.l10n.amountInvalid);
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await addIncome(ref.read(dioProvider), {
+        'type':   _type,
+        'amount': amount,
+        'date':   _date.toIso8601String(),
+        if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+      });
+      widget.onCreated();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      setState(() { _error = context.l10n.addIncomeFailed; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            Text(context.l10n.addIncomeTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 16),
+
+            // Amount
+            _FieldLabel(context.l10n.amountLabel),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.green),
+              decoration: InputDecoration(
+                hintText: '0.00',
+                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.green.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: AppColors.greenBg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Type
+            _FieldLabel(context.l10n.dairyType),
+            const SizedBox(height: 8),
+            Row(children: _types.map((t) => Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(left: t.$1 == _types.last.$1 ? 0 : 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _type = t.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _type == t.$1 ? AppColors.green : _kBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _type == t.$1 ? AppColors.green : _kBorder),
+                    ),
+                    child: Column(children: [
+                      Icon(t.$3, size: 20, color: _type == t.$1 ? Colors.white : _kMuted),
+                      const SizedBox(height: 4),
+                      Text(t.$2, textAlign: TextAlign.center,
+                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11,
+                              color: _type == t.$1 ? Colors.white : _kText)),
+                    ]),
+                  ),
+                ),
+              ),
+            )).toList()),
+            const SizedBox(height: 16),
+
+            // Date
+            _FieldLabel(context.l10n.dateLabel2),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kBorder),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16, color: _kMuted),
+                  const SizedBox(width: 8),
+                  Text(dateFmt.format(_date),
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Note
+            _FieldLabel(context.l10n.noteOptional),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteCtrl,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText),
+              decoration: InputDecoration(
+                hintText: context.l10n.noteHint,
+                hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted),
+                filled: true,
+                fillColor: _kBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+              ),
+            ),
+
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.red)),
+            ],
+            const SizedBox(height: 20),
+
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.green,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _loading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(context.l10n.submitIncome,
+                      style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white, fontSize: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Edit Expense sheet ────────────────────────────────────────────────────────
+
+class _EditExpenseSheet extends ConsumerStatefulWidget {
+  const _EditExpenseSheet({required this.expense, required this.onUpdated});
+  final ExpenseEntry expense;
+  final VoidCallback onUpdated;
+
+  @override
+  ConsumerState<_EditExpenseSheet> createState() => _EditExpenseSheetState();
+}
+
+class _EditExpenseSheetState extends ConsumerState<_EditExpenseSheet> {
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _noteCtrl;
+  late String   _category;
+  late DateTime _date;
+  bool     _loading = false;
+  String?  _error;
+
+  static const _categories = [
+    ('feed',        'علف',     Icons.grass_outlined),
+    ('doctor',      'بيطري',   Icons.medical_services_outlined),
+    ('transport',   'نقل',     Icons.local_shipping_outlined),
+    ('electricity', 'كهرباء',  Icons.bolt_outlined),
+    ('salary',      'رواتب',   Icons.people_outline),
+    ('rent',        'إيجار',   Icons.home_outlined),
+    ('water',       'مياه',    Icons.water_drop_outlined),
+    ('maintenance', 'صيانة',   Icons.build_outlined),
+    ('other',       'أخرى',    Icons.more_horiz),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _amountCtrl = TextEditingController(text: widget.expense.amount.toStringAsFixed(0));
+    _noteCtrl   = TextEditingController(text: widget.expense.note ?? '');
+    _category   = widget.expense.category;
+    _date       = widget.expense.date;
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim().replaceAll(',', ''));
+    if (amount == null || amount <= 0) {
+      setState(() => _error = context.l10n.amountInvalid);
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await updateExpense(ref.read(dioProvider), widget.expense.id, {
+        'category': _category,
+        'amount':   amount,
+        'date':     _date.toIso8601String(),
+        if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+      });
+      widget.onUpdated();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      setState(() { _error = context.l10n.addExpenseFailed; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            const Text('تعديل المصروف',
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 16),
+            _FieldLabel(context.l10n.amountLabel),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.red),
+              decoration: InputDecoration(
+                hintText: '0.00',
+                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.red.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: AppColors.redBg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _FieldLabel(context.l10n.categoryLabel),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: _categories.map((c) => GestureDetector(
+                onTap: () => setState(() => _category = c.$1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _category == c.$1 ? AppColors.red : _kBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _category == c.$1 ? AppColors.red : _kBorder),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(c.$3, size: 13, color: _category == c.$1 ? Colors.white : _kMuted),
+                    const SizedBox(width: 4),
+                    Text(c.$2, style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                        color: _category == c.$1 ? Colors.white : _kText)),
+                  ]),
+                ),
+              )).toList(),
+            ),
+            const SizedBox(height: 16),
+            _FieldLabel(context.l10n.dateLabel2),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kBorder),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16, color: _kMuted),
+                  const SizedBox(width: 8),
+                  Text(dateFmt.format(_date),
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _FieldLabel(context.l10n.noteOptional),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteCtrl,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText),
+              decoration: InputDecoration(
+                hintText: context.l10n.noteHint,
+                hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted),
+                filled: true,
+                fillColor: _kBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.red)),
+            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.red,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _loading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('حفظ التعديلات',
+                      style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white, fontSize: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Edit Income sheet ─────────────────────────────────────────────────────────
+
+class _EditIncomeSheet extends ConsumerStatefulWidget {
+  const _EditIncomeSheet({required this.entry, required this.onUpdated});
+  final IncomeEntry entry;
+  final VoidCallback onUpdated;
+
+  @override
+  ConsumerState<_EditIncomeSheet> createState() => _EditIncomeSheetState();
+}
+
+class _EditIncomeSheetState extends ConsumerState<_EditIncomeSheet> {
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _noteCtrl;
+  late final TextEditingController _buyerCtrl;
+  late String   _type;
+  late DateTime _date;
+  late String   _paymentStatus;
+  bool     _loading = false;
+  String?  _error;
+
+  static const _types = [
+    ('sale',    'بيع ماشية',     Icons.storefront_outlined),
+    ('deposit', 'إيداع / تحويل', Icons.account_balance_outlined),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _amountCtrl    = TextEditingController(text: widget.entry.amount.toStringAsFixed(0));
+    _noteCtrl      = TextEditingController(text: widget.entry.note ?? '');
+    _buyerCtrl     = TextEditingController(text: widget.entry.buyerName ?? '');
+    _type          = widget.entry.type;
+    _date          = widget.entry.date;
+    _paymentStatus = widget.entry.paymentStatus;
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _noteCtrl.dispose();
+    _buyerCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim().replaceAll(',', ''));
+    if (amount == null || amount <= 0) {
+      setState(() => _error = context.l10n.amountInvalid);
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await updateIncome(ref.read(dioProvider), widget.entry.id, {
+        'type':          _type,
+        'amount':        amount,
+        'date':          _date.toIso8601String(),
+        'paymentStatus': _paymentStatus,
+        if (_noteCtrl.text.trim().isNotEmpty) 'note': _noteCtrl.text.trim(),
+        if (_buyerCtrl.text.trim().isNotEmpty) 'buyerName': _buyerCtrl.text.trim(),
+      });
+      widget.onUpdated();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      setState(() { _error = context.l10n.addIncomeFailed; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHandle(),
+            const Text('تعديل الإيراد',
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.w800, color: _kText)),
+            const SizedBox(height: 16),
+            _FieldLabel(context.l10n.amountLabel),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.green),
+              decoration: InputDecoration(
+                hintText: '0.00',
+                hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.green.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: AppColors.greenBg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _FieldLabel(context.l10n.dairyType),
+            const SizedBox(height: 8),
+            Row(children: _types.map((t) => Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(left: t.$1 == _types.last.$1 ? 0 : 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _type = t.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _type == t.$1 ? AppColors.green : _kBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _type == t.$1 ? AppColors.green : _kBorder),
+                    ),
+                    child: Column(children: [
+                      Icon(t.$3, size: 20, color: _type == t.$1 ? Colors.white : _kMuted),
+                      const SizedBox(height: 4),
+                      Text(t.$2, textAlign: TextAlign.center,
+                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11,
+                              color: _type == t.$1 ? Colors.white : _kText)),
+                    ]),
+                  ),
+                ),
+              ),
+            )).toList()),
+            const SizedBox(height: 16),
+            _FieldLabel('حالة الدفع'),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: GestureDetector(
+                onTap: () => setState(() => _paymentStatus = 'received'),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _paymentStatus == 'received' ? AppColors.green : _kBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _paymentStatus == 'received' ? AppColors.green : _kBorder),
+                  ),
+                  child: Text('مُستلم', textAlign: TextAlign.center,
+                      style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700,
+                          color: _paymentStatus == 'received' ? Colors.white : _kText)),
+                ),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: GestureDetector(
+                onTap: () => setState(() => _paymentStatus = 'pending'),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _paymentStatus == 'pending' ? const Color(0xFFF57C00) : _kBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _paymentStatus == 'pending' ? const Color(0xFFF57C00) : _kBorder),
+                  ),
+                  child: Text('معلق', textAlign: TextAlign.center,
+                      style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700,
+                          color: _paymentStatus == 'pending' ? Colors.white : _kText)),
+                ),
+              )),
+            ]),
+            const SizedBox(height: 16),
+            _FieldLabel('اسم المشتري (اختياري)'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _buyerCtrl,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText),
+              decoration: InputDecoration(
+                hintText: 'اسم العميل',
+                hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted),
+                filled: true,
+                fillColor: _kBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _FieldLabel(context.l10n.dateLabel2),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kBorder),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16, color: _kMuted),
+                  const SizedBox(width: 8),
+                  Text(dateFmt.format(_date),
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _FieldLabel(context.l10n.noteOptional),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteCtrl,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kText),
+              decoration: InputDecoration(
+                hintText: context.l10n.noteHint,
+                hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: _kMuted),
+                filled: true,
+                fillColor: _kBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.red)),
+            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.green,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _loading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('حفظ التعديلات',
+                      style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white, fontSize: 15)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared sheet widgets ──────────────────────────────────────────────────────
+
+class _SheetHandle extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      width: 40, height: 4,
+      decoration: BoxDecoration(color: _kDivider, borderRadius: BorderRadius.circular(2)),
+    ),
+  );
+}
+
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w600, color: _kMuted),
+  );
+}
+
+// ── Budget tab ────────────────────────────────────────────────────────────────
+
+class _BudgetTab extends ConsumerStatefulWidget {
+  const _BudgetTab();
+
+  @override
+  ConsumerState<_BudgetTab> createState() => _BudgetTabState();
+}
+
+class _BudgetTabState extends ConsumerState<_BudgetTab> {
+  int _selectedMonth = DateTime.now().month; // 1-based
+  final int _currentYear = DateTime.now().year;
+
+  static const _monthNames = [
+    '', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+  ];
+
+  static const _categories = [
+    ('feed',        'علف',     Icons.grass_outlined,            Color(0xFF22C55E)),
+    ('doctor',      'بيطري',   Icons.medical_services_outlined, Color(0xFFEF4444)),
+    ('transport',   'نقل',     Icons.local_shipping_outlined,   Color(0xFF3B82F6)),
+    ('electricity', 'كهرباء',  Icons.bolt_outlined,             Color(0xFFF59E0B)),
+    ('salary',      'رواتب',   Icons.people_outline,            Color(0xFF8B5CF6)),
+    ('rent',        'إيجار',   Icons.home_outlined,             Color(0xFF06B6D4)),
+    ('water',       'مياه',    Icons.water_drop_outlined,       Color(0xFF0EA5E9)),
+    ('maintenance', 'صيانة',   Icons.build_outlined,            Color(0xFF6B7280)),
+    ('other',       'أخرى',    Icons.more_horiz,               Color(0xFFD97706)),
+  ];
+
+  Future<void> _editBudget(String category, String categoryAr, double current) async {
+    final ctrl = TextEditingController(
+        text: current > 0 ? current.toStringAsFixed(0) : '');
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          context.l10n.editBudgetTitle(categoryAr),
+          style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800, color: _kText, fontSize: 16),
+        ),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: false),
+          autofocus: true,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontFamily: 'Cairo', fontSize: 22, fontWeight: FontWeight.w800, color: _kText),
+          decoration: InputDecoration(
+            hintText: '0',
+            hintStyle: TextStyle(fontFamily: 'Cairo', fontSize: 22, color: _kMuted.withValues(alpha: 0.4)),
+            suffixText: 'ج.م',
+            suffixStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14, color: _kMuted),
+            filled: true,
+            fillColor: _kBg,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _kBorder)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _kBorder)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.green, width: 2)),
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(context.l10n.cancel, style: const TextStyle(fontFamily: 'Cairo', color: _kMuted)),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text.trim().replaceAll(',', ''));
+              if (v != null && v >= 0) Navigator.pop(ctx, v);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(context.l10n.save,
+                style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || !mounted) return;
+    try {
+      await upsertBudget(
+        ref.read(dioProvider),
+        year: _currentYear,
+        month: _selectedMonth,
+        category: category,
+        targetAmount: result,
+      );
+      ref.invalidate(currentYearBudgetProvider);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final asyncStatements = ref.watch(currentYearStatementsProvider);
+    final asyncBudget     = ref.watch(currentYearBudgetProvider);
+
+    // Actuals for selected month (month is 0-based in statements, 1-based in _selectedMonth)
+    StatementMonth? stmt;
+    final stmtList = asyncStatements.valueOrNull;
+    if (stmtList != null) {
+      for (final s in stmtList) {
+        if (s.month == _selectedMonth - 1) { stmt = s; break; }
+      }
+    }
+
+    // Budget targets for selected month (1-based)
+    final budgets = asyncBudget.valueOrNull ?? [];
+    final budgetMap = <String, double>{
+      for (final b in budgets.where((b) => b.month == _selectedMonth))
+        b.category: b.targetAmount,
+    };
+
+    final fmt          = NumberFormat('#,##0', 'ar');
+    final totalActual  = stmt?.totalExpenses ?? 0.0;
+    final totalTarget  = budgetMap.values.fold(0.0, (a, b) => a + b);
+    final isLoading    = asyncStatements.isLoading || asyncBudget.isLoading;
+
+    return RefreshIndicator(
+      color: AppColors.green,
+      onRefresh: () async {
+        ref.invalidate(currentYearStatementsProvider);
+        ref.invalidate(currentYearBudgetProvider);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: [
+          // Month selector
+          _MonthSelector(
+            selected: _selectedMonth,
+            onChanged: (m) => setState(() => _selectedMonth = m),
+          ),
+          const SizedBox(height: 14),
+
+          if (isLoading) ...[
+            const ShimmerCard(height: 90),
+            const SizedBox(height: 12),
+            const ShimmerList(count: 5, cardHeight: 72),
+          ] else ...[
+            // Summary header
+            _BudgetSummaryHeader(
+              actual: totalActual,
+              budgeted: totalTarget,
+              fmt: fmt,
+            ),
+            const SizedBox(height: 14),
+
+            _SectionHeader(title: context.l10n.budgetFor(_monthNames[_selectedMonth])),
+            const SizedBox(height: 10),
+
+            Container(
+              decoration: BoxDecoration(
+                color: _kCard,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                children: List.generate(_categories.length, (i) {
+                  final cat    = _categories[i];
+                  final actual = stmt?.expenses[cat.$1] ?? 0.0;
+                  final target = budgetMap[cat.$1] ?? 0.0;
+                  return _BudgetRow(
+                    categoryAr: cat.$2,
+                    icon:       cat.$3,
+                    color:      cat.$4,
+                    actual:     actual,
+                    target:     target,
+                    fmt:        fmt,
+                    isLast:     i == _categories.length - 1,
+                    onEdit:     () => _editBudget(cat.$1, cat.$2, target),
+                  );
+                }),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
+
+// ── Month selector chip row ───────────────────────────────────────────────────
+
+class _MonthSelector extends StatelessWidget {
+  const _MonthSelector({required this.selected, required this.onChanged});
+  final int selected;
+  final void Function(int) onChanged;
+
+  static const _months = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+  ];
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 34,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: 12,
+      itemBuilder: (_, i) {
+        final month      = i + 1;
+        final isSelected = month == selected;
+        return GestureDetector(
+          onTap: () => onChanged(month),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.green : _kCard,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isSelected ? AppColors.green : _kBorder),
+            ),
+            child: Text(
+              _months[i],
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? Colors.white : _kMuted,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+// ── Budget summary header ─────────────────────────────────────────────────────
+
+class _BudgetSummaryHeader extends StatelessWidget {
+  const _BudgetSummaryHeader({
+    required this.actual,
+    required this.budgeted,
+    required this.fmt,
+  });
+  final double actual;
+  final double budgeted;
+  final NumberFormat fmt;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTarget = budgeted > 0;
+    final pct       = hasTarget ? (actual / budgeted).clamp(0.0, 1.5) : 0.0;
+    final over      = hasTarget && actual > budgeted;
+    final color     = over ? AppColors.red : AppColors.green;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Column(children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(context.l10n.actualSpending,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted)),
+              Text('${fmt.format(actual)} ج.م',
+                  style: TextStyle(
+                    fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+            ]),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(context.l10n.totalBudget,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: _kMuted)),
+              Text(
+                hasTarget ? '${fmt.format(budgeted)} ج.م' : context.l10n.notSet,
+                style: TextStyle(
+                  fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.w800,
+                  color: hasTarget ? _kText : _kMuted,
+                ),
+              ),
+            ]),
+          ],
+        ),
+        if (hasTarget) ...[
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: pct.clamp(0.0, 1.0),
+              backgroundColor: color.withValues(alpha: 0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(
+              over
+                  ? context.l10n.budgetExceededBy(fmt.format(actual - budgeted))
+                  : context.l10n.remaining(fmt.format(budgeted - actual)),
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700, color: color),
+            ),
+            Text(
+              '${(pct * 100).toStringAsFixed(0)}%',
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700, color: color),
+            ),
+          ]),
+        ],
+      ]),
+    );
+  }
+}
+
+// ── Budget row (per category) ─────────────────────────────────────────────────
+
+class _BudgetRow extends StatelessWidget {
+  const _BudgetRow({
+    required this.categoryAr,
+    required this.icon,
+    required this.color,
+    required this.actual,
+    required this.target,
+    required this.fmt,
+    required this.isLast,
+    required this.onEdit,
+  });
+  final String categoryAr;
+  final IconData icon;
+  final Color color;
+  final double actual;
+  final double target;
+  final NumberFormat fmt;
+  final bool isLast;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTarget = target > 0;
+    final pct       = hasTarget ? (actual / target).clamp(0.0, 1.5) : 0.0;
+    final over      = hasTarget && actual > target;
+    final barColor  = over ? AppColors.red : color;
+
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(icon, size: 15, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(categoryAr,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo', fontSize: 13,
+                        fontWeight: FontWeight.w700, color: _kText)),
+                Text(
+                  hasTarget
+                      ? '${fmt.format(actual)} / ${fmt.format(target)} ج.م'
+                      : actual > 0
+                          ? '${fmt.format(actual)} ج.م  (${context.l10n.noTarget})'
+                          : context.l10n.noSpending,
+                  style: const TextStyle(
+                      fontFamily: 'Cairo', fontSize: 11, color: _kMuted),
+                ),
+              ],
+            )),
+            if (over)
+              Container(
+                margin: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.redBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(context.l10n.budgetExceeded,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo', fontSize: 10,
+                        fontWeight: FontWeight.w700, color: AppColors.red)),
+              ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onEdit,
+              child: Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: _kBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _kBorder),
+                ),
+                child: const Icon(Icons.edit_outlined, size: 14, color: _kMuted),
+              ),
+            ),
+          ]),
+          if (hasTarget || actual > 0) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: pct.clamp(0.0, 1.0),
+                backgroundColor: barColor.withValues(alpha: 0.12),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                minHeight: 5,
+              ),
+            ),
+          ],
+        ]),
+      ),
+      if (!isLast)
+        const Divider(height: 1, thickness: 1, indent: 16, endIndent: 16, color: _kDivider),
+    ]);
+  }
+}
+
+// ── Add choice card (expense / income picker) ─────────────────────────────────
+
+class _AddChoiceCard extends StatelessWidget {
+  const _AddChoiceCard({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.bg,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color bg;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 22),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(children: [
+        Icon(icon, size: 28, color: color),
+        const SizedBox(height: 8),
+        Text(label,
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+                fontWeight: FontWeight.w800, color: color)),
+      ]),
+    ),
+  );
+}
+
+// ── Public helpers — callable from any screen ─────────────────────────────────
+
+/// Opens the expense add form from any screen context.
+void showAddExpenseSheet(
+  BuildContext context, {
+  required VoidCallback onCreated,
+}) =>
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _kCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _AddExpenseSheet(onCreated: onCreated),
+    );
+
+/// Opens the income add form from any screen context.
+void showAddIncomeSheet(
+  BuildContext context, {
+  required VoidCallback onCreated,
+}) =>
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _kCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _AddIncomeSheet(onCreated: onCreated),
+    );

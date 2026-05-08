@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_notifier.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/l10n/l10n_ext.dart';
 
 class SplashScreen extends ConsumerWidget {
   const SplashScreen({super.key});
@@ -45,7 +46,7 @@ class SplashScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'سوق الثروة الحيوانية',
+              context.l10n.tagline,
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 16,

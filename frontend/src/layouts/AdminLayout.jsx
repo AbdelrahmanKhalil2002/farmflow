@@ -4,23 +4,24 @@ import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 
 const S = {
-  sidebarBg:   '#FFFFFF',
-  activeBg:    '#F0FDF4',
-  activeColor: '#16A34A',
-  dimColor:    '#6B7280',
-  border:      '#E5E7EB',
-  mainBg:      '#F4F6F4',
-  text:        '#111827',
+  sidebarBg:   'var(--sidebar-bg, #F0F7F1)',
+  activeBg:    'var(--sidebar-active-bg, rgba(58,125,68,0.09))',
+  activeColor: 'var(--sidebar-active-color, #3A7D44)',
+  dimColor:    'var(--sidebar-dim-color, #4B6B4E)',
+  border:      'var(--sidebar-border, #D4E8D6)',
+  mainBg:      'var(--main-bg, #F7FBF7)',
+  text:        'var(--sidebar-text, #1A2E1C)',
 };
 
 const LINKS = [
-  { to: '/admin',           label: 'Dashboard', icon: '▦', end: true },
-  { to: '/admin/listings',  label: 'Listings',  icon: '📋'           },
-  { to: '/admin/dairy',     label: 'Dairy',     icon: '🥛'           },
-  { to: '/admin/supplies',  label: 'Supplies',  icon: '🛒'           },
-  { to: '/admin/users',     label: 'Users',     icon: '👥'           },
-  { to: '/admin/orders',    label: 'Orders',    icon: '📦'           },
-  { to: '/admin/reviews',   label: 'Reviews',   icon: '⭐'           },
+  { to: '/admin',              label: 'Dashboard',  icon: '▦', end: true },
+  { to: '/admin/listings',     label: 'Listings',   icon: '📋'           },
+  { to: '/admin/dairy',        label: 'Dairy',      icon: '🥛'           },
+  { to: '/admin/supplies',     label: 'Supplies',   icon: '🛒'           },
+  { to: '/admin/users',        label: 'Users',      icon: '👥'           },
+  { to: '/admin/orders',       label: 'Orders',     icon: '📦'           },
+  { to: '/admin/reviews',      label: 'Reviews',    icon: '⭐'           },
+  { to: '/admin/analytics',    label: 'Analytics',  icon: '📈'           },
 ];
 
 const AdminLayout = () => {
@@ -28,6 +29,8 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
+
+  const isMacDesktop = window.electron?.platform === 'darwin';
 
   const handleLogout = () => { logout(); navigate('/login', { replace: true }); };
 
@@ -69,7 +72,7 @@ const AdminLayout = () => {
         .adm-sidebar  { display: flex; }
         .adm-topbar   { display: none; }
         .adm-spacer   { display: none; }
-        *:focus-visible { outline: 2px solid #16A34A !important; outline-offset: 2px; border-radius: 4px; }
+        *:focus-visible { outline: 2px solid var(--primary, #3A7D44) !important; outline-offset: 2px; border-radius: 4px; }
         @media (max-width: 640px) {
           .adm-sidebar  { display: none !important; }
           .adm-topbar   { display: flex !important; }
@@ -91,9 +94,18 @@ const AdminLayout = () => {
         borderRight: `1px solid ${S.border}`,
         flexDirection: 'column',
         transition: 'width 0.2s ease', overflow: 'hidden',
+        position: 'sticky', top: 0, height: '100vh',
       }}>
-        {/* Brand */}
-        <div style={{ padding: collapsed ? '18px 0' : '20px 18px 14px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
+        {/* Brand — doubles as macOS titlebar drag area */}
+        <div style={{
+          padding: isMacDesktop
+            ? (collapsed ? '36px 0 18px' : '36px 18px 14px')
+            : (collapsed ? '18px 0'      : '20px 18px 14px'),
+          borderBottom: `1px solid ${S.border}`,
+          display: 'flex', alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          WebkitAppRegion: 'drag',
+        }}>
           {!collapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -102,7 +114,7 @@ const AdminLayout = () => {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: S.activeColor, boxShadow: `0 0 5px ${S.activeColor}`, flexShrink: 0, display: 'inline-block' }} />
-                <span style={{ fontSize: '10px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Admin Panel</span>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px' }}>لوحة الإدارة</span>
               </div>
             </div>
           )}
@@ -110,7 +122,7 @@ const AdminLayout = () => {
           <button type="button" onClick={() => setCollapsed(p => !p)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: S.dimColor, fontSize: '14px', padding: '4px', borderRadius: '6px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: S.dimColor, fontSize: '14px', padding: '4px', borderRadius: '6px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', WebkitAppRegion: 'no-drag' }}>
             <span aria-hidden="true">{collapsed ? '▶' : '◀'}</span>
           </button>
         </div>
@@ -129,15 +141,15 @@ const AdminLayout = () => {
                   {(user?.name?.[0] || 'A').toUpperCase()}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: '600', color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name || 'Admin'}</div>
-                  <div style={{ fontSize: '11px', color: S.dimColor }}>Administrator</div>
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name || 'مدير'}</div>
+                  <div style={{ fontSize: '11px', color: S.dimColor }}>مدير</div>
                 </div>
               </div>
               <button type="button" onClick={handleLogout}
                 style={{ width: '100%', padding: '7px', borderRadius: '8px', border: `1px solid ${S.border}`, background: 'transparent', color: S.dimColor, fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#B91C1C'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = S.dimColor; e.currentTarget.style.borderColor = S.border; }}>
-                Sign Out
+                تسجيل الخروج
               </button>
             </>
           ) : (
@@ -168,7 +180,7 @@ const AdminLayout = () => {
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '18px', lineHeight: 1 }}>🌾</span>
           <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
-          <span style={{ fontSize: '9px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px', background: 'rgba(34,197,94,0.08)', padding: '2px 7px', borderRadius: '4px', border: `1px solid ${S.border}` }}>Admin</span>
+          <span style={{ fontSize: '9px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px', background: 'rgba(34,197,94,0.08)', padding: '2px 7px', borderRadius: '4px', border: `1px solid ${S.border}` }}>إدارة</span>
         </div>
         <NotificationBell iconColor={S.dimColor} />
         <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '700', color: S.activeColor, flexShrink: 0 }}>
@@ -202,7 +214,7 @@ const AdminLayout = () => {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: S.activeColor, display: 'inline-block' }} />
-              <span style={{ fontSize: '10px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Admin Panel</span>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px' }}>لوحة الإدارة</span>
             </div>
           </div>
           <button type="button" onClick={() => setMobileOpen(false)}
@@ -224,15 +236,15 @@ const AdminLayout = () => {
               {(user?.name?.[0] || 'A').toUpperCase()}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '13px', fontWeight: '600', color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name || 'Admin'}</div>
-              <div style={{ fontSize: '11px', color: S.dimColor }}>Administrator</div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name || 'مدير'}</div>
+              <div style={{ fontSize: '11px', color: S.dimColor }}>مدير</div>
             </div>
           </div>
           <button type="button" onClick={handleLogout}
             style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${S.border}`, background: 'transparent', color: S.dimColor, fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px' }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#B91C1C'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = S.dimColor; e.currentTarget.style.borderColor = S.border; }}>
-            ⏏ Sign Out
+            ⏏ تسجيل الخروج
           </button>
         </div>
       </aside>

@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FarmFlow — جولة تعريفية تفاعلية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;font-family:'Cairo',sans-serif;overflow:hidden;background:#060E08;direction:rtl}
+:root{
+  --g:#2B7A3D;--gd:#1E5E2C;--gdd:#0F3018;
+  --gl:#EDF7F0;--gb:#C6E8CE;
+  --bg:#F2F5FA;--card:#FFFFFF;
+  --tx:#0C1117;--mu:#64748B;--dm:#94A3B8;
+  --bd:#E4EAF1;
+  --sh:0 1px 3px rgba(12,17,23,.04),0 2px 12px rgba(12,17,23,.05);
+  --shm:0 4px 24px rgba(12,17,23,.09);
+  --shh:0 14px 50px rgba(12,17,23,.18);
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeOut{0%{opacity:1}100%{opacity:0}}
+
+/* ── progress ── */
+#pb{position:fixed;top:0;left:0;right:0;height:3px;background:rgba(255,255,255,.08);z-index:1000}
+#pf{height:100%;background:var(--g);transition:width .4s ease}
+
+/* ── label ── */
+#lbl{position:fixed;top:12px;right:20px;z-index:1000;background:rgba(0,0,0,.65);backdrop-filter:blur(10px);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.1)}
+
+/* ── keyboard hint ── */
+#kh{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.28);font-size:11px;z-index:999;animation:fadeOut 4s 1.5s ease forwards;pointer-events:none}
+
+/* ── bottom nav ── */
+#nav{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:13px;background:rgba(0,0,0,.72);backdrop-filter:blur(14px);border-radius:40px;padding:8px 17px;z-index:1000;border:1px solid rgba(255,255,255,.1)}
+.nb{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .2s;background:rgba(255,255,255,.1);color:#fff}
+.nb:hover{background:var(--g);transform:scale(1.1)}
+.nb:disabled{opacity:.3;cursor:default;transform:none!important}
+#ctr{font-family:'Cairo',sans-serif;color:rgba(255,255,255,.85);font-size:12px;font-weight:600;min-width:46px;text-align:center}
+#dots{display:flex;gap:5px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.28);transition:all .3s;cursor:pointer}
+.dot.active{background:#fff;width:18px;border-radius:3px}
+
+/* ── slides ── */
+#sw{width:100%;height:100vh;position:relative}
+.slide{position:absolute;inset:0;display:none;align-items:center;justify-content:center;animation:fadeUp .3s ease}
+.slide.active{display:flex}
+
+/* ══════════════════════════════════
+   APP WINDOW
+══════════════════════════════════ */
+.aw{width:1340px;height:840px;background:var(--bg);border-radius:16px;box-shadow:0 48px 96px rgba(0,0,0,.62);overflow:hidden;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.04)}
+/* macOS bar */
+.bc{height:40px;background:#181A1B;display:flex;align-items:center;padding:0 14px;gap:7px;flex-shrink:0}
+.bdd{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.bu{flex:1;background:#252628;border-radius:6px;height:24px;margin:0 18px;display:flex;align-items:center;padding:0 12px;color:rgba(255,255,255,.28);font-size:11px}
+/* body row */
+.bco{flex:1;overflow:hidden;display:flex}
+
+/* ══════════════════════════════════
+   SIDEBAR
+══════════════════════════════════ */
+.sb{width:216px;height:100%;flex-shrink:0;background:#0D1C11;display:flex;flex-direction:column;border-left:1px solid rgba(255,255,255,.05)}
+.sbh{padding:18px 14px 14px;border-bottom:1px solid rgba(255,255,255,.05)}
+.sbl{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.sbi{width:28px;height:28px;background:var(--g);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.sbt{color:#fff;font-size:15px;font-weight:800}
+.sbu{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.06);border-radius:10px;padding:9px 10px;border:1px solid rgba(255,255,255,.07)}
+.ua{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0}
+.un{color:#fff;font-size:12px;font-weight:700;line-height:1.3}
+.ur{color:rgba(255,255,255,.38);font-size:11px}
+.sbn{flex:1;overflow-y:auto;padding:8px 7px 10px}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;color:rgba(255,255,255,.48);font-size:13px;font-weight:500;cursor:pointer;margin-bottom:2px;transition:all .18s}
+.ni:hover{color:rgba(255,255,255,.82);background:rgba(255,255,255,.07)}
+.ni.a{background:rgba(43,122,61,.3);color:#fff;border:1px solid rgba(43,122,61,.28)}
+.ni .e{font-size:14px;width:20px;text-align:center;flex-shrink:0}
+.nbg{margin-right:auto;background:#EF4444;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px}
+.sbf{padding:8px 7px 14px;border-top:1px solid rgba(255,255,255,.05)}
+.sbf .ni{margin-bottom:0}
+
+/* ══════════════════════════════════
+   CONTENT WRAPPER + TOPBAR
+══════════════════════════════════ */
+.mwrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.tbr{height:54px;background:#fff;border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 26px;gap:14px;flex-shrink:0}
+.tbr-title{flex:1}
+.tbr-pt{font-size:15px;font-weight:800;color:var(--tx)}
+.tbr-ps{font-size:11px;color:var(--mu);margin-top:1px}
+.tbr-notif{width:34px;height:34px;border-radius:9px;background:var(--bg);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;position:relative;flex-shrink:0}
+.tbr-dot{position:absolute;top:6px;left:7px;width:7px;height:7px;background:#EF4444;border-radius:50%;border:2px solid #fff}
+
+/* ══════════════════════════════════
+   MAIN CONTENT
+══════════════════════════════════ */
+.mc{flex:1;overflow-y:auto;background:var(--bg);padding:22px 26px}
+
+/* ── page header ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;gap:14px}
+.pt{font-size:20px;font-weight:800;color:var(--tx)}
+.ps{font-size:12px;color:var(--mu);margin-top:3px}
+
+/* ── KPI grid ── */
+.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.kc{background:var(--card);border-radius:16px;padding:20px 20px;box-shadow:var(--sh);border:1px solid var(--bd)}
+.kci{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:19px;margin-bottom:12px}
+.kl{font-size:11px;color:var(--mu);font-weight:500}
+.kv{font-size:24px;font-weight:800;color:var(--tx);line-height:1.1;margin-top:3px}
+.ks{font-size:11px;color:var(--mu);margin-top:5px}
+.ksu{color:#16A34A}.ksd{color:#DC2626}
+
+/* ── card ── */
+.card{background:var(--card);border-radius:16px;box-shadow:var(--sh);border:1px solid var(--bd);padding:20px 22px}
+.ct{font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px}
+
+/* ── badges ── */
+.b{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.bg{background:#DCFCE7;color:#15803D}
+.ba{background:#FEF3C7;color:#B45309}
+.br{background:#FEE2E2;color:#B91C1C}
+.bb{background:#DBEAFE;color:#1D4ED8}
+.bx{background:#F3F4F6;color:#374151}
+.bp{background:#EDE9FE;color:#6D28D9}
+
+/* ── table ── */
+.t{width:100%;border-collapse:collapse}
+.t th{font-size:11px;font-weight:600;color:var(--mu);padding:10px 13px;text-align:right;background:var(--bg);border-bottom:1px solid var(--bd)}
+.t td{font-size:13px;color:var(--tx);padding:13px 13px;border-bottom:1px solid var(--bd)}
+.t tr:last-child td{border-bottom:none}
+.t tbody tr:hover td{background:#F7FAFF}
+
+/* ── follow-up items ── */
+.fup{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--bd);border-right:3px solid var(--g);margin-bottom:9px}
+.fup:last-child{margin-bottom:0}
+.fupi{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.fupt{font-size:13px;font-weight:700;color:var(--tx)}
+.fups{font-size:11px;color:var(--mu);margin-top:2px}
+
+/* ── listing card ── */
+.lc{background:var(--card);border-radius:14px;overflow:hidden;box-shadow:var(--sh);border:1px solid var(--bd)}
+.li{height:100px;display:flex;align-items:center;justify-content:center;font-size:44px}
+.lb{padding:13px 15px}
+.lt{font-size:13px;font-weight:700;color:var(--tx)}
+.lm{font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5}
+.lp{font-size:18px;font-weight:800;color:var(--g);margin-top:8px}
+.lp span{font-size:11px;font-weight:400;color:var(--mu)}
+
+/* ── animal card ── */
+.ac{background:var(--card);border-radius:14px;padding:15px;border:1px solid var(--bd);box-shadow:var(--sh)}
+.aeh{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:21px}
+.ah{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.an{font-size:13px;font-weight:700;color:var(--tx)}
+.at{font-size:11px;color:var(--mu);margin-top:2px}
+.ai{display:flex;gap:5px;flex-wrap:wrap}
+.ait{background:var(--bg);border-radius:7px;padding:3px 9px;font-size:11px;color:#374151;font-weight:500;border:1px solid var(--bd)}
+
+/* ── farm card ── */
+.fc{background:var(--card);border-radius:16px;overflow:hidden;box-shadow:var(--sh);border:1px solid var(--bd)}
+.fa{height:5px}
+.fb{padding:16px 18px}
+.fh{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.fav{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800;flex-shrink:0}
+.fn{font-size:14px;font-weight:700;color:var(--tx)}
+.fl{font-size:11px;color:var(--mu);margin-top:2px}
+.fcs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+.fch{font-size:11px;background:var(--gl);color:var(--gd);padding:2px 9px;border-radius:20px;font-weight:600}
+.fbtn{width:100%;background:var(--g);color:#fff;border:none;border-radius:10px;padding:10px;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer}
+
+/* ── stats bar ── */
+.stb{background:linear-gradient(135deg,#0D1C11,#1D5C2C);border-radius:16px;padding:20px 24px;display:flex;gap:0;margin-bottom:20px}
+.sti{text-align:center;flex:1;border-left:1px solid rgba(255,255,255,.1)}
+.sti:last-child{border-left:none}
+.stv{color:#fff;font-size:22px;font-weight:800}
+.stl{color:rgba(255,255,255,.52);font-size:11px;margin-top:3px}
+
+/* ── tab bar ── */
+.tb{display:flex;border-bottom:2px solid var(--bd);margin-bottom:18px}
+.ti{padding:9px 17px;font-size:13px;font-weight:500;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.ti.a{color:var(--g);font-weight:700;border-bottom-color:var(--g)}
+
+/* ── search ── */
+.sr{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--bd);border-radius:13px;padding:11px 15px;box-shadow:var(--sh);margin-bottom:16px}
+.si{border:none;background:transparent;outline:none;font-family:'Cairo',sans-serif;font-size:13px;color:var(--mu);flex:1}
+.sx{background:var(--gl);color:var(--gd);padding:5px 12px;border-radius:18px;font-size:12px;font-weight:600;border:1px solid var(--gb);cursor:pointer;white-space:nowrap}
+
+/* ── form ── */
+.fi{width:100%;background:var(--bg);border:1.5px solid var(--bd);border-radius:10px;padding:10px 13px;font-family:'Cairo',sans-serif;font-size:13px;color:var(--tx);outline:none}
+.fl2{font-size:12px;font-weight:600;color:var(--tx);margin-bottom:5px;display:block}
+.fg{margin-bottom:13px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
+
+/* ── buttons ── */
+.btn{background:var(--g);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn:hover{background:var(--gd);transform:translateY(-1px)}
+.btno{background:transparent;color:var(--g);border:1.5px solid var(--g);border-radius:10px;padding:10px 20px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+
+/* ── grids ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+
+/* ── modal ── */
+.mo{position:absolute;inset:0;background:rgba(6,14,8,.55);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(3px)}
+.md{background:#fff;border-radius:20px;padding:26px;width:470px;box-shadow:var(--shh)}
+.mdt{font-size:17px;font-weight:800;color:var(--tx);margin-bottom:18px}
+
+/* ── misc ── */
+.st{color:#FBBF24;font-size:13px;letter-spacing:1px}
+.dv{height:1px;background:var(--bd);margin:14px 0}
+.or{display:flex;align-items:center;gap:11px;padding:11px;border-radius:11px;background:var(--card);border:1px solid var(--bd);margin-bottom:8px}
+.op{font-size:14px;font-weight:800;color:var(--g);margin-right:auto;white-space:nowrap}
+.sbB{background:#081009!important}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#C8D5E0;border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="pb"><div id="pf" style="width:10%"></div></div>
+<div id="lbl">الشاشة الرئيسية • ١ من ١١</div>
+<div id="kh">← → للتنقل بين الشاشات</div>
+
+<div id="sw">
+
+<!-- ═══════════════════════════════════
+     SLIDE 1 — Welcome
+═══════════════════════════════════ -->
+<div class="slide active" data-n="0">
+  <div style="width:100%;height:100vh;background:linear-gradient(145deg,#060E08 0%,#0F2616 35%,#1A4A26 65%,#2B7A3D 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:32px">
+    <div style="display:flex;align-items:center;gap:14px;animation:fadeUp .6s ease both">
+      <div style="width:68px;height:68px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:34px;border:1px solid rgba(255,255,255,.18)">🌿</div>
+      <span style="color:#fff;font-size:52px;font-weight:900;letter-spacing:-2px">FarmFlow</span>
+    </div>
+    <p style="color:rgba(255,255,255,.7);font-size:18px;font-weight:400;animation:fadeUp .6s .1s ease both">المنصة الأولى لتجارة المواشي في مصر 🇪🇬</p>
+    <div style="display:flex;gap:20px;animation:fadeUp .6s .2s ease both">
+      <div style="width:260px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px);border-radius:22px;padding:28px 24px;border:1px solid rgba(255,255,255,.12);text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🧑‍🌾</div>
+        <div style="color:#fff;font-size:18px;font-weight:800;margin-bottom:8px">بائع / مزارع</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">أضف مواشيك وإعلاناتك، استقبل طلبات المشترين، وتابع مالياتك من مكان واحد</div>
+      </div>
+      <div style="width:260px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px);border-radius:22px;padding:28px 24px;border:1px solid rgba(255,255,255,.12);text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🛒</div>
+        <div style="color:#fff;font-size:18px;font-weight:800;margin-bottom:8px">مشتري</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.7">تصفح مئات المزارع، قارن الأسعار، واطلب مباشرة من المزارع الموثوقة في مصر</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:36px;animation:fadeUp .6s .35s ease both">
+      <div style="text-align:center"><div style="color:#fff;font-size:24px;font-weight:900">1,200+</div><div style="color:rgba(255,255,255,.5);font-size:12px">بائع مسجّل</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:24px;font-weight:900">15,000+</div><div style="color:rgba(255,255,255,.5);font-size:12px">رأس مواشي</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:24px;font-weight:900">27</div><div style="color:rgba(255,255,255,.5);font-size:12px">محافظة</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:24px;font-weight:900">⭐ 4.8</div><div style="color:rgba(255,255,255,.5);font-size:12px">متوسط التقييم</div></div>
+    </div>
+    <p style="color:rgba(255,255,255,.28);font-size:11px;animation:fadeUp .6s .45s ease both">اضغط ← للمتابعة • أو استخدم مفاتيح الأسهم</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 2 — Register Seller
+═══════════════════════════════════ -->
+<div class="slide" data-n="1">
+  <div style="width:1340px;height:840px;background:var(--bg);border-radius:16px;box-shadow:0 48px 96px rgba(0,0,0,.62);overflow:hidden;display:flex;border:1px solid rgba(255,255,255,.04)">
+    <div style="width:370px;flex-shrink:0;background:linear-gradient(155deg,#090B06 0%,#162B0D 45%,#1E4A17 80%,#2B7A3D 100%);padding:44px 32px;display:flex;flex-direction:column;justify-content:center">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:36px">
+        <div style="width:34px;height:34px;background:rgba(255,255,255,.15);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px">🌿</div>
+        <span style="color:#fff;font-size:21px;font-weight:800">FarmFlow</span>
+      </div>
+      <h2 style="color:#fff;font-size:22px;font-weight:800;margin-bottom:8px">سجّل كبائع الآن</h2>
+      <p style="color:rgba(255,255,255,.55);font-size:13px;line-height:1.75;margin-bottom:30px">انضم لأكبر منصة تجارة مواشي في مصر وابدأ البيع خلال دقائق</p>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:36px;height:36px;background:rgba(255,255,255,.1);border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📋</div>
+          <div><div style="color:#fff;font-size:14px;font-weight:700">إعلانات احترافية</div><div style="color:rgba(255,255,255,.48);font-size:12px;margin-top:3px">أنشئ إعلاناتك بصور وتفاصيل كاملة</div></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:36px;height:36px;background:rgba(255,255,255,.1);border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>
+          <div><div style="color:#fff;font-size:14px;font-weight:700">إدارة الطلبات</div><div style="color:rgba(255,255,255,.48);font-size:12px;margin-top:3px">استقبل وتابع طلبات المشترين بسهولة</div></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:36px;height:36px;background:rgba(255,255,255,.1);border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">💰</div>
+          <div><div style="color:#fff;font-size:14px;font-weight:700">تقارير مالية تفصيلية</div><div style="color:rgba(255,255,255,.48);font-size:12px;margin-top:3px">إيرادات ومصروفات وأرباح في لوحة واحدة</div></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:36px;height:36px;background:rgba(255,255,255,.1);border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">🔔</div>
+          <div><div style="color:#fff;font-size:14px;font-weight:700">إشعارات فورية</div><div style="color:rgba(255,255,255,.48);font-size:12px;margin-top:3px">تنبيهات تطعيم ووزن وتسليم على هاتفك</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;padding:40px 44px;overflow-y:auto;background:#fff;display:flex;flex-direction:column;justify-content:center">
+      <h3 style="font-size:20px;font-weight:800;color:var(--tx);margin-bottom:4px">إنشاء حساب بائع</h3>
+      <p style="font-size:13px;color:var(--mu);margin-bottom:26px">أدخل بياناتك لبدء رحلة البيع</p>
+      <div class="fr">
+        <div class="fg"><label class="fl2">الاسم الكامل</label><input class="fi" value="محمد أحمد الشافعي" readonly></div>
+        <div class="fg"><label class="fl2">رقم الجوال</label><input class="fi" value="01012345678" readonly></div>
+      </div>
+      <div class="fg"><label class="fl2">رقم الهوية الوطنية</label><input class="fi" value="29901152301123" readonly><div style="font-size:11px;color:#16A34A;margin-top:5px;background:#F0FDF4;padding:4px 10px;border-radius:7px;display:inline-block;border:1px solid #BBF7D0">✅ مولود في يناير 1999 • ذكر • الشرقية</div></div>
+      <div class="fr">
+        <div class="fg"><label class="fl2">المحافظة</label><select class="fi"><option>الشرقية</option></select></div>
+        <div class="fg"><label class="fl2">نوع المزرعة</label><select class="fi"><option>مواشي (أبقار / أغنام)</option></select></div>
+      </div>
+      <div class="fg"><label class="fl2">اسم المزرعة</label><input class="fi" value="مزرعة الشافعي للمواشي" readonly></div>
+      <div class="fr">
+        <div class="fg"><label class="fl2">كلمة المرور</label><input class="fi" type="password" value="••••••••" readonly></div>
+        <div class="fg"><label class="fl2">تأكيد كلمة المرور</label><input class="fi" type="password" value="••••••••" readonly></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px">
+        <button class="btn" style="flex:1;padding:14px">إنشاء الحساب →</button>
+        <button class="btno" style="padding:14px 20px">تسجيل الدخول</button>
+      </div>
+      <p style="font-size:12px;color:var(--mu);margin-top:14px;text-align:center">بالتسجيل توافق على <span style="color:var(--g);font-weight:600">شروط الاستخدام</span> و<span style="color:var(--g);font-weight:600">سياسة الخصوصية</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 3 — Seller Dashboard
+═══════════════════════════════════ -->
+<div class="slide" data-n="2">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/seller/dashboard</div></div>
+    <div class="bco">
+      <!-- Sidebar -->
+      <div class="sb">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#4CAF50">مش</div><div><div class="un">محمد الشافعي</div><div class="ur">بائع موثّق ✓</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni a"><span class="e">🏠</span>الرئيسية</div>
+          <div class="ni"><span class="e">🐄</span>قطيعي</div>
+          <div class="ni"><span class="e">📋</span>إعلاناتي</div>
+          <div class="ni"><span class="e">📦</span>الطلبات<span class="nbg">3</span></div>
+          <div class="ni"><span class="e">💰</span>المالية</div>
+          <div class="ni"><span class="e">🥛</span>منتجات الألبان</div>
+          <div class="ni"><span class="e">🛒</span>المستلزمات</div>
+          <div class="ni"><span class="e">⭐</span>التقييمات</div>
+          <div class="ni"><span class="e">📊</span>التحليلات</div>
+        </div>
+        <div class="sbf">
+          <div class="ni"><span class="e">⚙️</span>الإعدادات</div>
+        </div>
+      </div>
+      <!-- Content -->
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">مرحباً، محمد 👋</div>
+            <div class="tbr-ps">الخميس، 8 مايو 2026 — مزرعة الشافعي للمواشي، الشرقية</div>
+          </div>
+          <div class="tbr-notif"><span>🔔</span><div class="tbr-dot"></div></div>
+          <button class="btn" style="font-size:12px;padding:9px 18px">+ إضافة إعلان</button>
+        </div>
+        <div class="mc">
+          <!-- KPIs -->
+          <div class="kg">
+            <div class="kc">
+              <div class="kci" style="background:#F0FDF4">💰</div>
+              <div class="kl">إيرادات هذا الشهر</div>
+              <div class="kv">47,500 <span style="font-size:13px;font-weight:600;color:var(--mu)">ج.م</span></div>
+              <div class="ks"><span class="ksu">↑ +12%</span> عن الشهر الماضي</div>
+            </div>
+            <div class="kc">
+              <div class="kci" style="background:#EFF6FF">📦</div>
+              <div class="kl">طلبات نشطة</div>
+              <div class="kv">12</div>
+              <div class="ks">3 تنتظر التأكيد</div>
+            </div>
+            <div class="kc">
+              <div class="kci" style="background:#FFFBEB">🐄</div>
+              <div class="kl">إجمالي القطيع</div>
+              <div class="kv">38 <span style="font-size:13px;font-weight:600;color:var(--mu)">رأس</span></div>
+              <div class="ks">أبقار • أغنام • ماعز</div>
+            </div>
+            <div class="kc">
+              <div class="kci" style="background:#FFFBEB">⭐</div>
+              <div class="kl">متوسط التقييم</div>
+              <div class="kv">4.8 <span style="font-size:13px;font-weight:600;color:var(--mu)">/ 5</span></div>
+              <div class="ks">من 47 تقييم</div>
+            </div>
+          </div>
+          <!-- Two-column -->
+          <div class="g2">
+            <div class="card">
+              <div class="ct">📅 متابعات اليوم</div>
+              <div class="fup" style="border-right-color:#EF4444">
+                <div class="fupi" style="background:#FEE2E2">💉</div>
+                <div style="flex:1"><div class="fupt">تطعيم — بقرة #B-12</div><div class="fups">لقاح الحمى القلاعية • اليوم</div></div>
+                <span class="b ba">عاجل</span>
+              </div>
+              <div class="fup" style="border-right-color:#2563EB">
+                <div class="fupi" style="background:#DBEAFE">⚖️</div>
+                <div style="flex:1"><div class="fupt">وزن مجدول — 3 خراف</div><div class="fups">دوبير × 3 • موعد الوزن اليوم</div></div>
+                <span class="b bb">اليوم</span>
+              </div>
+              <div class="fup" style="border-right-color:#7C3AED">
+                <div class="fupi" style="background:#EDE9FE">🤱</div>
+                <div style="flex:1"><div class="fupt">حمل متوقع — ماعز #G-03</div><div class="fups">موعد الولادة خلال 7 أيام</div></div>
+                <span class="b bp">قريباً</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ct">🛒 آخر الطلبات</div>
+              <table class="t">
+                <thead><tr><th>المشتري</th><th>الحيوان</th><th>المبلغ</th><th>الحالة</th></tr></thead>
+                <tbody>
+                  <tr><td>أحمد الشرقاوي</td><td>عجل فريزيان 220 كجم</td><td style="font-weight:700;color:var(--g)">8,500 ج.م</td><td><span class="b bg">مؤكد</span></td></tr>
+                  <tr><td>خالد محمود</td><td>خروف دوبير 95 كجم</td><td style="font-weight:700;color:var(--g)">4,200 ج.م</td><td><span class="b ba">قيد المراجعة</span></td></tr>
+                  <tr><td>سامي النجار</td><td>بقرة حلاب 6 ل/يوم</td><td style="font-weight:700;color:var(--g)">22,000 ج.م</td><td><span class="b ba">قيد المراجعة</span></td></tr>
+                </tbody>
+              </table>
+              <div style="text-align:center;margin-top:12px"><button class="btno" style="font-size:12px;padding:7px 16px">عرض جميع الطلبات</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 4 — My Herd
+═══════════════════════════════════ -->
+<div class="slide" data-n="3">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/seller/herd</div></div>
+    <div class="bco">
+      <div class="sb">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#4CAF50">مش</div><div><div class="un">محمد الشافعي</div><div class="ur">بائع موثّق ✓</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni"><span class="e">🏠</span>الرئيسية</div>
+          <div class="ni a"><span class="e">🐄</span>قطيعي</div>
+          <div class="ni"><span class="e">📋</span>إعلاناتي</div>
+          <div class="ni"><span class="e">📦</span>الطلبات<span class="nbg">3</span></div>
+          <div class="ni"><span class="e">💰</span>المالية</div>
+          <div class="ni"><span class="e">🥛</span>منتجات الألبان</div>
+          <div class="ni"><span class="e">🛒</span>المستلزمات</div>
+          <div class="ni"><span class="e">⭐</span>التقييمات</div>
+          <div class="ni"><span class="e">📊</span>التحليلات</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">قطيعي 🐄</div>
+            <div class="tbr-ps">38 رأس إجمالي — الشرقية</div>
+          </div>
+          <button class="btn" style="font-size:12px;padding:9px 18px">+ إضافة حيوان</button>
+        </div>
+        <div class="mc">
+          <div class="stb">
+            <div class="sti"><div class="stv">18</div><div class="stl">🐄 أبقار</div></div>
+            <div class="sti"><div class="stv">12</div><div class="stl">🐑 أغنام</div></div>
+            <div class="sti"><div class="stv">6</div><div class="stl">🐐 ماعز</div></div>
+            <div class="sti"><div class="stv">2</div><div class="stl">🐃 جاموس</div></div>
+            <div class="sti"><div class="stv">4,820 كجم</div><div class="stl">إجمالي الوزن</div></div>
+          </div>
+          <div class="tb">
+            <div class="ti a">الكل (38)</div>
+            <div class="ti">🐄 أبقار (18)</div>
+            <div class="ti">🐑 أغنام (12)</div>
+            <div class="ti">🐐 ماعز (6)</div>
+            <div class="ti">🐃 جاموس (2)</div>
+          </div>
+          <div class="g4">
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#FEF3C7">🐄</div><div><div class="an">B-12 — فريزيان</div><div class="at">أنثى • 6 سنوات</div></div></div>
+              <div class="ai"><span class="ait">450 كجم</span><span class="ait">حلوب</span><span class="ait" style="color:#DC2626;background:#FEE2E2;border-color:#FECACA">تطعيم اليوم</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#DBEAFE">🐑</div><div><div class="an">S-07 — دوبير</div><div class="at">ذكر • 2 سنوات</div></div></div>
+              <div class="ai"><span class="ait">85 كجم</span><span class="ait">تسمين</span><span class="ait" style="color:#2563EB;background:#DBEAFE;border-color:#BFDBFE">وزن اليوم</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#DCFCE7">🐐</div><div><div class="an">G-03 — بلدي</div><div class="at">أنثى • 3 سنوات</div></div></div>
+              <div class="ai"><span class="ait">42 كجم</span><span class="ait">حلوب</span><span class="ait" style="color:#7C3AED;background:#EDE9FE;border-color:#DDD6FE">حمل — أسبوع</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#F1F5F9">🐃</div><div><div class="an">F-01 — جاموس مري</div><div class="at">أنثى • 5 سنوات</div></div></div>
+              <div class="ai"><span class="ait">380 كجم</span><span class="ait">حلوب</span><span class="ait">8 ل/يوم</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#FEF3C7">🐄</div><div><div class="an">B-05 — هجين</div><div class="at">ذكر • 18 شهر</div></div></div>
+              <div class="ai"><span class="ait">220 كجم</span><span class="ait">تسمين</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#DBEAFE">🐑</div><div><div class="an">S-11 — رهبي</div><div class="at">ذكر • 14 شهر</div></div></div>
+              <div class="ai"><span class="ait">72 كجم</span><span class="ait">تسمين</span></div>
+            </div>
+            <div class="ac">
+              <div class="ah"><div class="aeh" style="background:#DCFCE7">🐐</div><div><div class="an">G-07 — شامي</div><div class="at">أنثى • 4 سنوات</div></div></div>
+              <div class="ai"><span class="ait">55 كجم</span><span class="ait">حلوب</span><span class="ait">4 ل/يوم</span></div>
+            </div>
+            <div class="ac" style="border:2px dashed var(--bd);background:transparent;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;min-height:100px;cursor:pointer">
+              <div style="font-size:26px">➕</div>
+              <div style="font-size:12px;color:var(--mu);font-weight:600">إضافة حيوان جديد</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 5 — Add Listing
+═══════════════════════════════════ -->
+<div class="slide" data-n="4">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/seller/listings/add</div></div>
+    <div class="bco">
+      <div class="sb">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#4CAF50">مش</div><div><div class="un">محمد الشافعي</div><div class="ur">بائع موثّق ✓</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni"><span class="e">🏠</span>الرئيسية</div>
+          <div class="ni"><span class="e">🐄</span>قطيعي</div>
+          <div class="ni a"><span class="e">📋</span>إعلاناتي</div>
+          <div class="ni"><span class="e">📦</span>الطلبات<span class="nbg">3</span></div>
+          <div class="ni"><span class="e">💰</span>المالية</div>
+          <div class="ni"><span class="e">🥛</span>منتجات الألبان</div>
+          <div class="ni"><span class="e">🛒</span>المستلزمات</div>
+          <div class="ni"><span class="e">⭐</span>التقييمات</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">إضافة إعلان جديد 📋</div>
+            <div class="tbr-ps">أضف تفاصيل الحيوان المراد بيعه</div>
+          </div>
+        </div>
+        <div class="mc">
+          <div class="g2">
+            <div>
+              <div class="card" style="margin-bottom:16px">
+                <div class="ct">📸 صور الإعلان</div>
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+                  <div style="aspect-ratio:1;background:#FEF3C7;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:34px;border:2px solid var(--bd)">🐄</div>
+                  <div style="aspect-ratio:1;background:#F0FDF4;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid var(--bd)">🐄</div>
+                  <div style="aspect-ratio:1;background:var(--bg);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px dashed var(--bd);color:var(--dm)">+</div>
+                  <div style="aspect-ratio:1;background:var(--bg);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px dashed var(--bd);color:var(--dm)">+</div>
+                  <div style="aspect-ratio:1;background:var(--bg);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px dashed var(--bd);color:var(--dm)">+</div>
+                </div>
+                <p style="font-size:11px;color:var(--mu);margin-top:9px;text-align:center">حتى 5 صور • يُفضّل صور واضحة من زوايا متعددة</p>
+              </div>
+              <div class="card">
+                <div class="ct">💰 السعر والتوفر</div>
+                <div class="fg"><label class="fl2">السعر (ج.م)</label><input class="fi" value="18,500" readonly></div>
+                <div class="fg"><label class="fl2">قابل للتفاوض؟</label>
+                  <div style="display:flex;gap:12px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="neg" checked> نعم</label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="neg"> لا</label>
+                  </div>
+                </div>
+                <div class="fg"><label class="fl2">الكمية المتاحة</label><input class="fi" value="1 رأس" readonly></div>
+              </div>
+            </div>
+            <div>
+              <div class="card">
+                <div class="ct">🐄 تفاصيل الحيوان</div>
+                <div class="fr">
+                  <div class="fg"><label class="fl2">نوع الحيوان</label><select class="fi"><option>أبقار</option></select></div>
+                  <div class="fg"><label class="fl2">السلالة</label><select class="fi"><option>فريزيان</option></select></div>
+                </div>
+                <div class="fr">
+                  <div class="fg"><label class="fl2">الجنس</label><select class="fi"><option>ذكر (عجل)</option></select></div>
+                  <div class="fg"><label class="fl2">العمر</label><input class="fi" value="18 شهر" readonly></div>
+                </div>
+                <div class="fr">
+                  <div class="fg"><label class="fl2">الوزن (كجم)</label><input class="fi" value="520" readonly></div>
+                  <div class="fg"><label class="fl2">الغرض</label><select class="fi"><option>تسمين / لحوم</option></select></div>
+                </div>
+                <div class="fg"><label class="fl2">وصف الإعلان</label>
+                  <textarea class="fi" rows="3" style="resize:none" readonly>عجل فريزيان خالص بوزن 520 كجم، تغذية طبيعية على البرسيم والكونسنتريت. لقاحاته مكتملة ومعه كشف طبي. يصلح للعيد أو التسمين.</textarea>
+                </div>
+                <div class="fg"><label class="fl2">شهادات / مستندات</label>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap">
+                    <span class="b bg" style="font-size:12px">✅ كشف بيطري</span>
+                    <span class="b bg" style="font-size:12px">✅ لقاحات مكتملة</span>
+                    <span class="b bx" style="font-size:12px">+ إضافة مستند</span>
+                  </div>
+                </div>
+                <button class="btn" style="width:100%;padding:13px;margin-top:4px;font-size:14px">نشر الإعلان ✓</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 6 — My Listings
+═══════════════════════════════════ -->
+<div class="slide" data-n="5">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/seller/listings</div></div>
+    <div class="bco">
+      <div class="sb">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#4CAF50">مش</div><div><div class="un">محمد الشافعي</div><div class="ur">بائع موثّق ✓</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni"><span class="e">🏠</span>الرئيسية</div>
+          <div class="ni"><span class="e">🐄</span>قطيعي</div>
+          <div class="ni a"><span class="e">📋</span>إعلاناتي</div>
+          <div class="ni"><span class="e">📦</span>الطلبات<span class="nbg">3</span></div>
+          <div class="ni"><span class="e">💰</span>المالية</div>
+          <div class="ni"><span class="e">🥛</span>منتجات الألبان</div>
+          <div class="ni"><span class="e">🛒</span>المستلزمات</div>
+          <div class="ni"><span class="e">⭐</span>التقييمات</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">إعلاناتي 📋</div>
+            <div class="tbr-ps">8 إعلانات — 5 متاح • 2 محجوز • 1 مباع</div>
+          </div>
+          <button class="btn" style="font-size:12px;padding:9px 18px">+ إعلان جديد</button>
+        </div>
+        <div class="mc">
+          <div class="tb">
+            <div class="ti a">الكل (8)</div>
+            <div class="ti">متاح (5)</div>
+            <div class="ti">محجوز (2)</div>
+            <div class="ti">مباع (1)</div>
+          </div>
+          <div class="g3">
+            <div class="lc">
+              <div class="li" style="background:linear-gradient(135deg,#FEFCE8,#FEF3C7)">🐄</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="b bg">متاح</span><span style="font-size:11px;color:var(--mu)">منذ يومين</span></div>
+                <div class="lt">عجل فريزيان تسمين</div>
+                <div class="lm">520 كجم • ذكر • 18 شهر • لقاحات مكتملة</div>
+                <div class="lp">18,500 ج.م <span>قابل للتفاوض</span></div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn" style="flex:1;font-size:12px;padding:8px">تعديل</button>
+                  <button class="btno" style="flex:1;font-size:12px;padding:8px">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lc">
+              <div class="li" style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE)">🐑</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="b bg">متاح</span><span style="font-size:11px;color:var(--mu)">منذ 5 أيام</span></div>
+                <div class="lt">خروف دوبير للبيع</div>
+                <div class="lm">95 كجم • ذكر • 2 سنوات • تغذية طبيعية</div>
+                <div class="lp">4,200 ج.م <span>قابل للتفاوض</span></div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn" style="flex:1;font-size:12px;padding:8px">تعديل</button>
+                  <button class="btno" style="flex:1;font-size:12px;padding:8px">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lc">
+              <div class="li" style="background:linear-gradient(135deg,#F0FDF4,#DCFCE7)">🐄</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="b ba">محجوز</span><span style="font-size:11px;color:var(--mu)">منذ أسبوع</span></div>
+                <div class="lt">بقرة حلاب فريزيان</div>
+                <div class="lm">480 كجم • أنثى • 4 سنوات • 6 ل/يوم</div>
+                <div class="lp">22,000 ج.م</div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn" style="flex:1;font-size:12px;padding:8px;background:#D97706">محجوز ✓</button>
+                  <button class="btno" style="flex:1;font-size:12px;padding:8px">التفاصيل</button>
+                </div>
+              </div>
+            </div>
+            <div class="lc">
+              <div class="li" style="background:linear-gradient(135deg,#F5F3FF,#EDE9FE)">🐐</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="b bg">متاح</span><span style="font-size:11px;color:var(--mu)">منذ 3 أيام</span></div>
+                <div class="lt">ماعز شامي للبيع</div>
+                <div class="lm">65 كجم • أنثى • 2 سنوات • حلوب</div>
+                <div class="lp">3,800 ج.م <span>قابل للتفاوض</span></div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn" style="flex:1;font-size:12px;padding:8px">تعديل</button>
+                  <button class="btno" style="flex:1;font-size:12px;padding:8px">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lc">
+              <div class="li" style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9)">🐃</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="b bg">متاح</span><span style="font-size:11px;color:var(--mu)">منذ يوم</span></div>
+                <div class="lt">جاموس مري للبيع</div>
+                <div class="lm">380 كجم • أنثى • 5 سنوات • 8 ل/يوم</div>
+                <div class="lp">28,000 ج.م</div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn" style="flex:1;font-size:12px;padding:8px">تعديل</button>
+                  <button class="btno" style="flex:1;font-size:12px;padding:8px">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lc" style="border:2px dashed var(--bd);background:transparent;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;min-height:220px;cursor:pointer">
+              <div style="font-size:34px">➕</div>
+              <div style="font-size:13px;color:var(--mu);font-weight:600">إضافة إعلان جديد</div>
+              <div style="font-size:11px;color:var(--dm);text-align:center;padding:0 18px">شارك قطيعك مع آلاف المشترين في مصر</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 7 — Manage Orders
+═══════════════════════════════════ -->
+<div class="slide" data-n="6">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/seller/orders</div></div>
+    <div class="bco">
+      <div class="sb">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#4CAF50">مش</div><div><div class="un">محمد الشافعي</div><div class="ur">بائع موثّق ✓</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni"><span class="e">🏠</span>الرئيسية</div>
+          <div class="ni"><span class="e">🐄</span>قطيعي</div>
+          <div class="ni"><span class="e">📋</span>إعلاناتي</div>
+          <div class="ni a"><span class="e">📦</span>الطلبات<span class="nbg">3</span></div>
+          <div class="ni"><span class="e">💰</span>المالية</div>
+          <div class="ni"><span class="e">🥛</span>منتجات الألبان</div>
+          <div class="ni"><span class="e">🛒</span>المستلزمات</div>
+          <div class="ni"><span class="e">⭐</span>التقييمات</div>
+          <div class="ni"><span class="e">📊</span>التحليلات</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">إدارة الطلبات 📦</div>
+            <div class="tbr-ps">12 طلب إجمالي — 3 تنتظر مراجعتك</div>
+          </div>
+        </div>
+        <div class="mc">
+          <div class="tb">
+            <div class="ti a">الكل (12)</div>
+            <div class="ti">قيد المراجعة (3)</div>
+            <div class="ti">مؤكد (5)</div>
+            <div class="ti">قيد التسليم (2)</div>
+            <div class="ti">مكتمل (2)</div>
+          </div>
+          <div class="card">
+            <table class="t">
+              <thead>
+                <tr><th>#</th><th>المشتري</th><th>الحيوان</th><th>المبلغ</th><th>تاريخ الطلب</th><th>الحالة</th><th>إجراء</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight:700;color:var(--mu)">#1047</td>
+                  <td><div style="display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;border-radius:8px;background:#E17055;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">أش</div><div><div style="font-size:13px;font-weight:600">أحمد الشرقاوي</div><div style="font-size:11px;color:var(--mu)">01023456789</div></div></div></td>
+                  <td>عجل فريزيان 520 كجم</td>
+                  <td style="font-weight:700;color:var(--g)">18,500 ج.م</td>
+                  <td style="color:var(--mu)">8 مايو 2026</td>
+                  <td><span class="b ba">قيد المراجعة</span></td>
+                  <td><div style="display:flex;gap:6px"><button class="btn" style="font-size:11px;padding:5px 12px">قبول</button><button style="background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;font-size:11px;padding:5px 12px;font-family:'Cairo',sans-serif;cursor:pointer;font-weight:600">رفض</button></div></td>
+                </tr>
+                <tr>
+                  <td style="font-weight:700;color:var(--mu)">#1046</td>
+                  <td><div style="display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;border-radius:8px;background:#0984E3;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">خم</div><div><div style="font-size:13px;font-weight:600">خالد محمود</div><div style="font-size:11px;color:var(--mu)">01034567890</div></div></div></td>
+                  <td>خروف دوبير 95 كجم</td>
+                  <td style="font-weight:700;color:var(--g)">4,200 ج.م</td>
+                  <td style="color:var(--mu)">7 مايو 2026</td>
+                  <td><span class="b ba">قيد المراجعة</span></td>
+                  <td><div style="display:flex;gap:6px"><button class="btn" style="font-size:11px;padding:5px 12px">قبول</button><button style="background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;font-size:11px;padding:5px 12px;font-family:'Cairo',sans-serif;cursor:pointer;font-weight:600">رفض</button></div></td>
+                </tr>
+                <tr>
+                  <td style="font-weight:700;color:var(--mu)">#1045</td>
+                  <td><div style="display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;border-radius:8px;background:#6C5CE7;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">سن</div><div><div style="font-size:13px;font-weight:600">سامي النجار</div><div style="font-size:11px;color:var(--mu)">01045678901</div></div></div></td>
+                  <td>بقرة حلاب 480 كجم</td>
+                  <td style="font-weight:700;color:var(--g)">22,000 ج.م</td>
+                  <td style="color:var(--mu)">6 مايو 2026</td>
+                  <td><span class="b bg">مؤكد</span></td>
+                  <td><button class="btn" style="font-size:11px;padding:5px 12px;background:#2563EB">تسليم →</button></td>
+                </tr>
+                <tr>
+                  <td style="font-weight:700;color:var(--mu)">#1044</td>
+                  <td><div style="display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;border-radius:8px;background:#00B894;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">مع</div><div><div style="font-size:13px;font-weight:600">مريم عبدالله</div><div style="font-size:11px;color:var(--mu)">01056789012</div></div></div></td>
+                  <td>ماعز شامي 65 كجم</td>
+                  <td style="font-weight:700;color:var(--g)">3,800 ج.م</td>
+                  <td style="color:var(--mu)">5 مايو 2026</td>
+                  <td><span class="b bb">قيد التسليم</span></td>
+                  <td><button class="btn" style="font-size:11px;padding:5px 12px">تأكيد التسليم</button></td>
+                </tr>
+                <tr>
+                  <td style="font-weight:700;color:var(--mu)">#1043</td>
+                  <td><div style="display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;border-radius:8px;background:#D4A017;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">ول</div><div><div style="font-size:13px;font-weight:600">وليد لطفي</div><div style="font-size:11px;color:var(--mu)">01067890123</div></div></div></td>
+                  <td>خروف رهبي 72 كجم</td>
+                  <td style="font-weight:700;color:var(--g)">3,100 ج.م</td>
+                  <td style="color:var(--mu)">2 مايو 2026</td>
+                  <td><span class="b bx">مكتمل ✓</span></td>
+                  <td><button class="btno" style="font-size:11px;padding:5px 12px">التفاصيل</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 8 — Buyer Browse
+═══════════════════════════════════ -->
+<div class="slide" data-n="7">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/buyer/browse</div></div>
+    <div class="bco">
+      <div class="sb sbB">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#0984E3">عا</div><div><div class="un">عمر أحمد</div><div class="ur">مشتري</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni a"><span class="e">🏠</span>تصفح المزارع</div>
+          <div class="ni"><span class="e">📦</span>طلباتي</div>
+          <div class="ni"><span class="e">❤️</span>المفضلة</div>
+          <div class="ni"><span class="e">🔔</span>الإشعارات<span class="nbg">2</span></div>
+          <div class="ni"><span class="e">👤</span>حسابي</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <div class="tbr">
+          <div class="tbr-title">
+            <div class="tbr-pt">تصفح المزارع 🗺️</div>
+            <div class="tbr-ps">1,200+ مزرعة موثّقة في 27 محافظة</div>
+          </div>
+          <div class="tbr-notif"><span>🔔</span><div class="tbr-dot"></div></div>
+        </div>
+        <div class="mc">
+          <div class="sr">
+            <span style="font-size:18px;color:var(--mu)">🔍</span>
+            <input class="si" placeholder="ابحث عن نوع الحيوان أو المزرعة أو المحافظة...">
+            <span class="sx">🐄 أبقار</span>
+            <span class="sx">الشرقية ×</span>
+            <span class="sx">+ فلتر</span>
+          </div>
+          <div style="display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="background:var(--g);color:#fff;padding:5px 14px;border-radius:18px;font-size:12px;font-weight:600">الكل</span>
+            <span class="sx">🐄 أبقار</span>
+            <span class="sx">🐑 أغنام</span>
+            <span class="sx">🐐 ماعز</span>
+            <span class="sx">🐃 جاموس</span>
+            <span class="sx">🥛 ألبان</span>
+            <span class="sx">🛒 مستلزمات</span>
+          </div>
+          <p style="font-size:12px;color:var(--mu);margin-bottom:14px">عرض 48 مزرعة في الشرقية</p>
+          <div class="g4">
+            <div class="fc">
+              <div class="fa" style="background:#E17055"></div>
+              <div class="fb">
+                <div class="fh"><div class="fav" style="background:#E17055">مش</div><div><div class="fn">مزرعة الشافعي</div><div class="fl">📍 الشرقية • ⭐ 4.8 (47)</div></div></div>
+                <div class="fcs"><span class="fch">🐄 أبقار</span><span class="fch">🐑 أغنام</span><span class="fch">🐐 ماعز</span></div>
+                <div style="font-size:12px;color:var(--mu);margin-bottom:11px">8 إعلانات نشطة • بائع موثّق منذ 2022</div>
+                <button class="fbtn">عرض المزرعة →</button>
+              </div>
+            </div>
+            <div class="fc">
+              <div class="fa" style="background:#00B894"></div>
+              <div class="fb">
+                <div class="fh"><div class="fav" style="background:#00B894">نخ</div><div><div class="fn">مزرعة النيل الخضراء</div><div class="fl">📍 الدقهلية • ⭐ 4.6 (31)</div></div></div>
+                <div class="fcs"><span class="fch">🐄 أبقار</span><span class="fch">🐃 جاموس</span><span class="fch">🥛 ألبان</span></div>
+                <div style="font-size:12px;color:var(--mu);margin-bottom:11px">12 إعلانات نشطة • بائع موثّق منذ 2021</div>
+                <button class="fbtn">عرض المزرعة →</button>
+              </div>
+            </div>
+            <div class="fc">
+              <div class="fa" style="background:#6C5CE7"></div>
+              <div class="fb">
+                <div class="fh"><div class="fav" style="background:#6C5CE7">أع</div><div><div class="fn">مزرعة أبو العلا</div><div class="fl">📍 الغربية • ⭐ 4.9 (63)</div></div></div>
+                <div class="fcs"><span class="fch">🐑 أغنام</span><span class="fch">🐐 ماعز</span></div>
+                <div style="font-size:12px;color:var(--mu);margin-bottom:11px">6 إعلانات نشطة • بائع مميّز ⭐</div>
+                <button class="fbtn">عرض المزرعة →</button>
+              </div>
+            </div>
+            <div class="fc">
+              <div class="fa" style="background:#0984E3"></div>
+              <div class="fb">
+                <div class="fh"><div class="fav" style="background:#0984E3">رع</div><div><div class="fn">مزرعة الرشيد</div><div class="fl">📍 البحيرة • ⭐ 4.7 (28)</div></div></div>
+                <div class="fcs"><span class="fch">🐄 أبقار</span><span class="fch">🐃 جاموس</span></div>
+                <div style="font-size:12px;color:var(--mu);margin-bottom:11px">4 إعلانات نشطة • بائع موثّق منذ 2023</div>
+                <button class="fbtn">عرض المزرعة →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 9 — Farm Detail
+═══════════════════════════════════ -->
+<div class="slide" data-n="8">
+  <div class="aw">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/buyer/farm/shafei</div></div>
+    <div class="bco">
+      <div class="sb sbB">
+        <div class="sbh">
+          <div class="sbl"><div class="sbi">🌿</div><span class="sbt">FarmFlow</span></div>
+          <div class="sbu"><div class="ua" style="background:#0984E3">عا</div><div><div class="un">عمر أحمد</div><div class="ur">مشتري</div></div></div>
+        </div>
+        <div class="sbn">
+          <div class="ni a"><span class="e">🏠</span>تصفح المزارع</div>
+          <div class="ni"><span class="e">📦</span>طلباتي</div>
+          <div class="ni"><span class="e">❤️</span>المفضلة</div>
+          <div class="ni"><span class="e">🔔</span>الإشعارات<span class="nbg">2</span></div>
+          <div class="ni"><span class="e">👤</span>حسابي</div>
+        </div>
+        <div class="sbf"><div class="ni"><span class="e">⚙️</span>الإعدادات</div></div>
+      </div>
+      <div class="mwrap">
+        <!-- Farm hero banner -->
+        <div style="background:linear-gradient(135deg,#0D1C11,#1D5C2C);padding:20px 26px;display:flex;align-items:center;gap:16px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.08)">
+          <div style="width:58px;height:58px;border-radius:14px;background:#E17055;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:800;border:2px solid rgba(255,255,255,.18)">مش</div>
+          <div style="flex:1">
+            <div style="color:#fff;font-size:17px;font-weight:800">مزرعة الشافعي للمواشي</div>
+            <div style="color:rgba(255,255,255,.62);font-size:12px;margin-top:3px">📍 الشرقية، مصر • بائع موثّق منذ 2022 ✓</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:7px">
+              <span style="color:#FBBF24;font-size:12px">★★★★★</span>
+              <span style="color:rgba(255,255,255,.62);font-size:11px">4.8 من 47 تقييم</span>
+              <span style="background:rgba(255,255,255,.14);color:#fff;font-size:11px;padding:2px 10px;border-radius:10px">🐄 مواشي</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button style="background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:8px 14px;font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer;font-weight:600">📞 اتصال</button>
+            <button style="background:#25D366;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer;font-weight:600">💬 واتساب</button>
+            <button style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:8px 12px;font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer">❤️</button>
+          </div>
+        </div>
+        <!-- Tab bar -->
+        <div style="background:#fff;border-bottom:1px solid var(--bd);padding:0 24px;display:flex;flex-shrink:0">
+          <div class="ti a" style="font-size:13px">🐄 مواشي (8)</div>
+          <div class="ti" style="font-size:13px">🥛 ألبان (3)</div>
+          <div class="ti" style="font-size:13px">🛒 مستلزمات (2)</div>
+          <div class="ti" style="font-size:13px">⭐ تقييمات (47)</div>
+        </div>
+        <div class="mc">
+          <div class="g3">
+            <div class="lc" style="cursor:pointer">
+              <div class="li" style="background:linear-gradient(135deg,#FEFCE8,#FEF3C7)">🐄</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><span class="b bg">متاح</span><span style="font-size:10px;color:var(--mu)">منذ يومين</span></div>
+                <div class="lt">عجل فريزيان تسمين</div>
+                <div class="lm">520 كجم • ذكر • 18 شهر</div>
+                <div class="lp">18,500 ج.م <span>قابل للتفاوض</span></div>
+                <button class="btn" style="width:100%;margin-top:9px;font-size:12px;padding:9px">طلب الآن →</button>
+              </div>
+            </div>
+            <div class="lc" style="cursor:pointer">
+              <div class="li" style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE)">🐑</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><span class="b bg">متاح</span><span style="font-size:10px;color:var(--mu)">منذ 5 أيام</span></div>
+                <div class="lt">خروف دوبير</div>
+                <div class="lm">95 كجم • ذكر • 2 سنوات</div>
+                <div class="lp">4,200 ج.م <span>قابل للتفاوض</span></div>
+                <button class="btn" style="width:100%;margin-top:9px;font-size:12px;padding:9px">طلب الآن →</button>
+              </div>
+            </div>
+            <div class="lc" style="cursor:pointer">
+              <div class="li" style="background:linear-gradient(135deg,#F5F3FF,#EDE9FE)">🐐</div>
+              <div class="lb">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><span class="b bg">متاح</span><span style="font-size:10px;color:var(--mu)">منذ 3 أيام</span></div>
+                <div class="lt">ماعز شامي حلوب</div>
+                <div class="lm">65 كجم • أنثى • 2 سنوات</div>
+                <div class="lp">3,800 ج.م</div>
+                <button class="btn" style="width:100%;margin-top:9px;font-size:12px;padding:9px">طلب الآن →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 10 — Place Order Modal
+═══════════════════════════════════ -->
+<div class="slide" data-n="9">
+  <div class="aw" style="position:relative">
+    <div class="bc"><div class="bdd" style="background:#FF5F56"></div><div class="bdd" style="background:#FFBD2E"></div><div class="bdd" style="background:#27C93F"></div><div class="bu">farmflow-app.onrender.com/buyer/farm/shafei</div></div>
+    <div class="bco" style="filter:blur(2px);opacity:.45">
+      <div class="sb sbB"></div>
+      <div class="mc">
+        <div class="g3" style="margin-top:20px">
+          <div class="lc"><div class="li" style="background:#FEF3C7">🐄</div><div class="lb"><div class="lt">عجل فريزيان</div><div class="lp">18,500 ج.م</div></div></div>
+          <div class="lc"><div class="li" style="background:#DBEAFE">🐑</div><div class="lb"><div class="lt">خروف دوبير</div><div class="lp">4,200 ج.م</div></div></div>
+          <div class="lc"><div class="li" style="background:#EDE9FE">🐐</div><div class="lb"><div class="lt">ماعز شامي</div><div class="lp">3,800 ج.م</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mo">
+      <div class="md">
+        <div class="mdt">📦 تأكيد الطلب</div>
+        <div style="background:var(--bg);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:18px;border:1px solid var(--bd)">
+          <div style="font-size:36px">🐄</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700;color:var(--tx)">عجل فريزيان تسمين</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">مزرعة الشافعي • 520 كجم • ذكر</div>
+          </div>
+          <div style="text-align:left">
+            <div style="font-size:18px;font-weight:800;color:var(--g)">18,500 ج.م</div>
+            <div style="font-size:10px;color:var(--mu)">قابل للتفاوض</div>
+          </div>
+        </div>
+        <div class="fg"><label class="fl2">عنوان التسليم</label><input class="fi" value="القاهرة، مصر الجديدة، شارع عباس العقاد" readonly></div>
+        <div class="fr">
+          <div class="fg"><label class="fl2">المحافظة</label><select class="fi"><option>القاهرة</option></select></div>
+          <div class="fg"><label class="fl2">الكمية</label><input class="fi" value="1 رأس" readonly></div>
+        </div>
+        <div class="fg"><label class="fl2">ملاحظات للبائع (اختياري)</label><textarea class="fi" rows="2" style="resize:none" readonly>أفضّل التسليم صباح الجمعة، يرجى التواصل قبل يوم</textarea></div>
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--mu)">سعر الحيوان</span><span style="font-weight:600">18,500 ج.م</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span style="color:var(--mu)">رسوم المنصة</span><span style="font-weight:600">0 ج.م</span></div>
+          <div style="height:1px;background:#BBF7D0;margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800"><span>الإجمالي</span><span style="color:var(--g)">18,500 ج.م</span></div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" style="flex:1;padding:13px;font-size:14px">تأكيد الطلب ✓</button>
+          <button class="btno" style="padding:13px 18px">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SLIDE 11 — Outro
+═══════════════════════════════════ -->
+<div class="slide" data-n="10">
+  <div style="width:100%;height:100vh;background:linear-gradient(145deg,#060E08 0%,#0F2616 35%,#1A4A26 65%,#2B7A3D 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:center;gap:14px;animation:fadeUp .6s ease both">
+      <div style="width:64px;height:64px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:32px;border:1px solid rgba(255,255,255,.18)">🌿</div>
+      <span style="color:#fff;font-size:48px;font-weight:900;letter-spacing:-2px">FarmFlow</span>
+    </div>
+    <p style="color:rgba(255,255,255,.78);font-size:21px;font-weight:600;animation:fadeUp .6s .1s ease both">ابدأ رحلة البيع اليوم 🚀</p>
+    <div style="display:flex;gap:18px;animation:fadeUp .6s .2s ease both">
+      <div style="background:rgba(255,255,255,.09);backdrop-filter:blur(8px);border-radius:18px;padding:22px 32px;text-align:center;border:1px solid rgba(255,255,255,.13)">
+        <div style="color:#fff;font-size:28px;font-weight:900">مجّاني</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:4px">التسجيل مجّاني تماماً</div>
+      </div>
+      <div style="background:rgba(255,255,255,.09);backdrop-filter:blur(8px);border-radius:18px;padding:22px 32px;text-align:center;border:1px solid rgba(255,255,255,.13)">
+        <div style="color:#fff;font-size:28px;font-weight:900">دقيقتان</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:4px">وقت إنشاء الحساب</div>
+      </div>
+      <div style="background:rgba(255,255,255,.09);backdrop-filter:blur(8px);border-radius:18px;padding:22px 32px;text-align:center;border:1px solid rgba(255,255,255,.13)">
+        <div style="color:#fff;font-size:28px;font-weight:900">0%</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:4px">عمولة على المبيعات</div>
+      </div>
+      <div style="background:rgba(255,255,255,.09);backdrop-filter:blur(8px);border-radius:18px;padding:22px 32px;text-align:center;border:1px solid rgba(255,255,255,.13)">
+        <div style="color:#fff;font-size:28px;font-weight:900">24/7</div>
+        <div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:4px">دعم فني على مدار الساعة</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;animation:fadeUp .6s .3s ease both">
+      <button style="background:#fff;color:var(--g);border:none;border-radius:14px;padding:16px 52px;font-family:'Cairo',sans-serif;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,.25)">سجّل الآن مجاناً →</button>
+      <p style="color:rgba(255,255,255,.38);font-size:12px">farmflow-app.onrender.com</p>
+    </div>
+    <div style="display:flex;gap:28px;animation:fadeUp .6s .4s ease both">
+      <div style="text-align:center"><div style="color:#fff;font-size:20px;font-weight:800">1,200+</div><div style="color:rgba(255,255,255,.48);font-size:11px">بائع مسجّل</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:20px;font-weight:800">15,000+</div><div style="color:rgba(255,255,255,.48);font-size:11px">رأس مواشي</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:20px;font-weight:800">⭐ 4.8</div><div style="color:rgba(255,255,255,.48);font-size:11px">متوسط التقييم</div></div>
+      <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+      <div style="text-align:center"><div style="color:#fff;font-size:20px;font-weight:800">27</div><div style="color:rgba(255,255,255,.48);font-size:11px">محافظة</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /slides -->
+
+<!-- Navigation -->
+<div id="nav">
+  <button class="nb" id="pb2" onclick="goTo(cur-1)" title="السابق">→</button>
+  <div id="dots"></div>
+  <div id="ctr">1 / 11</div>
+  <button class="nb" id="nb2" onclick="goTo(cur+1)" title="التالي">←</button>
+</div>
+
+<script>
+const LABELS=['الشاشة الرئيسية','تسجيل كبائع','لوحة التحكم','إدارة القطيع','إضافة إعلان','إعلاناتي','إدارة الطلبات','تصفح كمشتري','صفحة المزرعة','إتمام الطلب','ابدأ معنا'];
+const slides=document.querySelectorAll('.slide');
+const n=slides.length;
+let cur=0;
+function buildDots(){const d=document.getElementById('dots');for(let i=0;i<n;i++){const el=document.createElement('div');el.className='dot'+(i===0?' active':'');el.onclick=()=>goTo(i);d.appendChild(el)}}
+function goTo(i){if(i<0||i>=n)return;slides[cur].classList.remove('active');document.querySelectorAll('.dot')[cur].classList.remove('active');cur=i;slides[cur].classList.add('active');document.querySelectorAll('.dot')[cur].classList.add('active');document.getElementById('ctr').textContent=(i+1)+' / '+n;document.getElementById('pf').style.width=(((i+1)/n)*100)+'%';document.getElementById('lbl').textContent=LABELS[i]+' • '+(i+1)+' من '+n;document.getElementById('pb2').disabled=i===0;document.getElementById('nb2').disabled=i===n-1}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')goTo(cur+1);if(e.key==='ArrowRight')goTo(cur-1)});
+let tx=0;
+document.addEventListener('touchstart',e=>{tx=e.touches[0].clientX},{passive:true});
+document.addEventListener('touchend',e=>{const dx=tx-e.changedTouches[0].clientX;if(Math.abs(dx)>50)goTo(dx>0?cur+1:cur-1)});
+buildDots();goTo(0);
+</script>
+</body>
+</html>

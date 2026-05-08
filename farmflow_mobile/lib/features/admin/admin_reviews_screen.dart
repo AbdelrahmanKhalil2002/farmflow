@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/shimmer_widget.dart';
@@ -19,11 +20,21 @@ final adminReviewsProvider =
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
-class AdminReviewsScreen extends ConsumerWidget {
+class AdminReviewsScreen extends ConsumerStatefulWidget {
   const AdminReviewsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminReviewsScreen> createState() =>
+      _AdminReviewsScreenState();
+}
+
+class _AdminReviewsScreenState extends ConsumerState<AdminReviewsScreen> {
+  String _ratingTab = 'all';   // all | high | low
+  String _search    = '';
+  String _sortBy    = 'newest'; // newest | highest | lowest
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(adminReviewsProvider);
 
     return Scaffold(
@@ -32,9 +43,33 @@ class AdminReviewsScreen extends ConsumerWidget {
         backgroundColor: AppColors.green,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text('إدارة التقييمات',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+        title: Text(context.l10n.adminReviewsTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
                 color: AppColors.white)),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort, color: AppColors.white),
+            tooltip: 'ترتيب',
+            onSelected: (v) => setState(() => _sortBy = v),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'newest',
+                child: Text('الأحدث',
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ),
+              const PopupMenuItem(
+                value: 'highest',
+                child: Text('أعلى تقييم',
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ),
+              const PopupMenuItem(
+                value: 'lowest',
+                child: Text('أقل تقييم',
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ),
+            ],
+          ),
+        ],
       ),
       body: async.when(
         loading: () => const Padding(
@@ -42,36 +77,215 @@ class AdminReviewsScreen extends ConsumerWidget {
             child: ShimmerList(count: 6, cardHeight: 90)),
         error: (e, _) => EmptyState(
           icon: Icons.wifi_off_rounded,
-          title: 'تعذّر التحميل',
+          title: context.l10n.loadingFailed,
           subtitle: e.toString(),
-          actionLabel: 'إعادة المحاولة',
+          actionLabel: context.l10n.retry,
           action: () => ref.invalidate(adminReviewsProvider),
         ),
         data: (reviews) {
-          if (reviews.isEmpty) {
-            return const EmptyState(
-              icon: Icons.star_border_outlined,
-              title: 'لا توجد تقييمات',
-              subtitle: 'لم يُضف أي تقييم بعد',
-            );
-          }
-          return RefreshIndicator(
-            color: AppColors.green,
-            onRefresh: () async => ref.invalidate(adminReviewsProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: reviews.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _ReviewAdminCard(
-                review: reviews[i],
-                onDeleted: () => ref.invalidate(adminReviewsProvider),
+          final total   = reviews.length;
+          final high    = reviews.where((r) =>
+              (r['rating'] as num?)?.toInt() != null &&
+              (r['rating'] as num).toInt() >= 4).length;
+          final low     = reviews.where((r) =>
+              (r['rating'] as num?)?.toInt() != null &&
+              (r['rating'] as num).toInt() < 3).length;
+
+          // Filter
+          var filtered = reviews.where((r) {
+            final rating    = (r['rating'] as num?)?.toInt() ?? 0;
+            final buyer     = r['buyer'] as Map? ?? {};
+            final buyerName = (buyer['name'] as String? ?? '').toLowerCase();
+            final comment   = (r['comment'] as String? ?? '').toLowerCase();
+            final ratingOk  = _ratingTab == 'all' ||
+                (_ratingTab == 'high' && rating >= 4) ||
+                (_ratingTab == 'low' && rating < 3);
+            final searchOk  = _search.isEmpty ||
+                buyerName.contains(_search) ||
+                comment.contains(_search);
+            return ratingOk && searchOk;
+          }).toList();
+
+          // Sort
+          filtered.sort((a, b) {
+            switch (_sortBy) {
+              case 'highest':
+                final ra = (a['rating'] as num?)?.toInt() ?? 0;
+                final rb = (b['rating'] as num?)?.toInt() ?? 0;
+                return rb.compareTo(ra);
+              case 'lowest':
+                final ra = (a['rating'] as num?)?.toInt() ?? 0;
+                final rb = (b['rating'] as num?)?.toInt() ?? 0;
+                return ra.compareTo(rb);
+              default:
+                final da = a['createdAt'] as String? ?? '';
+                final db = b['createdAt'] as String? ?? '';
+                return db.compareTo(da);
+            }
+          });
+
+          return Column(children: [
+            // ── Stats strip ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: Row(children: [
+                _StatChip(label: 'الكل',    value: '$total', color: AppColors.blue),
+                const SizedBox(width: 8),
+                _StatChip(label: 'عالي ≥4', value: '$high',  color: AppColors.green),
+                const SizedBox(width: 8),
+                _StatChip(label: 'منخفض <3', value: '$low', color: AppColors.red),
+              ]),
+            ),
+            const SizedBox(height: 8),
+
+            // ── Search bar ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+              child: TextField(
+                onChanged: (v) => setState(() => _search = v.toLowerCase()),
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                    color: AppColors.text),
+                decoration: InputDecoration(
+                  hintText: 'بحث باسم المشتري أو التعليق...',
+                  hintStyle: const TextStyle(fontFamily: 'Cairo',
+                      fontSize: 13, color: AppColors.muted),
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppColors.muted, size: 20),
+                  filled: true, fillColor: AppColors.card,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.border)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.border)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                          color: AppColors.green, width: 1.5)),
+                ),
               ),
             ),
-          );
+            const SizedBox(height: 8),
+
+            // ── Rating tabs ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Row(children: [
+                for (final tab in [
+                  ('all',  'الكل',     total,  AppColors.blue),
+                  ('high', 'عالي ≥4', high,   AppColors.green),
+                  ('low',  'منخفض <3', low,   AppColors.red),
+                ]) ...[
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _ratingTab = tab.$1),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: _ratingTab == tab.$1
+                              ? (tab.$4).withValues(alpha: 0.12)
+                              : AppColors.card,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _ratingTab == tab.$1
+                                ? tab.$4
+                                : AppColors.border,
+                          ),
+                        ),
+                        child: Column(children: [
+                          Text(tab.$2,
+                              style: TextStyle(fontFamily: 'Cairo',
+                                  fontSize: 11, fontWeight: FontWeight.w700,
+                                  color: _ratingTab == tab.$1
+                                      ? tab.$4
+                                      : AppColors.muted),
+                              textAlign: TextAlign.center),
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: tab.$4.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text('${tab.$3}',
+                                style: TextStyle(fontFamily: 'Cairo',
+                                    fontSize: 10, fontWeight: FontWeight.w800,
+                                    color: tab.$4)),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+
+            // ── List ────────────────────────────────────────────────────
+            Expanded(
+              child: filtered.isEmpty
+                  ? EmptyState(
+                      icon: Icons.star_border_outlined,
+                      title: context.l10n.noReviews2,
+                      subtitle: context.l10n.noReviewsYet2,
+                    )
+                  : RefreshIndicator(
+                      color: AppColors.green,
+                      onRefresh: () async =>
+                          ref.invalidate(adminReviewsProvider),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 10),
+                        itemBuilder: (_, i) => _ReviewAdminCard(
+                          review: filtered[i],
+                          onDeleted: () =>
+                              ref.invalidate(adminReviewsProvider),
+                        ),
+                      ),
+                    ),
+            ),
+          ]);
         },
       ),
     );
   }
+}
+
+// ── Stat chip ─────────────────────────────────────────────────────────────────
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final String label, value;
+  final Color  color;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(children: [
+        Text(value, style: TextStyle(fontFamily: 'Cairo', fontSize: 14,
+            fontWeight: FontWeight.w800, color: color)),
+        Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 9,
+            color: AppColors.muted), textAlign: TextAlign.center),
+      ]),
+    ),
+  );
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
@@ -94,20 +308,20 @@ class _ReviewAdminCardState extends ConsumerState<_ReviewAdminCard> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف التقييم',
-            style: TextStyle(fontFamily: 'Cairo')),
-        content: const Text('هل تريد حذف هذا التقييم؟',
-            style: TextStyle(fontFamily: 'Cairo')),
+        title: Text(context.l10n.deleteReviewTitle,
+            style: const TextStyle(fontFamily: 'Cairo')),
+        content: Text(context.l10n.deleteReviewMessage,
+            style: const TextStyle(fontFamily: 'Cairo')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء',
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: Text(context.l10n.cancel,
+                style: const TextStyle(fontFamily: 'Cairo')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف',
-                style: TextStyle(
+            child: Text(context.l10n.delete,
+                style: const TextStyle(
                     fontFamily: 'Cairo', color: AppColors.red)),
           ),
         ],
@@ -124,8 +338,8 @@ class _ReviewAdminCardState extends ConsumerState<_ReviewAdminCard> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('فشل في الحذف',
-              style: TextStyle(fontFamily: 'Cairo')),
+          content: Text(context.l10n.deleteReviewFailed,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.red,
         ));
       }
@@ -147,6 +361,11 @@ class _ReviewAdminCardState extends ConsumerState<_ReviewAdminCard> {
         ? DateFormat('d MMM yyyy', 'ar')
             .format(DateTime.parse(createdAt))
         : '';
+    final ratingColor = rating >= 4
+        ? AppColors.green
+        : rating < 3
+            ? AppColors.red
+            : AppColors.amber;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -165,16 +384,16 @@ class _ReviewAdminCardState extends ConsumerState<_ReviewAdminCard> {
         // Avatar
         Container(
           width: 40, height: 40,
-          decoration: const BoxDecoration(
-            color: AppColors.greenBg,
+          decoration: BoxDecoration(
+            color: ratingColor.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: Center(
             child: Text(
                 buyerName.isNotEmpty ? buyerName[0] : '؟',
-                style: const TextStyle(fontFamily: 'Cairo', fontSize: 16,
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.green)),
+                    color: ratingColor)),
           ),
         ),
         const SizedBox(width: 12),
@@ -207,7 +426,7 @@ class _ReviewAdminCardState extends ConsumerState<_ReviewAdminCard> {
               ),
             ]),
             const SizedBox(height: 2),
-            Text('للمزرعة: $sellerName',
+            Text(context.l10n.forFarm(sellerName),
                 style: const TextStyle(fontFamily: 'Cairo',
                     fontSize: 11, color: AppColors.muted)),
             if (comment.isNotEmpty) ...[

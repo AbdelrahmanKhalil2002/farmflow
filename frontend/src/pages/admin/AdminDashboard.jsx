@@ -4,28 +4,7 @@ import { getStats, getGovAnalytics } from '../../services/adminService';
 import { getEidConfig, updateEidConfig } from '../../services/eidService';
 import { getMarketPrices } from '../../services/marketPricesService';
 
-// ─── Design tokens ───────────────────────────────────────────────────────────
-const C = {
-  bg:       '#F4F6F4',
-  card:     '#FFFFFF',
-  card2:    '#F9FAFB',
-  border:   '#E5E7EB',
-  border2:  '#F3F4F6',
-  green:    '#16A34A',
-  greenDim: '#F0FDF4',
-  amber:    '#D97706',
-  amberDim: '#FFFBEB',
-  red:      '#DC2626',
-  redDim:   '#FEF2F2',
-  blue:     '#2563EB',
-  blueDim:  '#EFF6FF',
-  purple:   '#7C3AED',
-  purpleDim:'#F5F3FF',
-  slate:    '#64748B',
-  text:     '#111827',
-  textMid:  '#6B7280',
-  textDim:  '#9CA3AF',
-};
+import { C } from '../../tokens';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt    = (n)   => Number(n ?? 0).toLocaleString();

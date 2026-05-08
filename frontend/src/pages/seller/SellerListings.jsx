@@ -1,72 +1,61 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMyListings, deleteListing } from '../../services/listingService';
+import { getMyListings, deleteListing, updateListing } from '../../services/listingService';
 import { fmt, getImageUrl } from '../../utils/format';
 import { useToast } from '../../components/Toast';
+import { useLang } from '../../context/LangContext';
 
-// ─── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg:        '#F8F4EE',
-  card:      '#FFFFFF',
-  green:     '#3A7D44',
-  greenDk:   '#2D6235',
-  greenBg:   '#DCFCE7',
-  greenText: '#166534',
-  amber:     '#D97706',
-  amberBg:   '#FEF3C7',
-  amberText: '#92400E',
-  red:       '#DC2626',
-  redBg:     '#FEF2F2',
-  redText:   '#B91C1C',
-  border:    '#E8D5C0',
-  text:      '#2C1810',
-  muted:     '#8B6B5A',
-  shadow:    '0 1px 3px rgba(44,24,16,0.07), 0 4px 12px rgba(44,24,16,0.06)',
-  shadowHv:  '0 4px 16px rgba(44,24,16,0.12)',
-};
+import { C } from '../../tokens';
 
 // ─── Status config (with emoji dots as requested) ─────────────────────────────
 const STATUS = {
-  pending:  { ar: 'معلق الموافقة',  dot: '🟡', color: '#92400E', bg: '#FEF3C7', border: '#FDE68A' },
-  approved: { ar: 'معتمد ونشط',     dot: '🟢', color: '#166534', bg: '#DCFCE7', border: '#BBF7D0' },
-  rejected: { ar: 'مرفوض',          dot: '🔴', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
-  sold:     { ar: 'مباع',           dot: '⚫', color: '#4B5563', bg: '#F3F4F6', border: '#E5E7EB' },
+  draft:    { labelKey: 'listings.status.draft',    dot: '⬜', color: '#374151', bg: '#F9FAFB', border: '#E5E7EB' },
+  pending:  { labelKey: 'listings.status.pending',  dot: '🟡', color: '#92400E', bg: '#FEF3C7', border: '#FDE68A' },
+  approved: { labelKey: 'listings.status.active',   dot: '🟢', color: '#166534', bg: '#DCFCE7', border: '#BBF7D0' },
+  rejected: { labelKey: 'listings.status.rejected', dot: '🔴', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
+  sold:     { labelKey: 'listings.status.sold',     dot: '⚫', color: '#4B5563', bg: '#F3F4F6', border: '#E5E7EB' },
 };
 
 const TYPE_META = {
-  cattle:  { emoji: '🐄', ar: 'ماشية',  bg: '#FEF3C7' },
-  sheep:   { emoji: '🐑', ar: 'أغنام',  bg: '#DBEAFE' },
-  goat:    { emoji: '🐐', ar: 'ماعز',   bg: '#DCFCE7' },
-  camel:   { emoji: '🐪', ar: 'إبل',    bg: '#FFEDD5' },
-  horse:   { emoji: '🐎', ar: 'خيول',   bg: '#EDE9FE' },
-  poultry: { emoji: '🐔', ar: 'دواجن',  bg: '#D1FAE5' },
-  other:   { emoji: '🐾', ar: 'أخرى',   bg: '#F3F4F6' },
+  cattle:  { emoji: '🐄', typeKey: 'herd.type.cattle',  bg: '#FEF3C7' },
+  sheep:   { emoji: '🐑', typeKey: 'herd.type.sheep',   bg: '#DBEAFE' },
+  goat:    { emoji: '🐐', typeKey: 'herd.type.goat',    bg: '#DCFCE7' },
+  camel:   { emoji: '🐪', typeKey: 'herd.type.camel',   bg: '#FFEDD5' },
+  horse:   { emoji: '🐎', typeKey: 'herd.type.horse',   bg: '#EDE9FE' },
+  poultry: { emoji: '🐔', typeKey: 'herd.type.poultry', bg: '#D1FAE5' },
+  other:   { emoji: '🐾', typeKey: 'herd.type.other',   bg: '#F3F4F6' },
 };
 
 const FILTER_TABS = [
-  { key: 'all',      ar: 'الكل'          },
-  { key: 'approved', ar: '🟢 معتمد'      },
-  { key: 'pending',  ar: '🟡 معلق'       },
-  { key: 'rejected', ar: '🔴 مرفوض'      },
-  { key: 'sold',     ar: '⚫ مباع'       },
+  { key: 'all',      labelKey: 'common.all'                    },
+  { key: 'draft',    labelKey: 'listings.filter.draft'         },
+  { key: 'approved', labelKey: 'listings.filter.approved'      },
+  { key: 'pending',  labelKey: 'listings.filter.pending'       },
+  { key: 'rejected', labelKey: 'listings.filter.rejected'      },
+  { key: 'sold',     labelKey: 'listings.filter.sold'          },
 ];
 
 const SORT_OPTIONS = [
-  { key: 'date_desc',  ar: 'الأحدث أولاً'       },
-  { key: 'date_asc',   ar: 'الأقدم أولاً'        },
-  { key: 'price_desc', ar: 'السعر: الأعلى أولاً' },
-  { key: 'price_asc',  ar: 'السعر: الأقل أولاً'  },
-  { key: 'status',     ar: 'حسب الحالة'          },
+  { key: 'date_desc',  labelKey: 'listings.sort.newest'        },
+  { key: 'date_asc',   labelKey: 'listings.sort.oldest'        },
+  { key: 'price_desc', labelKey: 'listings.sort.priceHighFirst' },
+  { key: 'price_asc',  labelKey: 'listings.sort.priceLowFirst'  },
+  { key: 'status',     labelKey: 'listings.sort.byStatus'       },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtAge  = (m) => { if (m == null) return '—'; if (m < 12) return `${m} شهر`; const y = Math.floor(m / 12), r = m % 12; return r ? `${y}س ${r}ش` : `${y} سنة`; };
+const fmtAge  = (m, tFn) => {
+  if (m == null) return '—';
+  if (m < 12) return `${m} ${tFn('common.month')}`;
+  const y = Math.floor(m / 12), r = m % 12;
+  return r ? `${y}${tFn('common.years')[0]} ${r}${tFn('common.months')[0]}` : `${y} ${tFn('common.year')}`;
+};
 const fmtSAR  = (v) => `${fmt(v)} ج.م`;
 const fmtDate = (d) => new Date(d).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
 
 // ─── CSV export ───────────────────────────────────────────────────────────────
 const exportCSV = (listings) => {
-  const header = ['ID', 'النوع', 'السلالة', 'العمر (شهر)', 'الوزن (كجم)', 'السعر (EGP)', 'الحالة', 'الموقع', 'تاريخ الإضافة'];
+  const header = ['ID', 'Type', 'Breed', 'Age (months)', 'Weight (kg)', 'Price (EGP)', 'Status', 'Location', 'Date Added'];
   const rows = listings.map(l => [l._id, l.type, l.breed || '', l.age ?? '', l.weight ?? '', l.price, l.status, l.location || '', l.createdAt?.slice(0, 10) || '']);
   const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -84,7 +73,7 @@ const Thumb = ({ listing, size = 52 }) => {
 };
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status, reason }) => {
+const StatusBadge = ({ status, reason, t }) => {
   const [tip, setTip] = useState(false);
   const s = STATUS[status] || STATUS.pending;
   return (
@@ -94,13 +83,13 @@ const StatusBadge = ({ status, reason }) => {
         onMouseEnter={() => status === 'rejected' && setTip(true)}
         onMouseLeave={() => setTip(false)}
       >
-        {s.dot} {s.ar}
+        {s.dot} {t(s.labelKey)}
         {status === 'rejected' && <span style={{ fontSize: '11px', opacity: 0.7 }}>ⓘ</span>}
       </span>
       {tip && (
         <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)', background: '#1C1917', color: '#fff', fontSize: '12px', lineHeight: 1.5, padding: '8px 12px', borderRadius: '8px', whiteSpace: 'normal', maxWidth: '200px', zIndex: 300, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
-          <strong style={{ display: 'block', marginBottom: '2px' }}>سبب الرفض:</strong>
-          {reason || 'لم يُذكر سبب من قِبل الإدارة.'}
+          <strong style={{ display: 'block', marginBottom: '2px' }}>{t('listings.rejectionReason')}:</strong>
+          {reason || t('listings.noRejectionReason')}
           <div style={{ position: 'absolute', bottom: -5, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1C1917' }} />
         </div>
       )}
@@ -136,6 +125,7 @@ const ActBtn = ({ onClick, children, danger, primary, disabled, title }) => (
 const SellerListings = () => {
   const navigate = useNavigate();
   const toast    = useToast();
+  const { t }    = useLang();
 
   const [listings,    setListings]    = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -160,7 +150,7 @@ const SellerListings = () => {
     setLoading(true); setError('');
     getMyListings()
       .then(({ data }) => setListings(data))
-      .catch(() => setError('تعذّر تحميل القوائم.'))
+      .catch(() => setError(t('listings.loadErr')))
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
@@ -196,17 +186,27 @@ const SellerListings = () => {
 
   const confirmDelete = async (id) => {
     setDeleting(true);
-    try { await deleteListing(id); setListings(p => p.filter(l => l._id !== id)); setSelected(p => { const n = new Set(p); n.delete(id); return n; }); toast.success('تم حذف الإعلان.'); }
-    catch { toast.error('تعذّر الحذف. حاول مرة أخرى.'); }
+    try { await deleteListing(id); setListings(p => p.filter(l => l._id !== id)); setSelected(p => { const n = new Set(p); n.delete(id); return n; }); toast.success(t('listings.deleteSuccess')); }
+    catch { toast.error(t('listings.deleteErr')); }
     finally { setDeleting(false); setDeletingId(null); }
   };
 
   const confirmBulkDelete = async () => {
     setDeleting(true);
     const ids = [...selected];
-    try { await Promise.all(ids.map(id => deleteListing(id))); setListings(p => p.filter(l => !selected.has(l._id))); clearSel(); toast.success(`تم حذف ${ids.length} إعلان.`); }
-    catch { toast.error('تعذّر حذف بعض الإعلانات.'); }
+    try { await Promise.all(ids.map(id => deleteListing(id))); setListings(p => p.filter(l => !selected.has(l._id))); clearSel(); toast.success(t('listings.bulkDeleteSuccess').replace('{n}', ids.length)); }
+    catch { toast.error(t('listings.bulkDeleteErr')); }
     finally { setDeleting(false); setBulkConfirm(false); }
+  };
+
+  const publishDraft = async (id) => {
+    try {
+      await updateListing(id, { status: 'pending' });
+      setListings(p => p.map(l => l._id === id ? { ...l, status: 'pending' } : l));
+      toast.success('تم إرسال الإعلان للمراجعة');
+    } catch {
+      toast.error('حدث خطأ. حاول مرة أخرى.');
+    }
   };
 
   return (
@@ -222,13 +222,13 @@ const SellerListings = () => {
         <div aria-hidden style={{ position: 'absolute', right: -10, top: -18, fontSize: '140px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🐄</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>قوائمي 📋</h1>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff', letterSpacing: '-0.3px' }}>{t('listings.title')} 📋</h1>
             <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>
-              {loading ? 'جارٍ التحميل…' : `${listings.length} إعلان إجمالي`}
+              {loading ? t('common.loading') : `${listings.length} ${t('listings.totalCount')}`}
             </p>
           </div>
           <Link to="/seller/add-listing" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '7px', padding: '10px 18px', background: '#fff', color: C.greenDk, borderRadius: '10px', fontSize: '14px', fontWeight: '800' }}>
-            ➕ إضافة قائمة جديدة
+            ➕ {t('listings.addNew')}
           </Link>
         </div>
       </div>
@@ -250,7 +250,7 @@ const SellerListings = () => {
             {/* Search */}
             <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
               <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: C.muted, fontSize: '13px', pointerEvents: 'none' }}>🔍</span>
-              <input type="text" placeholder="بحث بالنوع أو السلالة…" value={search}
+              <input type="text" placeholder={t('listings.searchPlaceholder')} value={search}
                 onChange={e => { setSearch(e.target.value); clearSel(); }}
                 style={{ width: '100%', boxSizing: 'border-box', padding: '9px 32px 9px 34px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: '#FDFAF7', fontSize: '13px', color: C.text, fontFamily: 'inherit' }}
                 onFocus={e => e.target.style.borderColor = C.green}
@@ -262,13 +262,13 @@ const SellerListings = () => {
             {/* Date/sort */}
             <select value={sortKey} onChange={e => setSortKey(e.target.value)}
               style={{ padding: '9px 12px', borderRadius: '10px', border: `1.5px solid ${C.border}`, background: '#FDFAF7', fontSize: '13px', color: C.text, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>
-              {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.ar}</option>)}
+              {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{t(o.labelKey)}</option>)}
             </select>
 
             {/* View toggle */}
             {!isMobile && (
               <div style={{ display: 'flex', border: `1.5px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
-                {[['table', '☰', 'جدول'], ['grid', '⊞', 'بطاقات']].map(([mode, icon, label]) => (
+                {[['table', '☰', t('listings.viewTable')], ['grid', '⊞', t('listings.viewGrid')]].map(([mode, icon, label]) => (
                   <button key={mode} type="button" title={label} onClick={() => setViewMode(mode)}
                     style={{ width: '36px', height: '36px', border: 'none', background: viewMode === mode ? C.green : C.card, color: viewMode === mode ? '#fff' : C.muted, cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s', fontFamily: 'inherit' }}>
                     {icon}
@@ -292,7 +292,7 @@ const SellerListings = () => {
               return (
                 <button key={tab.key} type="button" onClick={() => { setFilterTab(tab.key); clearSel(); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.green : 'transparent', color: active ? '#fff' : C.muted, fontSize: '12px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s', fontFamily: 'inherit' }}>
-                  {tab.ar}
+                  {t(tab.labelKey)}
                   <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '10px', background: active ? 'rgba(255,255,255,0.25)' : C.border, color: active ? '#fff' : C.muted }}>
                     {cnt}
                   </span>
@@ -305,16 +305,16 @@ const SellerListings = () => {
         {/* ════ Bulk action bar ════ */}
         {selected.size > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px 14px', background: '#FFF8F0', border: `1.5px solid #E8C88A`, borderRadius: '12px', marginBottom: '14px', animation: 'fadeIn 0.2s ease' }}>
-            <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>✓ {selected.size} محدد</span>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>✓ {selected.size} {t('listings.selected')}</span>
             {!bulkConfirm
               ? <>
-                  <ActBtn danger onClick={() => setBulkConfirm(true)}>🗑 حذف المحددة</ActBtn>
-                  <ActBtn onClick={() => exportCSV(listings.filter(l => selected.has(l._id)))}>↓ تصدير CSV</ActBtn>
+                  <ActBtn danger onClick={() => setBulkConfirm(true)}>🗑 {t('listings.bulkDelete')}</ActBtn>
+                  <ActBtn onClick={() => exportCSV(listings.filter(l => selected.has(l._id)))}>↓ {t('listings.exportCSV')}</ActBtn>
                 </>
               : <>
-                  <span style={{ fontSize: '13px', color: C.redText, fontWeight: '700' }}>هل تريد حذف {selected.size} إعلان؟ لا يمكن التراجع.</span>
-                  <ActBtn danger onClick={confirmBulkDelete} disabled={deleting}>{deleting ? 'جارٍ الحذف…' : 'نعم، احذف'}</ActBtn>
-                  <ActBtn onClick={() => setBulkConfirm(false)}>رجوع</ActBtn>
+                  <span style={{ fontSize: '13px', color: C.redText, fontWeight: '700' }}>{t('listings.bulkDeleteConfirm').replace('{n}', selected.size)}</span>
+                  <ActBtn danger onClick={confirmBulkDelete} disabled={deleting}>{deleting ? t('listings.deleting') : t('listings.confirmYes')}</ActBtn>
+                  <ActBtn onClick={() => setBulkConfirm(false)}>{t('common.back')}</ActBtn>
                 </>
             }
             <button type="button" onClick={clearSel} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '16px', marginLeft: 'auto', padding: '2px' }}>✕</button>
@@ -335,14 +335,14 @@ const SellerListings = () => {
           <div style={{ textAlign: 'center', padding: '64px 24px', background: C.card, borderRadius: '18px', border: `1.5px dashed ${C.border}` }}>
             <div style={{ fontSize: '56px', marginBottom: '12px' }}>{search || filterTab !== 'all' ? '🔍' : '🌾'}</div>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: C.text }}>
-              {search || filterTab !== 'all' ? 'لا توجد نتائج' : 'لا توجد قوائم بعد'}
+              {search || filterTab !== 'all' ? t('listings.noResults') : t('listings.empty')}
             </h3>
             <p style={{ margin: '0 0 20px', fontSize: '14px', color: C.muted, lineHeight: 1.7 }}>
-              {search || filterTab !== 'all' ? 'جرب تغيير فلتر البحث أو الحالة.' : 'أضف أول قائمة لك لتبدأ البيع.'}
+              {search || filterTab !== 'all' ? t('listings.noResultsHint') : t('listings.emptyHint')}
             </p>
             {!search && filterTab === 'all'
-              ? <Link to="/seller/add-listing" style={{ display: 'inline-block', padding: '11px 24px', background: C.green, color: '#fff', borderRadius: '12px', fontSize: '14px', fontWeight: '800', textDecoration: 'none' }}>➕ إضافة أول قائمة</Link>
-              : <button type="button" onClick={() => { setSearch(''); setFilterTab('all'); }} style={{ padding: '9px 18px', background: C.card, border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: C.text, cursor: 'pointer', fontFamily: 'inherit' }}>مسح الفلاتر</button>
+              ? <Link to="/seller/add-listing" style={{ display: 'inline-block', padding: '11px 24px', background: C.green, color: '#fff', borderRadius: '12px', fontSize: '14px', fontWeight: '800', textDecoration: 'none' }}>➕ {t('listings.addNew')}</Link>
+              : <button type="button" onClick={() => { setSearch(''); setFilterTab('all'); }} style={{ padding: '9px 18px', background: C.card, border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: C.text, cursor: 'pointer', fontFamily: 'inherit' }}>{t('listings.clearFilters')}</button>
             }
           </div>
         )}
@@ -360,12 +360,12 @@ const SellerListings = () => {
                     <CB checked={allChecked} indeterminate={someChecked} onChange={toggleAll} />
                   </th>
                   {[
-                    ['الصورة والاسم',  'left',   ''],
-                    ['السعر (ج.م)',    'right',  '110px'],
-                    ['العمر / الوزن', 'center', '110px'],
-                    ['الحالة',         'left',   '160px'],
-                    ['المشاهدات',      'center', '84px'],
-                    ['الأزرار',        'right',  '150px'],
+                    [t('listings.col.animal'),  'left',   ''],
+                    [t('listings.col.price'),   'right',  '110px'],
+                    [t('listings.col.ageWeight'),'center', '110px'],
+                    [t('listings.col.status'),  'left',   '160px'],
+                    [t('listings.col.views'),   'center', '84px'],
+                    [t('listings.col.actions'), 'right',  '150px'],
                   ].map(([label, align, w]) => (
                     <th key={label} style={{ padding: '13px 14px', textAlign: align, fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', width: w || undefined }}>
                       {label}
@@ -397,9 +397,9 @@ const SellerListings = () => {
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: '800', fontSize: '14px', color: C.text, textTransform: 'capitalize', lineHeight: 1.2 }}>
-                              {l.breed || meta.ar}
+                              {l.breed || t(meta.typeKey)}
                             </div>
-                            <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px', textTransform: 'capitalize' }}>{meta.ar}{l.location ? ` · 📍 ${l.location}` : ''}</div>
+                            <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px', textTransform: 'capitalize' }}>{t(meta.typeKey)}{l.location ? ` · 📍 ${l.location}` : ''}</div>
                             <div style={{ fontSize: '10px', color: C.muted, marginTop: '2px' }}>{l.createdAt ? fmtDate(l.createdAt) : ''}</div>
                           </div>
                         </div>
@@ -412,13 +412,13 @@ const SellerListings = () => {
 
                       {/* Age / Weight */}
                       <td style={{ padding: '14px 14px', verticalAlign: 'middle', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{fmtAge(l.age)}</div>
-                        <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{l.weight != null ? `${l.weight} كجم` : '—'}</div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{fmtAge(l.age, t)}</div>
+                        <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{l.weight != null ? `${l.weight} ${t('common.kg')}` : '—'}</div>
                       </td>
 
                       {/* Status */}
                       <td style={{ padding: '14px 14px', verticalAlign: 'middle' }}>
-                        <StatusBadge status={l.status} reason={l.rejectionReason} />
+                        <StatusBadge status={l.status} reason={l.rejectionReason} t={t} />
                       </td>
 
                       {/* Views */}
@@ -432,15 +432,20 @@ const SellerListings = () => {
                       <td style={{ padding: '14px 14px', verticalAlign: 'middle', textAlign: 'right' }}>
                         {delCfm ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '700' }}>حذف؟</span>
-                            <ActBtn danger onClick={() => confirmDelete(l._id)} disabled={deleting}>{deleting ? '…' : 'نعم'}</ActBtn>
-                            <ActBtn onClick={() => setDeletingId(null)}>لا</ActBtn>
+                            <span style={{ fontSize: '12px', color: C.redText, fontWeight: '700' }}>{t('listings.confirmDelete')}</span>
+                            <ActBtn danger onClick={() => confirmDelete(l._id)} disabled={deleting}>{deleting ? '…' : t('listings.confirmYes')}</ActBtn>
+                            <ActBtn onClick={() => setDeletingId(null)}>{t('listings.confirmNo')}</ActBtn>
                           </div>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'flex-end' }}>
-                            <ActBtn onClick={() => navigate(`/seller/edit-listing/${l._id}`)} title="تعديل">✏️ تعديل</ActBtn>
-                            <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)} title="عرض">👁 عرض</ActBtn>
-                            <ActBtn danger onClick={() => setDeletingId(l._id)} title="حذف">🗑</ActBtn>
+                            {l.status === 'draft' && (
+                              <ActBtn primary onClick={() => publishDraft(l._id)}>🚀 نشر</ActBtn>
+                            )}
+                            <ActBtn onClick={() => navigate(`/seller/edit-listing/${l._id}`)} title={t('listings.editBtn')}>✏️ {t('listings.editBtn')}</ActBtn>
+                            {l.status !== 'draft' && (
+                              <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)} title={t('listings.viewBtn')}>👁 {t('listings.viewBtn')}</ActBtn>
+                            )}
+                            <ActBtn danger onClick={() => setDeletingId(l._id)} title={t('listings.deleteBtn')}>🗑</ActBtn>
                           </div>
                         )}
                       </td>
@@ -452,11 +457,11 @@ const SellerListings = () => {
 
             {/* Table footer */}
             <div style={{ padding: '12px 16px', background: '#FAF5EF', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: C.muted }}>{visible.length} نتيجة</span>
+              <span style={{ fontSize: '12px', color: C.muted }}>{visible.length} {t('listings.results')}</span>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 {/* Status legend */}
                 {Object.entries(STATUS).map(([key, s]) => (
-                  <span key={key} style={{ fontSize: '11px', color: s.color, fontWeight: '600' }}>{s.dot} {s.ar}</span>
+                  <span key={key} style={{ fontSize: '11px', color: s.color, fontWeight: '600' }}>{s.dot} {t(s.labelKey)}</span>
                 ))}
               </div>
             </div>
@@ -490,11 +495,11 @@ const SellerListings = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px', marginBottom: '5px' }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: '800', fontSize: '15px', color: C.text, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {l.breed || meta.ar}
+                            {l.breed || t(meta.typeKey)}
                           </div>
-                          <div style={{ fontSize: '11px', color: C.muted, marginTop: '1px' }}>{meta.ar}{l.location ? ` · ${l.location}` : ''}</div>
+                          <div style={{ fontSize: '11px', color: C.muted, marginTop: '1px' }}>{t(meta.typeKey)}{l.location ? ` · ${l.location}` : ''}</div>
                         </div>
-                        <StatusBadge status={l.status} reason={l.rejectionReason} />
+                        <StatusBadge status={l.status} reason={l.rejectionReason} t={t} />
                       </div>
                       <div style={{ fontSize: '18px', fontWeight: '800', color: C.green, letterSpacing: '-0.5px' }}>{fmtSAR(l.price)}</div>
                     </div>
@@ -503,9 +508,9 @@ const SellerListings = () => {
                   {/* ── Stats strip ── */}
                   <div style={{ display: 'flex', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
                     {[
-                      ['العمر',    fmtAge(l.age)],
-                      ['الوزن',    l.weight != null ? `${l.weight} كجم` : '—'],
-                      ['المشاهدات', `👁 ${l.views ?? 0}`],
+                      [t('herd.age'),    fmtAge(l.age, t)],
+                      [t('herd.weight'), l.weight != null ? `${l.weight} ${t('common.kg')}` : '—'],
+                      [t('listings.col.views'), `👁 ${l.views ?? 0}`],
                     ].map(([label, val], i, arr) => (
                       <div key={label} style={{ flex: 1, padding: '8px', textAlign: 'center', borderRight: i < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                         <div style={{ fontSize: '10px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
@@ -521,15 +526,20 @@ const SellerListings = () => {
                   <div style={{ padding: '8px 12px 12px' }}>
                     {delCfm ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '12px', color: C.redText, fontWeight: '700', flex: 1 }}>هل تريد الحذف؟</span>
-                        <ActBtn danger onClick={() => confirmDelete(l._id)} disabled={deleting}>{deleting ? '…' : 'نعم'}</ActBtn>
-                        <ActBtn onClick={() => setDeletingId(null)}>لا</ActBtn>
+                        <span style={{ fontSize: '12px', color: C.redText, fontWeight: '700', flex: 1 }}>{t('listings.confirmDelete')}</span>
+                        <ActBtn danger onClick={() => confirmDelete(l._id)} disabled={deleting}>{deleting ? '…' : t('listings.confirmYes')}</ActBtn>
+                        <ActBtn onClick={() => setDeletingId(null)}>{t('listings.confirmNo')}</ActBtn>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', gap: '7px' }}>
-                        <ActBtn primary onClick={() => navigate(`/seller/edit-listing/${l._id}`)}>✏️ تعديل</ActBtn>
-                        <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)}>👁 عرض</ActBtn>
-                        <ActBtn danger onClick={() => setDeletingId(l._id)}>🗑 حذف</ActBtn>
+                      <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                        {l.status === 'draft' && (
+                          <ActBtn primary onClick={() => publishDraft(l._id)}>🚀 نشر الآن</ActBtn>
+                        )}
+                        <ActBtn primary={l.status !== 'draft'} onClick={() => navigate(`/seller/edit-listing/${l._id}`)}>✏️ {t('listings.editBtn')}</ActBtn>
+                        {l.status !== 'draft' && (
+                          <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)}>👁 {t('listings.viewBtn')}</ActBtn>
+                        )}
+                        <ActBtn danger onClick={() => setDeletingId(l._id)}>🗑 {t('listings.deleteBtn')}</ActBtn>
                       </div>
                     )}
                   </div>
@@ -542,10 +552,10 @@ const SellerListings = () => {
         {/* Footer count */}
         {!loading && visible.length > 0 && (
           <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: C.muted }}>
-            <span>عرض {visible.length} من {listings.length} إعلان</span>
+            <span>{t('listings.showingOf').replace('{visible}', visible.length).replace('{total}', listings.length)}</span>
             <div style={{ display: 'flex', gap: '14px' }}>
-              {Object.entries(STATUS).map(([, s]) => (
-                <span key={s.ar}>{s.dot} {s.ar}</span>
+              {Object.entries(STATUS).map(([key, s]) => (
+                <span key={key}>{s.dot} {t(s.labelKey)}</span>
               ))}
             </div>
           </div>

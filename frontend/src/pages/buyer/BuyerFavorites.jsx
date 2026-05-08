@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFavorites, removeFavorite } from '../../services/favoritesService';
+import { useLang } from '../../context/LangContext';
 
-const C = {
-  bg: '#FEFAF5', card: '#FFFFFF', green: '#3A7D44', greenLt: '#F0F7F1',
-  border: '#E8D5C0', text: '#2C1810', muted: '#8B6B5A',
-  shadow: '0 1px 3px rgba(44,24,16,0.08)', red: '#DC2626', redBg: '#FEF2F2',
-};
+import { C } from '../../tokens';
 
 const StarRating = ({ value }) => {
   const full = Math.floor(value);
@@ -23,6 +20,7 @@ const StarRating = ({ value }) => {
 };
 
 const BuyerFavorites = () => {
+  const { t, isRTL } = useLang();
   const [farms,   setFarms]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -32,7 +30,7 @@ const BuyerFavorites = () => {
     setLoading(true);
     getFavorites()
       .then(res => setFarms(res.data))
-      .catch(() => setError('فشل تحميل المفضلة'))
+      .catch(() => setError(t('buyer.fav.loadErr')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -41,12 +39,12 @@ const BuyerFavorites = () => {
       await removeFavorite(sellerId);
       setFarms(f => f.filter(s => s._id !== sellerId));
     } catch {
-      setError('فشل إزالة المزرعة من المفضلة');
+      setError(t('buyer.fav.removeErr'));
     }
   };
 
   return (
-    <div dir="rtl" style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
 
       {/* Header */}
       <div style={{
@@ -54,8 +52,8 @@ const BuyerFavorites = () => {
         padding: '24px 32px', position: 'relative', overflow: 'hidden',
       }}>
         <div aria-hidden="true" style={{ position:'absolute', left:-8, top:-20, fontSize:120, opacity:0.06, lineHeight:1, pointerEvents:'none', userSelect:'none' }}>❤️</div>
-        <h1 style={{ margin:0, fontSize:22, fontWeight:800, color:'#fff' }}>المفضلة</h1>
-        <p style={{ margin:'3px 0 0', fontSize:13, color:'rgba(255,255,255,0.5)' }}>المزارع المحفوظة لديك</p>
+        <h1 style={{ margin:0, fontSize:22, fontWeight:800, color:'#fff' }}>{t('buyer.fav.title')}</h1>
+        <p style={{ margin:'3px 0 0', fontSize:13, color:'rgba(255,255,255,0.5)' }}>{t('buyer.fav.subtitle')}</p>
       </div>
 
       <div style={{ padding:'24px 32px 56px', maxWidth:900, margin:'0 auto' }}>
@@ -69,20 +67,20 @@ const BuyerFavorites = () => {
 
         {loading && (
           <div style={{ display:'flex', justifyContent:'center', padding:'56px', color:C.muted }}>
-            جاري التحميل…
+            {t('common.loading')}
           </div>
         )}
 
         {!loading && farms.length === 0 && (
           <div style={{ textAlign:'center', padding:'56px 24px' }}>
             <div style={{ fontSize:56, marginBottom:12 }}>💔</div>
-            <p style={{ margin:'0 0 4px', fontSize:18, fontWeight:700, color:C.text }}>لا توجد مزارع محفوظة</p>
-            <p style={{ margin:'0 0 20px', fontSize:13, color:C.muted }}>ابحث عن المزارع وأضفها لقائمة مفضلتك</p>
+            <p style={{ margin:'0 0 4px', fontSize:18, fontWeight:700, color:C.text }}>{t('buyer.fav.empty')}</p>
+            <p style={{ margin:'0 0 20px', fontSize:13, color:C.muted }}>{t('buyer.fav.emptyHint')}</p>
             <button
               type="button"
               onClick={() => navigate('/buyer')}
               style={{ padding:'10px 24px', background:C.green, color:'#fff', border:'none', borderRadius:9, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-              استعرض المزارع
+              {t('buyer.browse.title')}
             </button>
           </div>
         )}
@@ -107,9 +105,9 @@ const BuyerFavorites = () => {
                   {farm.reviewCount > 0 && (
                     <div style={{ display:'flex', alignItems:'center', gap:5 }}>
                       <StarRating value={farm.averageRating} />
-                      <span style={{ fontSize:12, color:C.muted }}>({farm.reviewCount} تقييم)</span>
+                      <span style={{ fontSize:12, color:C.muted }}>({farm.reviewCount} {t('buyer.fav.reviews')})</span>
                       {farm.averageRating >= 4.5 && (
-                        <span style={{ fontSize:11, background:'#FEF3C7', color:'#D97706', padding:'1px 7px', borderRadius:4, fontWeight:700 }}>موثوق ✓</span>
+                        <span style={{ fontSize:11, background:'#FEF3C7', color:'#D97706', padding:'1px 7px', borderRadius:4, fontWeight:700 }}>{t('buyer.browse.trusted')}</span>
                       )}
                     </div>
                   )}
@@ -124,12 +122,12 @@ const BuyerFavorites = () => {
                     type="button"
                     onClick={() => navigate(`/buyer/farms/${farm._id}`)}
                     style={{ padding:'8px 16px', background:C.green, color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-                    عرض المزرعة
+                    {t('buyer.fav.viewFarm')}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleRemove(farm._id)}
-                    title="إزالة من المفضلة"
+                    title={t('buyer.fav.remove')}
                     style={{ padding:'8px 10px', background:'none', color:C.red, border:`1px solid rgba(220,38,38,0.25)`, borderRadius:8, fontSize:16, cursor:'pointer', lineHeight:1 }}>
                     ❌
                   </button>

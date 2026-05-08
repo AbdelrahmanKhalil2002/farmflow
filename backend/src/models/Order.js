@@ -12,10 +12,23 @@ const orderSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    sourceType: {
+      type: String,
+      enum: ['listing', 'supply'],
+      default: 'listing',
+    },
     listing: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Listing',
-      required: true,
+    },
+    supply: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supply',
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
     paymentType: {
       type: String,
@@ -64,6 +77,15 @@ const orderSchema = new mongoose.Schema(
       enum: ['pending', 'in_transit', 'delivered'],
       default: 'pending',
     },
+
+    // Immutable per-step timestamps — one entry pushed on every status transition
+    timeline: [
+      {
+        status: { type: String, required: true },
+        at:     { type: Date,   default: Date.now },
+        note:   { type: String, trim: true },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_compress_util.dart';
 import '../../../shared/widgets/image_picker_grid.dart';
@@ -63,7 +64,7 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
           });
         }
       } catch (_) {
-        if (mounted) setState(() => _error = 'فشل في تحميل بيانات الحيوان');
+        if (mounted) setState(() => _error = context.l10n.loadAnimalFailed);
       }
     });
   }
@@ -118,7 +119,7 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في حفظ التعديلات. حاول مجدداً.';
+        _error = context.l10n.editAnimalFailedMsg;
         _loading = false;
       });
     }
@@ -135,8 +136,8 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
           backgroundColor: AppColors.green,
           elevation: 0,
           leading: const BackButton(color: AppColors.white),
-          title: const Text('تعديل بيانات الحيوان',
-              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+          title: Text(context.l10n.editAnimalTitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
                   color: AppColors.white)),
         ),
         body: _error != null
@@ -153,8 +154,8 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
         backgroundColor: AppColors.green,
         elevation: 0,
         leading: const BackButton(color: AppColors.white),
-        title: const Text('تعديل بيانات الحيوان',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+        title: Text(context.l10n.editAnimalTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
                 color: AppColors.white)),
       ),
       body: SingleChildScrollView(
@@ -163,7 +164,7 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Tag (read-only) ───────────────────────────────────────────────
-            _SectionLabel('رقم الوسم'),
+            _SectionLabel(context.l10n.tagId),
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
@@ -179,7 +180,7 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
             const SizedBox(height: 14),
 
             // ── Birth date (read-only) ────────────────────────────────────────
-            _SectionLabel('تاريخ الميلاد'),
+            _SectionLabel(context.l10n.birthDateLabel),
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
@@ -202,7 +203,7 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
             const SizedBox(height: 20),
 
             // ── Type picker ───────────────────────────────────────────────────
-            _SectionLabel('نوع الحيوان'),
+            _SectionLabel(context.l10n.animalType),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8, runSpacing: 8,
@@ -231,39 +232,39 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
             const SizedBox(height: 20),
 
             // ── Gender ────────────────────────────────────────────────────────
-            _SectionLabel('الجنس'),
+            _SectionLabel(context.l10n.animalGender),
             const SizedBox(height: 8),
             Row(children: [
-              _GenderChip(label: '♂ ذكر', selected: _gender == 'male',
+              _GenderChip(label: '♂ ${context.l10n.male}', selected: _gender == 'male',
                   onTap: () => setState(() => _gender = 'male')),
               const SizedBox(width: 10),
-              _GenderChip(label: '♀ أنثى', selected: _gender == 'female',
+              _GenderChip(label: '♀ ${context.l10n.female}', selected: _gender == 'female',
                   onTap: () => setState(() => _gender = 'female')),
             ]),
             const SizedBox(height: 20),
 
             // ── Breed ─────────────────────────────────────────────────────────
-            _FormField(controller: _breedCtrl, label: 'السلالة',
-                hint: 'مثال: فريزيان'),
+            _FormField(controller: _breedCtrl, label: context.l10n.breedLabel,
+                hint: context.l10n.breedHint2),
             const SizedBox(height: 14),
 
             // ── Weight ────────────────────────────────────────────────────────
-            _FormField(controller: _weightCtrl, label: 'الوزن الحالي (كجم)',
+            _FormField(controller: _weightCtrl, label: context.l10n.currentWeightLabel,
                 hint: '0', keyboardType: TextInputType.number),
             const SizedBox(height: 14),
 
             // ── Color ─────────────────────────────────────────────────────────
-            _FormField(controller: _colorCtrl, label: 'اللون',
-                hint: 'مثال: أبيض وأسود'),
+            _FormField(controller: _colorCtrl, label: context.l10n.colorLabel2,
+                hint: context.l10n.colorHint2),
             const SizedBox(height: 14),
 
             // ── Notes ─────────────────────────────────────────────────────────
-            _FormField(controller: _notesCtrl, label: 'ملاحظات',
-                hint: 'أي معلومات إضافية...', maxLines: 3),
+            _FormField(controller: _notesCtrl, label: context.l10n.notesLabel3,
+                hint: context.l10n.notesHint2, maxLines: 3),
             const SizedBox(height: 20),
 
             // ── Photos ────────────────────────────────────────────────────────
-            _SectionLabel('إضافة صور'),
+            _SectionLabel(context.l10n.addPhotosLabel),
             const SizedBox(height: 10),
             ImagePickerGrid(
               images: _images,
@@ -291,8 +292,8 @@ class _EditAnimalScreenState extends ConsumerState<EditAnimalScreen> {
                   ? const SizedBox(width: 22, height: 22,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('حفظ التعديلات',
-                      style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+                  : Text(context.l10n.editAnimalButton,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 15,
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
             const SizedBox(height: 24),

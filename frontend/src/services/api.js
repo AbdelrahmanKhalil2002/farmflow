@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getStoredToken, removeToken } from '../utils/token';
+import { cacheGet, cacheSet } from '../utils/apiCache';
 
 // In development: Vite proxy forwards /api/* to localhost:5001 (vite.config.js).
 // In production: set VITE_API_URL to your deployed backend URL.
@@ -22,7 +23,13 @@ api.interceptors.request.use((config) => {
 // ─── Response interceptor ────────────────────────────────────────────────────
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Cache successful GET responses for offline fallback
+    if (response.config.method === 'get') {
+      cacheSet(response.config.url, response.config.params, response.data);
+    }
+    return response;
+  },
 
   async (error) => {
     const config = error.config;
@@ -37,6 +44,15 @@ api.interceptors.response.use(
         const delay = RETRY_DELAY_MS * config._retryCount; // 1s → 2s
         await new Promise((resolve) => setTimeout(resolve, delay));
         return api(config);
+      }
+
+      // All retries exhausted — serve from cache if available
+      if (config.method === 'get') {
+        const cached = cacheGet(config.url, config.params);
+        if (cached) {
+          window.dispatchEvent(new CustomEvent('ff:cache-hit'));
+          return { data: cached.data, status: 200, _fromCache: true };
+        }
       }
     }
 

@@ -104,6 +104,51 @@ router.get('/weighing-due', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// ── GET /api/animals/vet/medical ──────────────────────────────────────────────
+// All medical records for this seller's animals with embedded animal info
+router.get('/vet/medical', async (req, res) => {
+  try {
+    const filter = {};
+    if (req.user.role !== 'admin') filter.seller = req.user.id;
+    const records = await MedicalRecord.find(filter)
+      .populate('animal', 'type breed tagId')
+      .sort({ date: -1 })
+      .limit(200);
+    res.json(records);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// ── GET /api/animals/vet/vaccinations ─────────────────────────────────────────
+// All vaccination log entries across all seller's animals (flattened)
+router.get('/vet/vaccinations', async (req, res) => {
+  try {
+    const filter = { status: { $ne: 'deceased' } };
+    if (req.user.role !== 'admin') filter.seller = req.user.id;
+    const animals = await Animal.find(filter, 'type breed tagId vaccinationLog');
+    const result = [];
+    for (const animal of animals) {
+      for (const vac of animal.vaccinationLog) {
+        result.push({
+          _id:         vac._id,
+          vaccine:     vac.vaccine,
+          date:        vac.date,
+          nextDueDate: vac.nextDueDate,
+          vet:         vac.vet,
+          notes:       vac.notes,
+          animal: {
+            _id:   animal._id,
+            type:  animal.type,
+            breed: animal.breed,
+            tagId: animal.tagId,
+          },
+        });
+      }
+    }
+    result.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json(result);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 // ── POST /api/animals ─────────────────────────────────────────────────────────
 router.post(
   '/',

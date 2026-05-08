@@ -1,6 +1,6 @@
 const router             = require('express').Router();
 const { body }           = require('express-validator');
-const { register, login, getMe, verifyId, updateProfile, updatePassword } = require('../controllers/authController');
+const { register, login, getMe, verifyId, updateProfile, updatePassword, forgotPassword, resetPassword, verifyEmail, resendVerification, verify2FA } = require('../controllers/authController');
 const { protect }        = require('../middleware/auth');
 const upload             = require('../config/upload');
 
@@ -94,6 +94,33 @@ router.patch('/fcm-token', protect, async (req, res) => {
   }
 });
 
+// ─── Notification preferences ─────────────────────────────────────────────────
+router.get('/notif-prefs', protect, async (req, res) => {
+  try {
+    const user = await require('../models/User').findById(req.user.id).select('notifPrefs');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const prefs = user.notifPrefs ?? { orders: true, reminders: true, dairy: true, messages: true };
+    res.json(prefs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put('/notif-prefs', protect, async (req, res) => {
+  try {
+    const { orders, reminders, dairy, messages } = req.body;
+    const prefs = {};
+    if (orders    !== undefined) prefs['notifPrefs.orders']    = !!orders;
+    if (reminders !== undefined) prefs['notifPrefs.reminders'] = !!reminders;
+    if (dairy     !== undefined) prefs['notifPrefs.dairy']     = !!dairy;
+    if (messages  !== undefined) prefs['notifPrefs.messages']  = !!messages;
+    await require('../models/User').findByIdAndUpdate(req.user.id, { $set: prefs });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ─── Verify National ID (format + Civil Registry mock) ───────────────────────
 router.post(
   '/verify-id',
@@ -105,5 +132,16 @@ router.post(
   ],
   verifyId
 );
+
+// ─── Password reset ───────────────────────────────────────────────────────────
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password',  resetPassword);
+
+// ─── Email verification ───────────────────────────────────────────────────────
+router.post('/verify-email',          verifyEmail);
+router.post('/resend-verification',   protect, resendVerification);
+
+// ─── Admin 2FA ────────────────────────────────────────────────────────────────
+router.post('/verify-2fa', verify2FA);
 
 module.exports = router;

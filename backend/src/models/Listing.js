@@ -7,9 +7,14 @@ const listingSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    farm: {
+      type:  mongoose.Schema.Types.ObjectId,
+      ref:   'Farm',
+      index: true,
+    },
     type: {
       type: String,
-      enum: ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'other'],
+      enum: ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'ostrich', 'gazelle', 'oryx', 'deer', 'llama', 'alpaca', 'donkey', 'mule', 'other'],
       required: true,
     },
     breed: {
@@ -38,7 +43,7 @@ const listingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'sold'],
+      enum: ['draft', 'pending', 'approved', 'rejected', 'sold'],
       default: 'pending',
     },
     location: {

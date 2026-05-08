@@ -12,6 +12,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../buyer/browse/sellers_service.dart';
 import '../../buyer/browse/buyer_supplies_service.dart';
 import '../../buyer/favorites/favorites_service.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../buyer/notifications/notifications_service.dart';
 
 // ── Egyptian governorates ─────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ class _BuyerHomeScreenState extends ConsumerState<BuyerHomeScreen>
                           color: AppColors.text,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'ابحث عن مزرعة أو محافظة...',
+                          hintText: context.l10n.searchHint,
                           hintStyle: TextStyle(
                             fontFamily: 'Cairo',
                             color: AppColors.muted.withValues(alpha: 0.7),
@@ -175,18 +176,7 @@ class _BuyerHomeScreenState extends ConsumerState<BuyerHomeScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _showFilterSheet,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppColors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.tune, color: AppColors.green),
-                      ),
-                    ),
+                    _FilterButton(onTap: _showFilterSheet),
                   ],
                 ),
               ),
@@ -202,10 +192,10 @@ class _BuyerHomeScreenState extends ConsumerState<BuyerHomeScreen>
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
-                tabs: const [
-                  Tab(text: '🌾 المزارع'),
-                  Tab(text: '🌙 عروض العيد'),
-                  Tab(text: '🛒 المستلزمات'),
+                tabs: [
+                  Tab(text: context.l10n.tabFarms),
+                  Tab(text: context.l10n.tabEid),
+                  Tab(text: context.l10n.tabSupplies),
                 ],
               ),
             ],
@@ -219,6 +209,108 @@ class _BuyerHomeScreenState extends ConsumerState<BuyerHomeScreen>
           _EidTab(),
           _SuppliesTab(),
         ],
+      ),
+    );
+  }
+}
+
+// ── Filter icon button (shows active-dot when filters set) ────────────────────
+class _FilterButton extends ConsumerWidget {
+  const _FilterButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final filter = ref.watch(sellersFilterProvider);
+    final active = filter.hasActiveFilters;
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: active
+                  ? AppColors.white
+                  : AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.tune,
+                color: active ? AppColors.green : AppColors.green),
+          ),
+          if (active)
+            Positioned(
+              top: -2,
+              left: -2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: AppColors.amber,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sort chips strip ──────────────────────────────────────────────────────────
+class _SortStrip extends ConsumerWidget {
+  const _SortStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final filter = ref.watch(sellersFilterProvider);
+
+    const options = [
+      (SellersSortBy.rating,   'التقييم'),
+      (SellersSortBy.newest,   'الأحدث'),
+      (SellersSortBy.priceAsc, 'السعر: الأقل'),
+      (SellersSortBy.priceDesc,'السعر: الأعلى'),
+    ];
+
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: options.map((opt) {
+          final selected = filter.sortBy == opt.$1;
+          return Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: GestureDetector(
+              onTap: () => ref
+                  .read(sellersFilterProvider.notifier)
+                  .update((f) => f.copyWith(sortBy: opt.$1)),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.green : AppColors.card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppColors.green : AppColors.border,
+                  ),
+                ),
+                child: Text(
+                  opt.$2,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? AppColors.white : AppColors.text,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -239,9 +331,9 @@ class _FarmsTab extends ConsumerWidget {
       ),
       error: (e, _) => EmptyState(
         icon: Icons.wifi_off_rounded,
-        title: 'تعذّر تحميل المزارع',
+        title: context.l10n.loadingFarmsFailed,
         subtitle: e.toString(),
-        actionLabel: 'إعادة المحاولة',
+        actionLabel: context.l10n.retry,
         action: () => ref.read(paginatedSellersProvider.notifier).refresh(),
       ),
       data: (sellersState) {
@@ -249,13 +341,13 @@ class _FarmsTab extends ConsumerWidget {
           return RefreshIndicator(
             color: AppColors.green,
             onRefresh: () => ref.read(paginatedSellersProvider.notifier).refresh(),
-            child: const CustomScrollView(
+            child: CustomScrollView(
               slivers: [
                 SliverFillRemaining(
                   child: EmptyState(
                     icon: Icons.search_off_rounded,
-                    title: 'لا توجد مزارع',
-                    subtitle: 'جرّب تعديل كلمة البحث أو الفلتر',
+                    title: context.l10n.noFarms,
+                    subtitle: context.l10n.noFarmsSubtitle,
                   ),
                 ),
               ],
@@ -268,6 +360,13 @@ class _FarmsTab extends ConsumerWidget {
           onRefresh: () => ref.read(paginatedSellersProvider.notifier).refresh(),
           child: CustomScrollView(
             slivers: [
+              // Sort strip
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 12, bottom: 4),
+                  child: _SortStrip(),
+                ),
+              ),
               SliverPadding(
                 padding: const EdgeInsets.all(16),
                 sliver: SliverGrid(
@@ -303,9 +402,9 @@ class _FarmsTab extends ConsumerWidget {
                                     .loadMore(),
                                 icon: const Icon(Icons.expand_more,
                                     color: AppColors.green),
-                                label: const Text(
-                                  'تحميل المزيد',
-                                  style: TextStyle(
+                                label: Text(
+                                  context.l10n.loadMore,
+                                  style: const TextStyle(
                                     fontFamily: 'Cairo',
                                     color: AppColors.green,
                                     fontWeight: FontWeight.w600,
@@ -337,8 +436,6 @@ class _EidTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Reuse the already-loaded sellers list; farms with eidAvailable
-    // listings are identified by listingTypes containing relevant types
     final asyncAll = ref.watch(allSellersProvider);
 
     return asyncAll.when(
@@ -346,12 +443,11 @@ class _EidTab extends ConsumerWidget {
         padding: EdgeInsets.all(16),
         child: ShimmerList(count: 4, cardHeight: 200),
       ),
-      error: (_, __) => const EmptyState(
+      error: (_, __) => EmptyState(
         icon: Icons.sentiment_dissatisfied,
-        title: 'تعذّر التحميل',
+        title: context.l10n.loadingFailed,
       ),
       data: (all) {
-        // Show all sellers that have livestock listings (eid candidates)
         final eid = all
             .where((s) =>
                 s.listingCount > 0 &&
@@ -360,10 +456,10 @@ class _EidTab extends ConsumerWidget {
             .toList();
 
         if (eid.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.event_outlined,
-            title: 'لا توجد عروض عيد حالياً',
-            subtitle: 'تابع المزارع للحصول على آخر العروض',
+            title: context.l10n.noEidOffers,
+            subtitle: context.l10n.noEidOffersSubtitle,
           );
         }
         return RefreshIndicator(
@@ -388,6 +484,12 @@ class _EidFarmTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isFav = ref.watch(favoriteIdsProvider).contains(seller.id);
+
+    // Determine if seller has a very recent listing (within last 24h)
+    final hasNewToday = seller.newestListingAt != null &&
+        seller.newestListingAt!
+            .isAfter(DateTime.now().subtract(const Duration(hours: 24)));
+
     return GestureDetector(
       onTap: () => context.push('/buyer/farm/${seller.id}'),
       child: Container(
@@ -427,14 +529,38 @@ class _EidFarmTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      seller.displayName,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.text,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            seller.displayName,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AppColors.text,
+                            ),
+                          ),
+                        ),
+                        if (hasNewToday)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.amberLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              '🌙 جديد اليوم',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.amber,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     if (seller.governorate != null)
                       Text(
@@ -447,6 +573,25 @@ class _EidFarmTile extends ConsumerWidget {
                       ),
                     const SizedBox(height: 4),
                     _TypeChips(types: seller.listingTypes),
+                    // Eid share info if available
+                    if (seller.listingCount > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.category_outlined,
+                              size: 11, color: AppColors.muted),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${seller.listingCount} إعلان للأضاحي',
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 10,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -471,6 +616,12 @@ class _EidFarmTile extends ConsumerWidget {
 class FarmCard extends ConsumerWidget {
   const FarmCard({super.key, required this.seller});
   final SellerSummaryModel seller;
+
+  /// True if a new listing appeared within the last 24 hours.
+  bool get _hasNewToday =>
+      seller.newestListingAt != null &&
+      seller.newestListingAt!
+          .isAfter(DateTime.now().subtract(const Duration(hours: 24)));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -516,8 +667,31 @@ class FarmCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                // "جديد" badge
-                if (seller.isNew)
+                // "جديد اليوم" badge — shown when listing created within last 24h
+                if (_hasNewToday)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD97706),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        '🌟 جديد اليوم',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.white,
+                        ),
+                      ),
+                    ),
+                  )
+                // Fallback: "جديد" badge for farms new within 7 days
+                else if (seller.isNew)
                   Positioned(
                     top: 8,
                     left: 8,
@@ -528,9 +702,9 @@ class FarmCard extends ConsumerWidget {
                         color: AppColors.amber,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'جديد',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.newBadge,
+                        style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
@@ -715,17 +889,17 @@ class _SuppliesTab extends ConsumerWidget {
       ),
       error: (e, _) => EmptyState(
         icon: Icons.wifi_off_rounded,
-        title: 'تعذّر تحميل المستلزمات',
+        title: context.l10n.loadingSuppliesFailed,
         subtitle: e.toString(),
-        actionLabel: 'إعادة المحاولة',
+        actionLabel: context.l10n.retry,
         action: () => ref.invalidate(allSuppliesProvider),
       ),
       data: (supplies) {
         if (supplies.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.storefront_outlined,
-            title: 'لا توجد مستلزمات متاحة',
-            subtitle: 'تابع لاحقاً لعروض العلف والمعدات',
+            title: context.l10n.noSupplies,
+            subtitle: context.l10n.noSuppliesSubtitle,
           );
         }
         return RefreshIndicator(
@@ -830,13 +1004,13 @@ class _SupplyCard extends StatelessWidget {
                     ),
                     if (supply.deliveryAvailable)
                       Row(
-                        children: const [
-                          Icon(Icons.local_shipping_outlined,
+                        children: [
+                          const Icon(Icons.local_shipping_outlined,
                               size: 10, color: AppColors.muted),
-                          SizedBox(width: 2),
+                          const SizedBox(width: 2),
                           Text(
-                            'توصيل متاح',
-                            style: TextStyle(
+                            context.l10n.deliveryAvailable,
+                            style: const TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 9,
                               color: AppColors.muted,
@@ -866,17 +1040,54 @@ class _SupplyPlaceholder extends StatelessWidget {
 }
 
 // ── Filter bottom sheet ───────────────────────────────────────────────────────
-class _FilterSheet extends ConsumerWidget {
+class _FilterSheet extends ConsumerStatefulWidget {
   const _FilterSheet();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends ConsumerState<_FilterSheet> {
+  late TextEditingController _minPriceCtrl;
+  late TextEditingController _maxPriceCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final filter = ref.read(sellersFilterProvider);
+    _minPriceCtrl = TextEditingController(
+        text: filter.minPrice != null
+            ? filter.minPrice!.toStringAsFixed(0)
+            : '');
+    _maxPriceCtrl = TextEditingController(
+        text: filter.maxPrice != null
+            ? filter.maxPrice!.toStringAsFixed(0)
+            : '');
+  }
+
+  @override
+  void dispose() {
+    _minPriceCtrl.dispose();
+    _maxPriceCtrl.dispose();
+    super.dispose();
+  }
+
+  void _applyPriceFilter() {
+    final min = double.tryParse(_minPriceCtrl.text.trim());
+    final max = double.tryParse(_maxPriceCtrl.text.trim());
+    ref.read(sellersFilterProvider.notifier).update(
+          (f) => f.copyWith(minPrice: min, maxPrice: max),
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final filter = ref.watch(sellersFilterProvider);
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
+      initialChildSize: 0.75,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
       expand: false,
       builder: (_, scrollCtrl) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -895,9 +1106,9 @@ class _FilterSheet extends ConsumerWidget {
                 ),
               ),
             ),
-            const Text(
-              'فلترة المزارع',
-              style: TextStyle(
+            Text(
+              context.l10n.filterFarms,
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
@@ -905,27 +1116,172 @@ class _FilterSheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'المحافظة',
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-            const SizedBox(height: 8),
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
                 children: [
-                  // Governorate selector
+                  // ── Delivery only toggle ────────────────────────────────
+                  GestureDetector(
+                    onTap: () => ref
+                        .read(sellersFilterProvider.notifier)
+                        .update((f) => f.copyWith(deliveryOnly: !f.deliveryOnly)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: filter.deliveryOnly
+                            ? AppColors.greenBg
+                            : AppColors.bg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: filter.deliveryOnly
+                              ? AppColors.green
+                              : AppColors.border,
+                          width: filter.deliveryOnly ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.local_shipping_outlined,
+                              size: 18,
+                              color: filter.deliveryOnly
+                                  ? AppColors.green
+                                  : AppColors.muted),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'يتوفر توصيل فقط',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.text,
+                              ),
+                            ),
+                          ),
+                          if (filter.deliveryOnly)
+                            const Icon(Icons.check_circle,
+                                color: AppColors.green, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Price range ─────────────────────────────────────────
+                  const Text(
+                    'نطاق السعر (ج.م / كجم)',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _minPriceCtrl,
+                          keyboardType: TextInputType.number,
+                          textDirection: TextDirection.ltr,
+                          onChanged: (_) => _applyPriceFilter(),
+                          style: const TextStyle(
+                              fontFamily: 'Cairo', fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'من',
+                            hintStyle: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                color: AppColors.muted),
+                            filled: true,
+                            fillColor: AppColors.bg,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.green),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('—',
+                            style: TextStyle(
+                                fontFamily: 'Cairo',
+                                color: AppColors.muted,
+                                fontSize: 16)),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _maxPriceCtrl,
+                          keyboardType: TextInputType.number,
+                          textDirection: TextDirection.ltr,
+                          onChanged: (_) => _applyPriceFilter(),
+                          style: const TextStyle(
+                              fontFamily: 'Cairo', fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'إلى',
+                            hintStyle: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                color: AppColors.muted),
+                            filled: true,
+                            fillColor: AppColors.bg,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                                  const BorderSide(color: AppColors.green),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Governorate ─────────────────────────────────────────
+                  Text(
+                    context.l10n.governorate,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       _FilterChip(
-                        label: 'الكل',
+                        label: context.l10n.allFilter,
                         selected: filter.governorate == null,
                         onTap: () => ref
                             .read(sellersFilterProvider.notifier)
@@ -941,9 +1297,11 @@ class _FilterSheet extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'نوع الماشية',
-                    style: TextStyle(
+
+                  // ── Animal type ─────────────────────────────────────────
+                  Text(
+                    context.l10n.livestockType,
+                    style: const TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -956,7 +1314,7 @@ class _FilterSheet extends ConsumerWidget {
                     runSpacing: 8,
                     children: [
                       _FilterChip(
-                        label: 'الكل',
+                        label: context.l10n.allFilter,
                         selected: filter.animalType == null,
                         onTap: () => ref
                             .read(sellersFilterProvider.notifier)
@@ -972,18 +1330,21 @@ class _FilterSheet extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
+
                   // Reset button
-                  if (filter.governorate != null || filter.animalType != null)
+                  if (filter.hasActiveFilters)
                     OutlinedButton(
                       onPressed: () {
+                        _minPriceCtrl.clear();
+                        _maxPriceCtrl.clear();
                         ref
                             .read(sellersFilterProvider.notifier)
                             .update((_) => const SellersFilter());
                         Navigator.pop(context);
                       },
-                      child: const Text(
-                        'مسح الفلتر',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.clearFilter,
+                        style: const TextStyle(
                           fontFamily: 'Cairo',
                           color: AppColors.red,
                         ),
@@ -995,9 +1356,9 @@ class _FilterSheet extends ConsumerWidget {
             FilledButton(
               onPressed: () => Navigator.pop(context),
               style: FilledButton.styleFrom(backgroundColor: AppColors.green),
-              child: const Text(
-                'تطبيق',
-                style: TextStyle(
+              child: Text(
+                context.l10n.apply,
+                style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w700,
                 ),

@@ -1,36 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getBudgets, setBudget } from '../../services/budgetService';
 import { getStatements } from '../../services/statementsService';
+import { useLang } from '../../context/LangContext';
 
-const C = {
-  bg:       '#FEFAF5',
-  card:     '#FFFFFF',
-  green:    '#3A7D44',
-  greenDk:  '#2D6235',
-  greenLt:  '#F0F7F1',
-  greenBg:  '#DCFCE7',
-  greenText:'#166534',
-  border:   '#E8D5C0',
-  text:     '#2C1810',
-  muted:    '#8B6B5A',
-  shadow:   '0 1px 3px rgba(44,24,16,0.08)',
-  red:      '#DC2626',
-  redBg:    '#FEF2F2',
-  amber:    '#D97706',
-  amberBg:  '#FEF3C7',
-};
+import { C } from '../../tokens';
 
 const EXP_CATS = [
-  { key: 'feed',        label: 'علف',      emoji: '🌾' },
-  { key: 'doctor',      label: 'بيطري',    emoji: '🏥' },
-  { key: 'transport',   label: 'نقل',      emoji: '🚚' },
-  { key: 'electricity', label: 'كهرباء',   emoji: '⚡' },
-  { key: 'salary',      label: 'رواتب',    emoji: '👷' },
-  { key: 'rent',        label: 'إيجار',    emoji: '🏠' },
-  { key: 'water',       label: 'مياه',     emoji: '💧' },
-  { key: 'maintenance', label: 'صيانة',    emoji: '🔧' },
-  { key: 'other',       label: 'أخرى',     emoji: '📦' },
-  { key: 'income',      label: 'هدف الدخل', emoji: '💰' },
+  { key: 'feed',        labelKey: 'expenses.cat.feed',        emoji: '🌾' },
+  { key: 'doctor',      labelKey: 'expenses.cat.doctor',      emoji: '🏥' },
+  { key: 'transport',   labelKey: 'expenses.cat.transport',   emoji: '🚚' },
+  { key: 'electricity', labelKey: 'expenses.cat.electricity', emoji: '⚡' },
+  { key: 'salary',      labelKey: 'expenses.cat.salary',      emoji: '👷' },
+  { key: 'rent',        labelKey: 'expenses.cat.rent',        emoji: '🏠' },
+  { key: 'water',       labelKey: 'expenses.cat.water',       emoji: '💧' },
+  { key: 'maintenance', labelKey: 'expenses.cat.maintenance', emoji: '🔧' },
+  { key: 'other',       labelKey: 'expenses.cat.other',       emoji: '📦' },
+  { key: 'income',      labelKey: 'budget.cat.income',        emoji: '💰' },
 ];
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -41,7 +26,7 @@ const fmt = (v) => v != null && v !== 0
   : '—';
 
 // ─── Inline editable cell ──────────────────────────────────────────────────
-const BudgetCell = ({ value, onSave, catKey, year, month }) => {
+const BudgetCell = ({ value, onSave, catKey, year, month, tFn }) => {
   const [editing, setEditing] = useState(false);
   const [input,   setInput]   = useState('');
   const [saving,  setSaving]  = useState(false);
@@ -78,7 +63,7 @@ const BudgetCell = ({ value, onSave, catKey, year, month }) => {
   return (
     <div
       onClick={startEdit}
-      title="انقر للتعديل"
+      title={tFn('budget.setTarget')}
       style={{
         padding: '5px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
         color: value ? C.greenText : C.muted, background: value ? C.greenBg : '#F9F5F0',
@@ -86,13 +71,14 @@ const BudgetCell = ({ value, onSave, catKey, year, month }) => {
         transition: 'all 0.15s',
       }}
     >
-      {saving ? '…' : value ? fmt(value) : '+ تحديد'}
+      {saving ? '…' : value ? fmt(value) : `+ ${tFn('budget.setTarget')}`}
     </div>
   );
 };
 
 // ─── Main page ─────────────────────────────────────────────────────────────
 const SellerBudget = () => {
+  const { t, isRTL } = useLang();
   const [year,     setYear]     = useState(CURRENT_YEAR);
   const [budgets,  setBudgets]  = useState({}); // { 'feed-3': 1200, ... }
   const [actuals,  setActuals]  = useState({}); // { 'feed-3': 980, ... }
@@ -142,11 +128,15 @@ const SellerBudget = () => {
   const handleSave = async (category, yr, month, targetAmount) => {
     await setBudget({ year: yr, month, category, targetAmount });
     setBudgets(prev => ({ ...prev, [`${category}-${month}`]: targetAmount }));
-    setToast('تم الحفظ ✓');
+    setToast(t('budget.saved'));
     setTimeout(() => setToast(''), 2000);
   };
 
-  const MONTHS = ['يناير','فبراير','مارس','إبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const MONTHS = [
+    t('budget.jan'), t('budget.feb'), t('budget.mar'), t('budget.apr'),
+    t('budget.may'), t('budget.jun'), t('budget.jul'), t('budget.aug'),
+    t('budget.sep'), t('budget.oct'), t('budget.nov'), t('budget.dec'),
+  ];
 
   // Annual target per category (sum of 12 months)
   const annualTarget = (catKey) =>
@@ -155,7 +145,7 @@ const SellerBudget = () => {
     Array.from({ length: 12 }, (_, i) => actuals[`${catKey}-${i + 1}`] || 0).reduce((s, v) => s + v, 0);
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', padding: '24px 28px', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} dir="rtl">
+    <div style={{ background: C.bg, minHeight: '100vh', padding: '24px 28px', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* Toast */}
       {toast && (
@@ -166,13 +156,13 @@ const SellerBudget = () => {
 
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: '900', color: C.text }}>📊 الميزانية والأهداف</h1>
-        <p style={{ margin: 0, fontSize: '13px', color: C.muted }}>حدد أهدافك الشهرية لكل فئة وتابع الفعلي مقابل المستهدف</p>
+        <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: '900', color: C.text }}>📊 {t('budget.title')}</h1>
+        <p style={{ margin: 0, fontSize: '13px', color: C.muted }}>{t('budget.subtitle')}</p>
       </div>
 
       {/* Year selector */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', color: C.muted, fontWeight: '600' }}>السنة:</span>
+        <span style={{ fontSize: '13px', color: C.muted, fontWeight: '600' }}>{t('budget.year')}:</span>
         {YEAR_OPTIONS.map(y => (
           <button key={y} type="button" onClick={() => setYear(y)}
             style={{ padding: '6px 16px', borderRadius: '8px', border: `1.5px solid ${year === y ? C.green : C.border}`, background: year === y ? C.green : C.card, color: year === y ? '#fff' : C.text, fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
@@ -182,18 +172,18 @@ const SellerBudget = () => {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: C.muted }}>جاري التحميل…</div>
+        <div style={{ textAlign: 'center', padding: '60px', color: C.muted }}>{t('budget.loading')}</div>
       ) : (
         <>
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px' }}>
             {[
-              { label: 'إجمالي هدف المصروفات', value: EXP_CATS.filter(c => c.key !== 'income').reduce((s, c) => s + annualTarget(c.key), 0), color: C.amber },
-              { label: 'إجمالي هدف الدخل', value: annualTarget('income'), color: C.green },
-              { label: 'الفعلي للمصروفات', value: EXP_CATS.filter(c => c.key !== 'income').reduce((s, c) => s + annualActual(c.key), 0), color: C.muted },
+              { labelKey: 'budget.totalExpTarget', value: EXP_CATS.filter(c => c.key !== 'income').reduce((s, c) => s + annualTarget(c.key), 0), color: C.amber },
+              { labelKey: 'budget.totalIncTarget', value: annualTarget('income'), color: C.green },
+              { labelKey: 'budget.actualExp', value: EXP_CATS.filter(c => c.key !== 'income').reduce((s, c) => s + annualActual(c.key), 0), color: C.muted },
             ].map((card, i) => (
               <div key={i} style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '16px 20px', boxShadow: C.shadow }}>
-                <div style={{ fontSize: '12px', color: C.muted, fontWeight: '600', marginBottom: '6px' }}>{card.label}</div>
+                <div style={{ fontSize: '12px', color: C.muted, fontWeight: '600', marginBottom: '6px' }}>{t(card.labelKey)}</div>
                 <div style={{ fontSize: '20px', fontWeight: '900', color: card.color }}>{fmt(card.value)}</div>
               </div>
             ))}
@@ -206,15 +196,15 @@ const SellerBudget = () => {
                 <thead>
                   <tr style={{ background: '#F9F5F0' }}>
                     <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '700', color: C.muted, borderBottom: `1px solid ${C.border}`, position: 'sticky', right: 0, background: '#F9F5F0', minWidth: '120px' }}>
-                      الفئة
+                      {t('budget.cat')}
                     </th>
                     {MONTHS.map((m, i) => (
-                      <th key={m} style={{ padding: '10px 6px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: C.muted, borderBottom: `1px solid ${C.border}`, minWidth: '90px' }}>
+                      <th key={i} style={{ padding: '10px 6px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: C.muted, borderBottom: `1px solid ${C.border}`, minWidth: '90px' }}>
                         {m}
                       </th>
                     ))}
                     <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: C.muted, borderBottom: `1px solid ${C.border}`, minWidth: '100px', background: C.greenLt }}>
-                      السنوي
+                      {t('budget.annual')}
                     </th>
                   </tr>
                 </thead>
@@ -228,11 +218,11 @@ const SellerBudget = () => {
                         <td style={{ padding: '12px 16px', position: 'sticky', right: 0, background: ci % 2 === 0 ? C.card : '#FEFAF5', zIndex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '16px' }}>{cat.emoji}</span>
-                            <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{cat.label}</span>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t(cat.labelKey)}</span>
                           </div>
                           {annualA > 0 && (
                             <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>
-                              فعلي: <span style={{ color: over ? C.red : C.green, fontWeight: '600' }}>{fmt(annualA)}</span>
+                              {t('budget.actual')}: <span style={{ color: over ? C.red : C.green, fontWeight: '600' }}>{fmt(annualA)}</span>
                             </div>
                           )}
                         </td>
@@ -244,7 +234,7 @@ const SellerBudget = () => {
                           return (
                             <td key={m} style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                <BudgetCell value={bval} onSave={handleSave} catKey={cat.key} year={year} month={m} />
+                                <BudgetCell value={bval} onSave={handleSave} catKey={cat.key} year={year} month={m} tFn={t} />
                                 {aval > 0 && (
                                   <span style={{ fontSize: '10px', color: isOver ? C.red : C.green, fontWeight: '600' }}>
                                     {isOver ? '▲' : '▼'} {fmt(aval)}
@@ -259,7 +249,7 @@ const SellerBudget = () => {
                             {annualT > 0 ? fmt(annualT) : '—'}
                           </div>
                           {over && annualT > 0 && (
-                            <div style={{ fontSize: '10px', color: C.red, fontWeight: '600', marginTop: '2px' }}>تجاوز الحد</div>
+                            <div style={{ fontSize: '10px', color: C.red, fontWeight: '600', marginTop: '2px' }}>{t('budget.overLimit')}</div>
                           )}
                         </td>
                       </tr>
@@ -270,7 +260,7 @@ const SellerBudget = () => {
             </div>
 
             <div style={{ padding: '14px 20px', background: '#F9F5F0', borderTop: `1px solid ${C.border}`, fontSize: '12px', color: C.muted }}>
-              💡 انقر على أي خلية لتحديد الهدف الشهري · تظهر الأرقام الخضراء الأداء الفعلي مقارنةً بالهدف
+              💡 {t('budget.hint')}
             </div>
           </div>
         </>

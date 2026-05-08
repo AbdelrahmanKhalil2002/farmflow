@@ -12,6 +12,20 @@ frontend/dist-ssr/
 
 # Uploaded files (ephemeral — not part of source)
 backend/uploads/
+backend/uploads/*
+
+# Local Claude Code memory & settings
+memory/
+.claude/
+
+# Screen recorder output (videos, node_modules)
+recorder/
+
+# Security testing prompts — local only, never push
+farmflow_pentest_prompts.md
+
+# Generated doc previews
+docs/pdf_preview/
 
 # Logs
 *.log

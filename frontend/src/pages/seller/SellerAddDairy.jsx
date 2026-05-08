@@ -2,31 +2,25 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createDairy } from '../../services/dairyService';
 import { useToast } from '../../components/Toast';
-
-const C = {
-  bg: '#FEFAF5', card: '#FFFFFF', green: '#3A7D44', greenDk: '#2D6235',
-  greenBg: '#DCFCE7', greenText: '#166534', amber: '#D97706', amberBg: '#FEF3C7',
-  amberText: '#92400E', red: '#DC2626', redBg: '#FEF2F2', redText: '#B91C1C',
-  border: '#E8D5C0', text: '#2C1810', muted: '#8B6B5A',
-  shadow: '0 1px 3px rgba(44,24,16,0.08), 0 4px 12px rgba(44,24,16,0.06)',
-};
+import { useLang } from '../../context/LangContext';
+import { C } from '../../tokens';
 
 const TYPES = [
-  { value: 'milk',   emoji: '🥛', label: 'لبن' },
-  { value: 'cheese', emoji: '🧀', label: 'جبنة' },
-  { value: 'yogurt', emoji: '🫙', label: 'زبادي' },
-  { value: 'butter', emoji: '🧈', label: 'زبدة' },
-  { value: 'cream',  emoji: '🍦', label: 'قشطة' },
-  { value: 'ghee',   emoji: '🫕', label: 'سمن' },
-  { value: 'other',  emoji: '📦', label: 'أخرى' },
+  { value: 'milk',   emoji: '🥛', labelKey: 'dairy.type.milk' },
+  { value: 'cheese', emoji: '🧀', labelKey: 'dairy.type.cheese' },
+  { value: 'yogurt', emoji: '🫙', labelKey: 'dairy.type.yogurt' },
+  { value: 'butter', emoji: '🧈', labelKey: 'dairy.type.butter' },
+  { value: 'cream',  emoji: '🍦', labelKey: 'dairy.type.cream' },
+  { value: 'ghee',   emoji: '🫕', labelKey: 'dairy.type.ghee' },
+  { value: 'other',  emoji: '📦', labelKey: 'dairy.type.other' },
 ];
 
 const UNITS = [
-  { value: 'liter', label: 'لتر' },
-  { value: 'kg',    label: 'كجم' },
-  { value: 'piece', label: 'قطعة' },
-  { value: 'pack',  label: 'عبوة' },
-  { value: 'dozen', label: 'دزينة' },
+  { value: 'liter', labelKey: 'dairy.unit.liter' },
+  { value: 'kg',    labelKey: 'dairy.unit.kg' },
+  { value: 'piece', labelKey: 'dairy.unit.piece' },
+  { value: 'pack',  labelKey: 'dairy.unit.pack' },
+  { value: 'dozen', labelKey: 'dairy.unit.dozen' },
 ];
 
 const EMPTY = {
@@ -50,6 +44,7 @@ const labelStyle = {
 const SellerAddDairy = () => {
   const navigate = useNavigate();
   const toast    = useToast();
+  const { t, isRTL } = useLang();
 
   const [form,     setForm]     = useState(EMPTY);
   const [images,   setImages]   = useState([]);
@@ -70,13 +65,13 @@ const SellerAddDairy = () => {
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())       e.name         = 'الاسم مطلوب';
+    if (!form.name.trim())       e.name         = t('addDairy.err.name');
     if (!form.quantity || Number(form.quantity) < 0)
-                                 e.quantity      = 'الكمية مطلوبة';
+                                 e.quantity      = t('addDairy.err.quantity');
     if (!form.pricePerUnit || Number(form.pricePerUnit) < 0)
-                                 e.pricePerUnit  = 'السعر مطلوب';
+                                 e.pricePerUnit  = t('addDairy.err.price');
     if (form.deliveryAvailable && !form.deliveryCost)
-                                 e.deliveryCost  = 'أدخل تكلفة التوصيل';
+                                 e.deliveryCost  = t('addDairy.err.deliveryCost');
     return e;
   };
 
@@ -102,10 +97,10 @@ const SellerAddDairy = () => {
       images.forEach(img => fd.append('images', img));
 
       await createDairy(fd);
-      toast.success('تم إضافة المنتج بنجاح. في انتظار الموافقة.');
+      toast.success(t('addDairy.submit'));
       navigate('/seller/dairy');
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'فشل إضافة المنتج.');
+      toast.error(err?.response?.data?.message || t('common.unknownErr'));
     } finally {
       setSaving(false);
     }
@@ -114,7 +109,7 @@ const SellerAddDairy = () => {
   const selectedType = TYPES.find(t => t.value === form.type);
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} style={{ background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
 
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #0C4A6E 0%, #0E7490 55%, #0891B2 100%)', padding: '24px 32px', position: 'relative', overflow: 'hidden' }}>
@@ -122,11 +117,11 @@ const SellerAddDairy = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button type="button" onClick={() => navigate('/seller/dairy')}
             style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px', backdropFilter: 'blur(4px)' }}>
-            ← رجوع
+            ← {t('common.back')}
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff' }}>إضافة منتج ألبان</h1>
-            <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>سيُراجع المنتج قبل النشر</p>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#fff' }}>{t('addDairy.title')}</h1>
+            <p style={{ margin: '3px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>{t('listings.status.pending')}</p>
           </div>
         </div>
       </div>
@@ -135,20 +130,20 @@ const SellerAddDairy = () => {
 
         {/* Type selector */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '16px', boxShadow: C.shadow }}>
-          <div style={labelStyle}>نوع المنتج</div>
+          <div style={labelStyle}>{t('dairy.form.type')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-            {TYPES.map(t => (
-              <button key={t.value} type="button"
-                onClick={() => set('type', t.value)}
+            {TYPES.map(tp => (
+              <button key={tp.value} type="button"
+                onClick={() => set('type', tp.value)}
                 style={{
                   padding: '10px 16px', borderRadius: '10px', border: `2px solid`,
-                  borderColor: form.type === t.value ? C.green : C.border,
-                  background: form.type === t.value ? C.greenBg : '#fff',
-                  color: form.type === t.value ? C.greenText : C.muted,
+                  borderColor: form.type === tp.value ? C.green : C.border,
+                  background: form.type === tp.value ? C.greenBg : '#fff',
+                  color: form.type === tp.value ? C.greenText : C.muted,
                   fontSize: '13px', fontWeight: '700', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: '6px',
                 }}>
-                {t.emoji} {t.label}
+                {tp.emoji} {t(tp.labelKey)}
               </button>
             ))}
           </div>
@@ -157,41 +152,41 @@ const SellerAddDairy = () => {
         {/* Basic info */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '16px', boxShadow: C.shadow }}>
           <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {selectedType?.emoji} معلومات المنتج
+            {selectedType?.emoji} {t('addDairy.productInfo')}
           </div>
 
           {/* Name */}
           <div style={{ marginBottom: '14px' }}>
-            <label style={labelStyle}>اسم المنتج <span style={{ color: C.red }}>*</span></label>
+            <label style={labelStyle}>{t('dairy.form.name')} <span style={{ color: C.red }}>*</span></label>
             <input
               style={{ ...inputStyle, borderColor: errors.name ? C.red : C.border }}
               value={form.name}
               onChange={e => set('name', e.target.value)}
-              placeholder={`مثال: ${selectedType?.label} بلدي طازج`}
+              placeholder={t('addDairy.namePlaceholder')}
             />
             {errors.name && <div style={{ color: C.red, fontSize: '12px', marginTop: '4px' }}>{errors.name}</div>}
           </div>
 
           {/* Description */}
           <div>
-            <label style={labelStyle}>وصف المنتج <span style={{ color: C.muted, fontWeight: '400' }}>(اختياري)</span></label>
+            <label style={labelStyle}>{t('dairy.form.description')} <span style={{ color: C.muted, fontWeight: '400' }}>{t('common.optional')}</span></label>
             <textarea
               style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }}
               value={form.description}
               onChange={e => set('description', e.target.value)}
-              placeholder="أضف تفاصيل إضافية: مصدر المنتج، طريقة التحضير، مميزات خاصة…"
+              placeholder={t('addDairy.descPlaceholder')}
             />
           </div>
         </div>
 
         {/* Quantity & Price */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '16px', boxShadow: C.shadow }}>
-          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📦 الكمية والسعر</div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📦 {t('addDairy.quantityPrice')}</div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
             {/* Quantity */}
             <div>
-              <label style={labelStyle}>الكمية المتاحة <span style={{ color: C.red }}>*</span></label>
+              <label style={labelStyle}>{t('dairy.form.quantity')} <span style={{ color: C.red }}>*</span></label>
               <input
                 type="number" min="0" step="0.01"
                 style={{ ...inputStyle, borderColor: errors.quantity ? C.red : C.border }}
@@ -204,16 +199,16 @@ const SellerAddDairy = () => {
 
             {/* Unit */}
             <div>
-              <label style={labelStyle}>وحدة القياس</label>
+              <label style={labelStyle}>{t('dairy.form.unit')}</label>
               <select style={inputStyle} value={form.unit} onChange={e => set('unit', e.target.value)}>
-                {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                {UNITS.map(u => <option key={u.value} value={u.value}>{t(u.labelKey)}</option>)}
               </select>
             </div>
           </div>
 
           {/* Price per unit */}
           <div>
-            <label style={labelStyle}>السعر لكل {UNITS.find(u => u.value === form.unit)?.label} <span style={{ color: C.red }}>*</span></label>
+            <label style={labelStyle}>{t('dairy.form.price')} / {t(UNITS.find(u => u.value === form.unit)?.labelKey)} <span style={{ color: C.red }}>*</span></label>
             <div style={{ position: 'relative' }}>
               <input
                 type="number" min="0" step="0.01"
@@ -230,14 +225,14 @@ const SellerAddDairy = () => {
 
         {/* Dates */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '16px', boxShadow: C.shadow }}>
-          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📅 التواريخ</div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📅 {t('addDairy.dates')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={labelStyle}>تاريخ الإنتاج <span style={{ color: C.muted, fontWeight: '400' }}>(اختياري)</span></label>
+              <label style={labelStyle}>{t('dairy.form.prodDate')} <span style={{ color: C.muted, fontWeight: '400' }}>{t('common.optional')}</span></label>
               <input type="date" style={inputStyle} value={form.productionDate} onChange={e => set('productionDate', e.target.value)} />
             </div>
             <div>
-              <label style={labelStyle}>تاريخ الانتهاء <span style={{ color: C.muted, fontWeight: '400' }}>(اختياري)</span></label>
+              <label style={labelStyle}>{t('dairy.form.expDate')} <span style={{ color: C.muted, fontWeight: '400' }}>{t('common.optional')}</span></label>
               <input type="date" style={inputStyle} value={form.expiryDate} onChange={e => set('expiryDate', e.target.value)} />
             </div>
           </div>
@@ -245,7 +240,7 @@ const SellerAddDairy = () => {
 
         {/* Delivery */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '16px', boxShadow: C.shadow }}>
-          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>🚚 التوصيل</div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>🚚 {t('addDairy.delivery')}</div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '12px' }}>
             <div
@@ -264,13 +259,13 @@ const SellerAddDairy = () => {
               }} />
             </div>
             <span style={{ fontSize: '14px', color: C.text, fontWeight: '600' }}>
-              {form.deliveryAvailable ? 'التوصيل متاح' : 'بدون توصيل (استلام من المزرعة)'}
+              {form.deliveryAvailable ? t('dairy.deliveryAvailable') : t('dairy.noDelivery')}
             </span>
           </label>
 
           {form.deliveryAvailable && (
             <div>
-              <label style={labelStyle}>تكلفة التوصيل (ج.م) <span style={{ color: C.red }}>*</span></label>
+              <label style={labelStyle}>{t('dairy.form.deliveryCost')} <span style={{ color: C.red }}>*</span></label>
               <input
                 type="number" min="0" step="0.5"
                 style={{ ...inputStyle, borderColor: errors.deliveryCost ? C.red : C.border }}
@@ -285,7 +280,7 @@ const SellerAddDairy = () => {
 
         {/* Images */}
         <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '20px', marginBottom: '24px', boxShadow: C.shadow }}>
-          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📷 صور المنتج <span style={{ color: C.muted, fontWeight: '400', fontSize: '13px' }}>(اختياري، حتى 5 صور)</span></div>
+          <div style={{ fontSize: '15px', fontWeight: '800', color: C.text, marginBottom: '16px' }}>📷 {t('addDairy.photos')} <span style={{ color: C.muted, fontWeight: '400', fontSize: '13px' }}>{t('addDairy.photosHint')}</span></div>
 
           <label style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -294,8 +289,8 @@ const SellerAddDairy = () => {
           }}>
             <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImages} />
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>📷</div>
-            <div style={{ fontSize: '14px', fontWeight: '600', color: C.text }}>اضغط لاختيار الصور</div>
-            <div style={{ fontSize: '12px', color: C.muted, marginTop: '4px' }}>PNG, JPG, WEBP — حتى 5 صور</div>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: C.text }}>{t('addDairy.photosTap')}</div>
+            <div style={{ fontSize: '12px', color: C.muted, marginTop: '4px' }}>{t('addDairy.photosTypes')}</div>
           </label>
 
           {previews.length > 0 && (
@@ -321,11 +316,11 @@ const SellerAddDairy = () => {
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
           <button type="button" onClick={() => navigate('/seller/dairy')}
             style={{ padding: '12px 24px', borderRadius: '10px', border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-            إلغاء
+            {t('common.cancel')}
           </button>
           <button type="submit" disabled={saving}
             style={{ padding: '12px 28px', borderRadius: '10px', border: 'none', background: saving ? '#9CA3AF' : C.green, color: '#fff', fontSize: '14px', fontWeight: '700', cursor: saving ? 'not-allowed' : 'pointer' }}>
-            {saving ? 'جاري الإضافة…' : '+ إضافة المنتج'}
+            {saving ? t('addDairy.loading') : t('addDairy.submitBtn')}
           </button>
         </div>
 

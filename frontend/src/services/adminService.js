@@ -4,7 +4,7 @@ import api from './api';
 export const getStats          = ()   => api.get('/admin/stats');
 
 // Users
-export const getAllUsers        = ()   => api.get('/admin/users');
+export const getAllUsers        = (page = 1, limit = 20) => api.get(`/admin/users?page=${page}&limit=${limit}`);
 export const toggleUserStatus  = (id) => api.patch(`/admin/users/${id}/toggle`);
 export const deleteUser        = (id) => api.delete(`/admin/users/${id}`);
 
@@ -20,4 +20,5 @@ export const updateOrderStatus  = (id, status)   => api.put(`/orders/${id}/statu
 export const setOrderDelivery   = (id, data)     => api.patch(`/orders/${id}/delivery`, data);
 
 // Analytics
-export const getGovAnalytics    = ()             => api.get('/admin/analytics');
+export const getGovAnalytics        = ()           => api.get('/admin/analytics');
+export const getPlatformAnalytics   = (weeks = 12) => api.get(`/admin/platform-analytics?weeks=${weeks}`);

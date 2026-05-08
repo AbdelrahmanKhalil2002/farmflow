@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_compress_util.dart';
 import '../../../shared/widgets/image_picker_grid.dart';
@@ -37,12 +38,6 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
   List<XFile> _images = [];
   bool _loading = false;
   String? _error;
-
-  static const _pregnancyStatuses = [
-    ('none',                'لا حمل'),
-    ('pregnant',            '🤰 حامل'),
-    ('recently_gave_birth', '🐣 ولدت حديثاً'),
-  ];
 
   static const _types = [
     ('cattle',  '🐄', 'أبقار'),
@@ -111,12 +106,12 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
 
   Future<void> _submit() async {
     if (_tagCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'رقم الوسم مطلوب');
+      setState(() => _error = context.l10n.tagIdRequired);
       _scrollTo(_tagKey);
       return;
     }
     if (_birthDate == null) {
-      setState(() => _error = 'تاريخ الميلاد مطلوب');
+      setState(() => _error = context.l10n.birthDateRequired);
       _scrollTo(_birthDateKey);
       return;
     }
@@ -166,7 +161,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في إضافة الحيوان. تحقق من رقم الوسم أو حاول مجدداً.';
+        _error = context.l10n.addAnimalFailedMsg;
         _loading = false;
       });
     }
@@ -175,6 +170,11 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('d MMMM yyyy', 'ar');
+    final pregnancyStatuses = [
+      ('none',                context.l10n.pregnancyNone),
+      ('pregnant',            context.l10n.pregnancyPregnant),
+      ('recently_gave_birth', context.l10n.pregnancyRecentBirth),
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -182,9 +182,9 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
         backgroundColor: AppColors.green,
         elevation: 0,
         leading: const BackButton(color: AppColors.white),
-        title: const Text(
-          'إضافة حيوان',
-          style: TextStyle(
+        title: Text(
+          context.l10n.addAnimalTitle,
+          style: const TextStyle(
             fontFamily: 'Cairo',
             fontWeight: FontWeight.w800,
             color: AppColors.white,
@@ -198,7 +198,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Type picker ─────────────────────────────────────────────────
-            _SectionLabel('نوع الحيوان'),
+            _SectionLabel(context.l10n.animalType),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8, runSpacing: 8,
@@ -232,18 +232,18 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
             const SizedBox(height: 20),
 
             // ── Gender ───────────────────────────────────────────────────────
-            _SectionLabel('الجنس'),
+            _SectionLabel(context.l10n.animalGender),
             const SizedBox(height: 8),
             Row(
               children: [
                 _GenderChip(
-                  label: '♂ ذكر',
+                  label: '♂ ${context.l10n.male}',
                   selected: _gender == 'male',
                   onTap: () => setState(() => _gender = 'male'),
                 ),
                 const SizedBox(width: 10),
                 _GenderChip(
-                  label: '♀ أنثى',
+                  label: '♀ ${context.l10n.female}',
                   selected: _gender == 'female',
                   onTap: () => setState(() => _gender = 'female'),
                 ),
@@ -256,8 +256,8 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
               key: _tagKey,
               child: _FormField(
                 controller: _tagCtrl,
-                label: 'رقم الوسم *',
-                hint: 'مثال: A-001',
+                label: context.l10n.tagIdLabel2,
+                hint: context.l10n.tagIdHint2,
               ),
             ),
             const SizedBox(height: 14),
@@ -265,15 +265,15 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
             // ── Breed ────────────────────────────────────────────────────────
             _FormField(
               controller: _breedCtrl,
-              label: 'السلالة',
-              hint: 'مثال: فريزيان، بلدي...',
+              label: context.l10n.breedLabel,
+              hint: context.l10n.breedHint,
             ),
             const SizedBox(height: 14),
 
             // ── Birth date ───────────────────────────────────────────────────
             KeyedSubtree(
               key: _birthDateKey,
-              child: _SectionLabel('تاريخ الميلاد *'),
+              child: _SectionLabel(context.l10n.birthDateLabel2),
             ),
             const SizedBox(height: 8),
             GestureDetector(
@@ -297,7 +297,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
                     Text(
                       _birthDate != null
                           ? dateFmt.format(_birthDate!)
-                          : 'اختر تاريخ الميلاد',
+                          : context.l10n.chooseBirthDate3,
                       style: TextStyle(
                         fontFamily: 'Cairo', fontSize: 13,
                         color: _birthDate != null
@@ -313,7 +313,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
             // ── Weight ───────────────────────────────────────────────────────
             _FormField(
               controller: _weightCtrl,
-              label: 'الوزن الحالي (كجم)',
+              label: context.l10n.currentWeightLabel,
               hint: '0',
               keyboardType: TextInputType.number,
             ),
@@ -322,27 +322,27 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
             // ── Color ────────────────────────────────────────────────────────
             _FormField(
               controller: _colorCtrl,
-              label: 'اللون',
-              hint: 'مثال: أبيض وأسود',
+              label: context.l10n.colorLabel2,
+              hint: context.l10n.colorHint2,
             ),
             const SizedBox(height: 14),
 
             // ── Notes ────────────────────────────────────────────────────────
             _FormField(
               controller: _notesCtrl,
-              label: 'ملاحظات',
-              hint: 'أي معلومات إضافية...',
+              label: context.l10n.notesLabel3,
+              hint: context.l10n.notesHint2,
               maxLines: 3,
             ),
             const SizedBox(height: 20),
 
             // ── Pregnancy (females only) ─────────────────────────────────────
             if (_gender == 'female') ...[
-              _SectionLabel('حالة الحمل'),
+              _SectionLabel(context.l10n.pregnancyStatus),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8, runSpacing: 8,
-                children: _pregnancyStatuses.map((s) => GestureDetector(
+                children: pregnancyStatuses.map((s) => GestureDetector(
                   onTap: () => setState(() => _pregnancyStatus = s.$1),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -368,7 +368,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
               ),
               if (_pregnancyStatus == 'pregnant') ...[
                 const SizedBox(height: 14),
-                _SectionLabel('تاريخ الولادة المتوقع (اختياري)'),
+                _SectionLabel(context.l10n.expectedBirthDateLabel2),
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: _pickExpectedBirthDate,
@@ -392,7 +392,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
                           _expectedBirthDate != null
                               ? DateFormat('d MMMM yyyy', 'ar')
                                   .format(_expectedBirthDate!)
-                              : 'اختر التاريخ',
+                              : context.l10n.chooseBirthDate4,
                           style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
                               color: _expectedBirthDate != null
                                   ? AppColors.text : AppColors.muted),
@@ -406,7 +406,7 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
             ],
 
             // ── Photos ───────────────────────────────────────────────────────
-            _SectionLabel('صور الحيوان'),
+            _SectionLabel(context.l10n.animalPhotosLabel),
             const SizedBox(height: 10),
             ImagePickerGrid(
               images: _images,
@@ -439,8 +439,8 @@ class _AddAnimalScreenState extends ConsumerState<AddAnimalScreen> {
                   ? const SizedBox(width: 22, height: 22,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('إضافة للقطيع',
-                      style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+                  : Text(context.l10n.addAnimalButton,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 15,
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
             const SizedBox(height: 24),

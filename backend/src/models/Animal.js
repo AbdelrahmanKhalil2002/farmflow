@@ -17,9 +17,10 @@ const vaccinationEntrySchema = new Schema({
 
 const animalSchema = new Schema({
   seller: { type: ObjectId, ref: 'User', required: true, index: true },
+  farm:   { type: ObjectId, ref: 'Farm', index: true },
 
   tagId:  { type: String, trim: true, maxlength: 50 },   // farm ear-tag / ID
-  type:   { type: String, required: true, enum: ['cattle','buffalo','sheep','goat','camel','horse','poultry','rabbit','other'] },
+  type:   { type: String, required: true, enum: ['cattle','buffalo','sheep','goat','camel','horse','poultry','rabbit','ostrich','gazelle','oryx','deer','llama','alpaca','donkey','mule','other'] },
   breed:  { type: String, trim: true, maxlength: 80 },
   gender: { type: String, enum: ['male','female','unknown'], default: 'unknown' },
 

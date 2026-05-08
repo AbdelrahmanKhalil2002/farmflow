@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/supply_model.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
@@ -9,25 +10,62 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
 import 'supplies_service.dart';
 
-class SellerSuppliesScreen extends ConsumerWidget {
+class SellerSuppliesScreen extends ConsumerStatefulWidget {
   const SellerSuppliesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SellerSuppliesScreen> createState() => _SellerSuppliesScreenState();
+}
+
+class _SellerSuppliesScreenState extends ConsumerState<SellerSuppliesScreen> {
+  String _statusFilter = 'all';
+
+  static const _statuses = [
+    ('all',       'الكل'),
+    ('pending',   'قيد المراجعة'),
+    ('approved',  'متاح'),
+    ('rejected',  'مرفوض'),
+    ('sold_out',  'نفذ المخزون'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     final asyncSupplies = ref.watch(mySuppliesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: const Color(0xFFF7F8FA),
       appBar: AppBar(
         backgroundColor: AppColors.green,
         elevation: 0,
         leading: const BackButton(color: AppColors.white),
-        title: const Text(
-          'مستلزماتي',
-          style: TextStyle(
-            fontFamily: 'Cairo',
-            fontWeight: FontWeight.w800,
-            color: AppColors.white,
+        title: Text(context.l10n.suppliesTitle,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+                color: AppColors.white)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(44),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Row(
+              children: _statuses.map((s) {
+                final sel = _statusFilter == s.$1;
+                return GestureDetector(
+                  onTap: () => setState(() => _statusFilter = s.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: sel ? AppColors.white : AppColors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(s.$2, style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: sel ? AppColors.green : AppColors.white)),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),
@@ -35,55 +73,54 @@ class SellerSuppliesScreen extends ConsumerWidget {
         backgroundColor: AppColors.green,
         onPressed: () => _showAddSheet(context, ref),
         icon: const Icon(Icons.add, color: AppColors.white),
-        label: const Text(
-          'إضافة مستلزم',
-          style: TextStyle(
-              fontFamily: 'Cairo', fontWeight: FontWeight.w700,
-              color: AppColors.white),
-        ),
+        label: Text(context.l10n.addSupply,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+                color: AppColors.white)),
       ),
       body: asyncSupplies.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.all(16),
-          child: ShimmerList(count: 4, cardHeight: 100),
-        ),
+        loading: () => const Padding(padding: EdgeInsets.all(16),
+            child: ShimmerList(count: 4, cardHeight: 100)),
         error: (e, _) => EmptyState(
           icon: Icons.wifi_off_rounded,
-          title: 'تعذّر التحميل',
+          title: context.l10n.loadSuppliesFailed,
           subtitle: e.toString(),
-          actionLabel: 'إعادة المحاولة',
+          actionLabel: context.l10n.retry,
           action: () => ref.invalidate(mySuppliesProvider),
         ),
         data: (supplies) {
+          final filtered = _statusFilter == 'all'
+              ? supplies
+              : supplies.where((s) => s.status == _statusFilter).toList();
           if (supplies.isEmpty) {
             return EmptyState(
               icon: Icons.inventory_2_outlined,
-              title: 'لا توجد مستلزمات',
-              subtitle: 'أضف أول مستلزم زراعي',
-              actionLabel: 'إضافة مستلزم',
+              title: context.l10n.noSupplyItems,
+              subtitle: context.l10n.addFirstSupply,
+              actionLabel: context.l10n.addSupply,
               action: () => _showAddSheet(context, ref),
             );
+          }
+          if (filtered.isEmpty) {
+            return const Center(child: Text('لا توجد مستلزمات بهذه الحالة',
+                style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF9CA3AF))));
           }
           return RefreshIndicator(
             color: AppColors.green,
             onRefresh: () async => ref.invalidate(mySuppliesProvider),
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: supplies.length,
+              itemCount: filtered.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (_, i) => _SupplyCard(
-                supply: supplies[i],
-                onEdit: () => _showEditSheet(context, ref, supplies[i]),
+                supply: filtered[i],
+                onEdit: () => _showEditSheet(context, ref, filtered[i]),
                 onDelete: () async {
-                  final ok = await showConfirmDialog(
-                    context,
-                    title: 'حذف المستلزم',
-                    message: 'هل تريد حذف "${supplies[i].name}"؟',
-                    confirmLabel: 'حذف',
-                    dangerous: true,
-                  );
+                  final ok = await showConfirmDialog(context,
+                      title: context.l10n.deleteSupplyTitle,
+                      message: context.l10n.deleteSupplyMessage,
+                      confirmLabel: context.l10n.delete, dangerous: true);
                   if (ok) {
-                    await deleteSupply(ref.read(dioProvider), supplies[i].id);
+                    await deleteSupply(ref.read(dioProvider), filtered[i].id);
                     ref.invalidate(mySuppliesProvider);
                   }
                 },
@@ -99,7 +136,7 @@ class SellerSuppliesScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.card,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -114,7 +151,7 @@ class SellerSuppliesScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.card,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -148,11 +185,7 @@ class _SupplyCard extends StatelessWidget {
     'approved': Color(0xFFF0FDF4),
     'rejected': Color(0xFFFEF2F2),
   };
-  static const _statusAr = {
-    'pending':  'قيد المراجعة',
-    'approved': 'متاح',
-    'rejected': 'مرفوض',
-  };
+  // statusAr built dynamically in build() using context.l10n
   static const _catColors = {
     'feed':       Color(0xFF22C55E),
     'veterinary': Color(0xFFEF4444),
@@ -167,30 +200,34 @@ class _SupplyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusAr = {
+      'pending':  context.l10n.pendingStatus,
+      'approved': context.l10n.approvedStatus,
+      'rejected': context.l10n.rejectedStatus,
+    };
     final statusColor = _statusColor[supply.status] ?? AppColors.muted;
     final statusBg    = _statusBg[supply.status]    ?? AppColors.bg;
-    final statusAr    = _statusAr[supply.status]    ?? supply.status;
+    final statusLabel = statusAr[supply.status]     ?? supply.status;
     final catColor    = _catColors[supply.category] ?? AppColors.muted;
     final fmt = NumberFormat('#,##0', 'ar');
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
         boxShadow: const [
-          BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2)),
+          BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 80,
-            height: 90,
+            width: 70,
+            height: 80,
             decoration: BoxDecoration(
               color: catColor.withValues(alpha: 0.10),
               borderRadius:
-                  const BorderRadius.horizontal(right: Radius.circular(13)),
+                  const BorderRadius.horizontal(right: Radius.circular(11)),
             ),
             child: Center(
               child: Text(_catEmojis[supply.category] ?? '📦',
@@ -225,7 +262,7 @@ class _SupplyCard extends StatelessWidget {
                           color: statusBg,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(statusAr,
+                        child: Text(statusLabel,
                           style: TextStyle(fontFamily: 'Cairo', fontSize: 10,
                               fontWeight: FontWeight.w700, color: statusColor)),
                       ),
@@ -247,8 +284,8 @@ class _SupplyCard extends StatelessWidget {
                             fontWeight: FontWeight.w800, color: AppColors.green),
                       ),
                       if (supply.deliveryAvailable)
-                        const Text('🚚 توصيل',
-                            style: TextStyle(fontFamily: 'Cairo', fontSize: 10,
+                        Text('🚚 ${context.l10n.deliveryAvailable}',
+                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 10,
                                 color: AppColors.blue)),
                     ],
                   ),
@@ -317,7 +354,7 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
     if (_nameCtrl.text.trim().isEmpty ||
         _qtyCtrl.text.trim().isEmpty ||
         _priceCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'يرجى ملء جميع الحقول المطلوبة');
+      setState(() => _error = context.l10n.allFields);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -334,7 +371,7 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في إضافة المستلزم. حاول مجدداً.';
+        _error = context.l10n.addExpenseFailed;
         _loading = false;
       });
     }
@@ -358,11 +395,11 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Text('إضافة مستلزم زراعي',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+            Text(context.l10n.addSupply,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                     fontWeight: FontWeight.w800, color: AppColors.text)),
             const SizedBox(height: 16),
-            const Text('التصنيف', style: TextStyle(fontFamily: 'Cairo',
+            Text(context.l10n.supplyCategory, style: const TextStyle(fontFamily: 'Cairo',
                 fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted)),
             const SizedBox(height: 8),
             Wrap(
@@ -385,17 +422,17 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
               )).toList(),
             ),
             const SizedBox(height: 14),
-            _Field(controller: _nameCtrl, label: 'اسم المستلزم *', hint: 'مثال: علف دواجن'),
+            _Field(controller: _nameCtrl, label: context.l10n.supplyName, hint: ''),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _Field(controller: _qtyCtrl, label: 'الكمية *',
+              Expanded(child: _Field(controller: _qtyCtrl, label: context.l10n.supplyQuantity,
                   hint: '0', keyboardType: TextInputType.number)),
               const SizedBox(width: 10),
-              Expanded(child: _Field(controller: _unitCtrl, label: 'الوحدة *',
-                  hint: 'كيلو')),
+              Expanded(child: _Field(controller: _unitCtrl, label: context.l10n.supplyUnit,
+                  hint: '')),
             ]),
             const SizedBox(height: 10),
-            _Field(controller: _priceCtrl, label: 'السعر لكل وحدة (ج.م) *',
+            _Field(controller: _priceCtrl, label: context.l10n.supplyPrice,
                 hint: '0', keyboardType: TextInputType.number),
             const SizedBox(height: 10),
             Row(children: [
@@ -403,7 +440,7 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
                 onChanged: (v) => setState(() => _delivery = v),
                 activeColor: AppColors.green),
               const SizedBox(width: 8),
-              const Text('توصيل متاح', style: TextStyle(fontFamily: 'Cairo',
+              Text(context.l10n.supplyDelivery, style: const TextStyle(fontFamily: 'Cairo',
                   fontSize: 13, color: AppColors.text)),
             ]),
             if (_error != null) ...[
@@ -420,8 +457,8 @@ class _AddSupplySheetState extends ConsumerState<_AddSupplySheet> {
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('إضافة المستلزم',
-                      style: TextStyle(fontFamily: 'Cairo',
+                  : Text(context.l10n.addSupplyButton,
+                      style: const TextStyle(fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
           ],
@@ -485,7 +522,7 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
     if (_nameCtrl.text.trim().isEmpty ||
         _qtyCtrl.text.trim().isEmpty ||
         _priceCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'يرجى ملء جميع الحقول المطلوبة');
+      setState(() => _error = context.l10n.allFields);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -502,7 +539,7 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
       widget.onUpdated();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() { _error = 'فشل في التحديث. حاول مجدداً.'; _loading = false; });
+      setState(() { _error = context.l10n.updateFailed; _loading = false; });
     }
   }
 
@@ -521,11 +558,11 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
               width: 40, height: 4,
               decoration: BoxDecoration(color: AppColors.border,
                   borderRadius: BorderRadius.circular(2)))),
-            const Text('تعديل المستلزم',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+            Text(context.l10n.editListingTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                     fontWeight: FontWeight.w800, color: AppColors.text)),
             const SizedBox(height: 16),
-            const Text('التصنيف', style: TextStyle(fontFamily: 'Cairo',
+            Text(context.l10n.supplyCategory, style: const TextStyle(fontFamily: 'Cairo',
                 fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted)),
             const SizedBox(height: 8),
             Wrap(
@@ -548,18 +585,18 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
               )).toList(),
             ),
             const SizedBox(height: 14),
-            _Field(controller: _nameCtrl, label: 'اسم المستلزم *',
-                hint: 'مثال: علف دواجن'),
+            _Field(controller: _nameCtrl, label: context.l10n.supplyName,
+                hint: ''),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _Field(controller: _qtyCtrl, label: 'الكمية *',
+              Expanded(child: _Field(controller: _qtyCtrl, label: context.l10n.supplyQuantity,
                   hint: '0', keyboardType: TextInputType.number)),
               const SizedBox(width: 10),
-              Expanded(child: _Field(controller: _unitCtrl, label: 'الوحدة *',
-                  hint: 'كيلو')),
+              Expanded(child: _Field(controller: _unitCtrl, label: context.l10n.supplyUnit,
+                  hint: '')),
             ]),
             const SizedBox(height: 10),
-            _Field(controller: _priceCtrl, label: 'السعر لكل وحدة (ج.م) *',
+            _Field(controller: _priceCtrl, label: context.l10n.supplyPrice,
                 hint: '0', keyboardType: TextInputType.number),
             const SizedBox(height: 10),
             Row(children: [
@@ -567,7 +604,7 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
                 onChanged: (v) => setState(() => _delivery = v),
                 activeColor: AppColors.green),
               const SizedBox(width: 8),
-              const Text('توصيل متاح', style: TextStyle(fontFamily: 'Cairo',
+              Text(context.l10n.supplyDelivery, style: const TextStyle(fontFamily: 'Cairo',
                   fontSize: 13, color: AppColors.text)),
             ]),
             if (_error != null) ...[
@@ -584,8 +621,8 @@ class _EditSupplySheetState extends ConsumerState<_EditSupplySheet> {
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('حفظ التعديلات',
-                      style: TextStyle(fontFamily: 'Cairo',
+                  : Text(context.l10n.saveSupplyButton,
+                      style: const TextStyle(fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
           ],

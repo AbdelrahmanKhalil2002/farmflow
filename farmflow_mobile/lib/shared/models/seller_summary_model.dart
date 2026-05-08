@@ -71,7 +71,9 @@ class SellerSummaryModel {
       bio:              json['bio'] as String?,
       farmDescription:  json['farmDescription'] as String?,
       farmBanner:       json['farmBanner'] as String?,
-      farmLocation:     json['farmLocation'] as String?,
+      farmLocation:     json['farmLocation'] is Map
+          ? (json['farmLocation'] as Map)['address'] as String?
+          : json['farmLocation'] as String?,
       farmCertificates: toStrings(json['farmCertificates']),
       animalTypes:      toStrings(json['animalTypes']),
       experience:       json['experience'] as String?,

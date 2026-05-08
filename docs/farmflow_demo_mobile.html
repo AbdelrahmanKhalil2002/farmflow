@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FarmFlow Mobile — Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;font-family:'Cairo',sans-serif;overflow:hidden;background:#0a1a0d;direction:rtl}
+:root{
+  --g:#3A7D44;--gd:#2D6235;--gdd:#1C3A24;
+  --gl:#F0F7F1;--gb:#DCFCE7;
+  --bg:#F8F4EE;--card:#fff;
+  --tx:#2C1810;--mu:#8B6B5A;--dm:#9CA3AF;
+  --bd:#E8D5C0;
+  --sh:0 2px 8px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.06);
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── Progress bar ── */
+#pb{position:fixed;top:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1);z-index:1000}
+#pf{height:100%;background:var(--g);transition:width .4s ease}
+
+/* ── Label ── */
+#lbl{position:fixed;top:10px;right:16px;z-index:1000;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);color:rgba(255,255,255,.85);font-size:11px;font-weight:600;padding:4px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.1)}
+
+/* ── Keyboard hint ── */
+#kh{position:fixed;top:12px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.3);font-size:11px;z-index:999;animation:kfade 4s 1.5s ease forwards;pointer-events:none}
+@keyframes kfade{0%{opacity:1}100%{opacity:0}}
+
+/* ── Main layout ── */
+#sw{width:100%;height:100vh;position:relative}
+.slide{position:absolute;inset:0;display:none;align-items:center;justify-content:center;animation:fadeUp .3s ease}
+.slide.active{display:flex}
+
+/* ── Nav arrows ── */
+.arrow{position:fixed;top:50%;transform:translateY(-50%);z-index:1000;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.arrow:hover{background:var(--g)}
+.arrow:disabled{opacity:.2;cursor:default}
+#arr-p{left:calc(50% - 280px)}
+#arr-n{right:calc(50% - 280px)}
+
+/* ── Dots ── */
+#nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:1000}
+#dots{display:flex;gap:5px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .3s;cursor:pointer}
+.dot.active{background:#fff;width:16px;border-radius:3px}
+#ctr{color:rgba(255,255,255,.7);font-size:11px;font-weight:600;min-width:40px;text-align:center}
+
+/* ── Phone frame ── */
+.phone-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+}
+.phone{
+  width:390px;height:844px;
+  background:#111;border-radius:54px;
+  padding:12px;
+  box-shadow:
+    0 0 0 1px #2a2a2a,
+    0 0 0 3px #0a0a0a,
+    inset 0 0 0 1.5px #333,
+    0 40px 100px rgba(0,0,0,.8),
+    0 0 60px rgba(58,125,68,.15);
+  position:relative;flex-shrink:0;
+}
+/* Side buttons */
+.phone::before{content:'';position:absolute;right:-4px;top:160px;width:4px;height:72px;background:#1a1a1a;border-radius:0 3px 3px 0;box-shadow:0 90px 0 #1a1a1a}
+.phone::after{content:'';position:absolute;left:-4px;top:130px;width:4px;height:38px;background:#1a1a1a;border-radius:3px 0 0 3px;box-shadow:0 50px 0 #1a1a1a,0 100px 0 #1a1a1a}
+
+.screen{
+  width:100%;height:100%;
+  background:#fff;border-radius:42px;
+  overflow:hidden;position:relative;
+  display:flex;flex-direction:column;
+}
+
+/* ── Dynamic island ── */
+.di{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  width:120px;height:34px;background:#000;border-radius:20px;z-index:20;
+}
+
+/* ── Status bar ── */
+.sbar{
+  height:52px;display:flex;align-items:flex-end;padding:0 20px 10px;
+  flex-shrink:0;position:relative;z-index:10;
+}
+.sbar-time{font-size:15px;font-weight:700;margin-left:auto}
+.sbar-icons{display:flex;align-items:center;gap:5px;margin-right:auto}
+.sbar-icons span{font-size:14px}
+
+/* ── App bar ── */
+.abar{
+  height:56px;display:flex;align-items:center;padding:0 16px;
+  flex-shrink:0;border-bottom:1px solid rgba(0,0,0,.06);
+  background:#fff;
+}
+.abar-title{font-size:17px;font-weight:800;color:var(--tx);flex:1;text-align:center}
+.abar-icon{width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:20px;border-radius:50%;cursor:pointer}
+.abar-green{background:linear-gradient(135deg,var(--gdd),var(--g))}
+.abar-green .sbar-time{color:#fff}
+.abar-green .sbar-icons span{filter:brightness(10)}
+.abar-green .abar-title{color:#fff}
+
+/* ── Content area ── */
+.content{flex:1;overflow:hidden;background:var(--bg)}
+.content-scroll{height:100%;overflow-y:auto;padding:14px}
+
+/* ── Bottom nav ── */
+.bbar{
+  height:64px;background:#fff;border-top:1px solid var(--bd);
+  display:flex;align-items:center;flex-shrink:0;
+  padding-bottom:4px;
+}
+.bbt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;padding-top:4px}
+.bbt .be{font-size:22px;transition:transform .2s}
+.bbt .bl{font-size:9px;font-weight:500;color:var(--dm);transition:color .2s}
+.bbt.a .bl{color:var(--g);font-weight:700}
+.bbt.a .be{transform:scale(1.1)}
+
+/* ── Components ── */
+/* Card */
+.card{background:var(--card);border-radius:14px;box-shadow:var(--sh);border:1px solid var(--bd);padding:14px;margin-bottom:10px}
+.ct{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px}
+
+/* Badge */
+.b{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:14px;white-space:nowrap}
+.bg{background:#DCFCE7;color:#166534}
+.ba{background:#FEF3C7;color:#92400E}
+.br{background:#FEE2E2;color:#B91C1C}
+.bb{background:#DBEAFE;color:#1E3A5F}
+.bx{background:#F3F4F6;color:#374151}
+.bp{background:#EDE9FE;color:#5B21B6}
+
+/* KPI strip */
+.kstrip{background:linear-gradient(135deg,var(--gdd),var(--g));border-radius:14px;padding:14px;display:flex;margin-bottom:12px}
+.ki{flex:1;text-align:center;border-left:1px solid rgba(255,255,255,.15)}
+.ki:last-child{border-left:none}
+.kv{color:#fff;font-size:16px;font-weight:800;line-height:1.2}
+.kl{color:rgba(255,255,255,.6);font-size:9px;margin-top:2px}
+
+/* Follow-up */
+.fup{background:#fff;border-radius:11px;padding:11px 13px;border:1px solid var(--bd);border-right:3px solid var(--g);display:flex;align-items:center;gap:10px;margin-bottom:8px;box-shadow:var(--sh)}
+
+/* Animal card */
+.acard{background:#fff;border-radius:12px;padding:12px;border:1px solid var(--bd);box-shadow:var(--sh);display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.aemoji{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.aname{font-size:13px;font-weight:700;color:var(--tx)}
+.atag{font-size:11px;color:var(--mu);margin-top:1px}
+.abad{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.abit{font-size:10px;background:#F3F4F6;border-radius:6px;padding:2px 7px;color:#374151;font-weight:500}
+
+/* Listing card */
+.lcard{background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--sh);border:1px solid var(--bd);margin-bottom:10px;display:flex}
+.limg{width:80px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:36px}
+.lbody{flex:1;padding:11px 12px}
+.lt{font-size:13px;font-weight:700;color:var(--tx)}
+.lm{font-size:11px;color:var(--mu);margin-top:2px}
+.lp{font-size:15px;font-weight:800;color:var(--g);margin-top:5px}
+
+/* Farm card */
+.fcard{background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--sh);border:1px solid var(--bd);margin-bottom:10px}
+.facent{height:5px}
+.fbody{padding:13px}
+.fhead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.favt{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:800;flex-shrink:0}
+.fname{font-size:14px;font-weight:700;color:var(--tx)}
+.floc{font-size:11px;color:var(--mu)}
+.fchips{display:flex;gap:5px;margin-bottom:9px;flex-wrap:wrap}
+.fch{font-size:10px;background:var(--gl);color:var(--gd);padding:2px 8px;border-radius:10px;font-weight:500}
+
+/* Input */
+.fi{width:100%;background:#F9FAFB;border:1.5px solid var(--bd);border-radius:10px;padding:10px 13px;font-family:'Cairo',sans-serif;font-size:13px;color:var(--tx);outline:none;margin-bottom:10px}
+.fl2{font-size:12px;font-weight:600;color:var(--tx);margin-bottom:4px;display:block}
+
+/* Button */
+.btn{background:var(--g);color:#fff;border:none;border-radius:12px;padding:13px;font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;width:100%;display:block;text-align:center}
+.btn2{background:transparent;color:var(--g);border:1.5px solid var(--g);border-radius:12px;padding:11px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;width:100%;display:block;text-align:center}
+
+/* FAB */
+.fab{position:absolute;bottom:80px;left:20px;width:52px;height:52px;background:var(--g);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 16px rgba(58,125,68,.4);cursor:pointer;z-index:5}
+
+/* Order card */
+.ocard{background:#fff;border-radius:13px;padding:13px;border:1px solid var(--bd);box-shadow:var(--sh);margin-bottom:9px}
+.ohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.otitle{font-size:13px;font-weight:700;color:var(--tx)}
+.oprice{font-size:14px;font-weight:800;color:var(--g)}
+.ometa{font-size:11px;color:var(--mu)}
+
+/* Tab bar */
+.tabs{display:flex;border-bottom:2px solid var(--bd);margin-bottom:12px;background:#fff;flex-shrink:0;padding:0 14px}
+.tab{padding:8px 14px;font-size:12px;font-weight:500;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.tab.a{color:var(--g);font-weight:700;border-bottom-color:var(--g)}
+
+/* Filter chips */
+.chips{display:flex;gap:7px;overflow-x:auto;padding:0 0 8px;margin-bottom:6px;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;font-size:11px;padding:5px 13px;border-radius:16px;font-weight:600;cursor:pointer;font-family:'Cairo',sans-serif;white-space:nowrap}
+.chip-a{background:var(--g);color:#fff;border:none}
+.chip-i{background:#fff;color:var(--mu);border:1.5px solid var(--bd)}
+
+/* Search */
+.search{display:flex;align-items:center;gap:9px;background:#fff;border:1.5px solid var(--bd);border-radius:12px;padding:10px 13px;box-shadow:var(--sh);margin-bottom:12px}
+.sinput{border:none;background:transparent;outline:none;font-family:'Cairo',sans-serif;font-size:13px;color:var(--mu);flex:1}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#C4A882;border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="pb"><div id="pf" style="width:10%"></div></div>
+<div id="lbl">شاشة ١ من ١٠</div>
+<div id="kh">← → للتنقل</div>
+
+<button class="arrow" id="arr-p" onclick="goTo(cur-1)">→</button>
+<button class="arrow" id="arr-n" onclick="goTo(cur+1)">←</button>
+
+<div id="sw">
+
+<!-- ════════════════════════════════════════
+     SCREEN 1 — Splash
+════════════════════════════════════════ -->
+<div class="slide active" data-n="0">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen" style="background:linear-gradient(160deg,#0d2618 0%,#1a4a25 45%,#2D6235 75%,#3A7D44 100%)">
+        <div class="di"></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px">
+          <div style="animation:fadeUp .6s ease both">
+            <div style="width:80px;height:80px;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:40px;border:1px solid rgba(255,255,255,.2);margin:0 auto 14px">🌿</div>
+            <div style="color:#fff;font-size:38px;font-weight:900;text-align:center;letter-spacing:-1px">FarmFlow</div>
+          </div>
+          <p style="color:rgba(255,255,255,.7);font-size:15px;text-align:center;animation:fadeUp .6s .1s ease both;padding:0 30px">المنصة الأولى لتجارة المواشي في مصر 🇪🇬</p>
+          <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;margin-top:20px"></div>
+        </div>
+        <div style="padding:0 0 40px;text-align:center">
+          <div style="display:flex;justify-content:center;gap:20px;margin-bottom:24px">
+            <div style="text-align:center"><div style="color:#fff;font-size:18px;font-weight:800">1,200+</div><div style="color:rgba(255,255,255,.5);font-size:10px">بائع</div></div>
+            <div style="width:1px;background:rgba(255,255,255,.15)"></div>
+            <div style="text-align:center"><div style="color:#fff;font-size:18px;font-weight:800">15K+</div><div style="color:rgba(255,255,255,.5);font-size:10px">رأس مواشي</div></div>
+            <div style="width:1px;background:rgba(255,255,255,.15)"></div>
+            <div style="text-align:center"><div style="color:#fff;font-size:18px;font-weight:800">27</div><div style="color:rgba(255,255,255,.5);font-size:10px">محافظة</div></div>
+          </div>
+          <div style="width:134px;height:5px;background:rgba(255,255,255,.2);border-radius:3px;margin:0 auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 2 — Role Selection
+════════════════════════════════════════ -->
+<div class="slide" data-n="1">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen" style="background:#fff">
+        <div class="di"></div>
+        <div class="sbar" style="background:#fff"><span class="sbar-time" style="color:var(--tx)">9:41</span><div class="sbar-icons"><span>📶</span><span>🔋</span></div></div>
+        <div style="flex:1;padding:24px 20px;overflow-y:auto;display:flex;flex-direction:column">
+          <!-- Logo -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:28px">
+            <div style="width:32px;height:32px;background:var(--g);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px">🌿</div>
+            <span style="font-size:20px;font-weight:900;color:var(--tx)">FarmFlow</span>
+          </div>
+          <h2 style="font-size:22px;font-weight:800;color:var(--tx);margin-bottom:6px">مرحباً بك! 👋</h2>
+          <p style="font-size:14px;color:var(--mu);margin-bottom:28px;line-height:1.6">اختر كيف تريد استخدام التطبيق</p>
+          <!-- Seller card -->
+          <div style="background:linear-gradient(135deg,#1C3A24,#3A7D44);border-radius:18px;padding:22px;margin-bottom:14px;cursor:pointer;position:relative;overflow:hidden">
+            <div style="font-size:40px;margin-bottom:10px">🧑‍🌾</div>
+            <div style="color:#fff;font-size:18px;font-weight:800;margin-bottom:6px">بائع / مزارع</div>
+            <div style="color:rgba(255,255,255,.7);font-size:13px;line-height:1.6">أضف مواشيك وإعلاناتك، واستقبل طلبات المشترين</div>
+            <div style="position:absolute;bottom:16px;left:16px;font-size:20px;opacity:.3">🐄🐑🐐</div>
+          </div>
+          <!-- Buyer card -->
+          <div style="background:var(--bg);border:1.5px solid var(--bd);border-radius:18px;padding:22px;cursor:pointer;margin-bottom:20px">
+            <div style="font-size:40px;margin-bottom:10px">🛒</div>
+            <div style="color:var(--tx);font-size:18px;font-weight:800;margin-bottom:6px">مشتري</div>
+            <div style="color:var(--mu);font-size:13px;line-height:1.6">تصفح مئات المزارع وقارن الأسعار في مصر</div>
+          </div>
+          <p style="font-size:12px;color:var(--dm);text-align:center">لديك حساب بالفعل؟ <span style="color:var(--g);font-weight:600">تسجيل الدخول</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 3 — Register Seller
+════════════════════════════════════════ -->
+<div class="slide" data-n="2">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar abar-green" style="background:linear-gradient(135deg,#1C3A24,#2D6235)">
+          <span class="sbar-time" style="color:#fff">9:41</span>
+          <div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div>
+        </div>
+        <div style="background:linear-gradient(135deg,#1C3A24,#2D6235);padding:14px 18px 18px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <div style="font-size:20px;cursor:pointer;color:#fff">←</div>
+          <div style="flex:1;color:#fff;font-size:16px;font-weight:700;text-align:center">إنشاء حساب بائع</div>
+          <div style="width:28px"></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px">
+          <div style="margin-bottom:12px"><label class="fl2">الاسم الكامل</label><input class="fi" value="محمد أحمد الشافعي" readonly></div>
+          <div style="margin-bottom:12px"><label class="fl2">رقم الجوال</label><input class="fi" value="01012345678" readonly></div>
+          <div style="margin-bottom:8px"><label class="fl2">رقم الهوية الوطنية</label><input class="fi" value="29901152301123" readonly></div>
+          <div style="background:#DCFCE7;border-radius:8px;padding:8px 11px;font-size:11px;color:#166534;font-weight:600;margin-bottom:12px">✅ مولود يناير 1999 • ذكر • الشرقية</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div><label class="fl2">المحافظة</label><select class="fi" style="margin-bottom:0"><option>الشرقية</option></select></div>
+            <div><label class="fl2">نوع المزرعة</label><select class="fi" style="margin-bottom:0"><option>مواشي</option></select></div>
+          </div>
+          <div style="margin-bottom:12px"><label class="fl2">اسم المزرعة</label><input class="fi" value="مزرعة الشافعي" readonly></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+            <div><label class="fl2">كلمة المرور</label><input class="fi" type="password" value="••••••••" readonly style="margin-bottom:0"></div>
+            <div><label class="fl2">تأكيد</label><input class="fi" type="password" value="••••••••" readonly style="margin-bottom:0"></div>
+          </div>
+          <button class="btn">إنشاء الحساب 🎉</button>
+          <p style="font-size:11px;color:var(--dm);text-align:center;margin-top:12px">بالتسجيل توافق على <span style="color:var(--g)">شروط الاستخدام</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 4 — Seller Dashboard
+════════════════════════════════════════ -->
+<div class="slide" data-n="3">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <!-- Top header -->
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 18px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div>
+              <div style="color:rgba(255,255,255,.7);font-size:11px">مرحباً 👋</div>
+              <div style="color:#fff;font-size:17px;font-weight:800">محمد الشافعي</div>
+            </div>
+            <div style="position:relative">
+              <div style="width:38px;height:38px;background:rgba(255,255,255,.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px">🔔</div>
+              <div style="position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:#EF4444;border-radius:50%;border:1.5px solid var(--g)"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Content -->
+        <div class="content">
+          <div class="content-scroll">
+            <!-- KPI strip -->
+            <div class="kstrip">
+              <div class="ki"><div class="kv">47.5K</div><div class="kl">💰 الإيرادات</div></div>
+              <div class="ki"><div class="kv">12</div><div class="kl">📦 طلبات</div></div>
+              <div class="ki"><div class="kv">38</div><div class="kl">🐄 القطيع</div></div>
+              <div class="ki"><div class="kv">⭐4.8</div><div class="kl">التقييم</div></div>
+            </div>
+            <!-- Follow-ups -->
+            <div class="ct">📅 متابعات اليوم</div>
+            <div class="fup">
+              <span style="font-size:20px">💉</span>
+              <div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--tx)">تطعيم — بقرة #B-12</div><div style="font-size:11px;color:var(--mu)">حمى قلاعية • اليوم</div></div>
+              <span class="b ba">عاجل</span>
+            </div>
+            <div class="fup" style="border-right-color:#2563EB">
+              <span style="font-size:20px">⚖️</span>
+              <div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--tx)">وزن مجدول — 3 خراف</div><div style="font-size:11px;color:var(--mu)">دوبير × 3</div></div>
+              <span class="b bb">اليوم</span>
+            </div>
+            <div class="fup" style="border-right-color:#7C3AED">
+              <span style="font-size:20px">🤱</span>
+              <div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--tx)">حمل — ماعز #G-03</div><div style="font-size:11px;color:var(--mu)">الولادة خلال أسبوع</div></div>
+              <span class="b bp">قريباً</span>
+            </div>
+            <!-- Recent orders -->
+            <div class="ct" style="margin-top:4px">🛒 آخر الطلبات</div>
+            <div class="ocard">
+              <div class="ohead"><div><div class="otitle">عجل فريزيان 520 كجم</div><div class="ometa">أحمد الشرقاوي • اليوم</div></div><div class="oprice">18,500 ج.م</div></div>
+              <span class="b ba">قيد المراجعة</span>
+            </div>
+            <div class="ocard">
+              <div class="ohead"><div><div class="otitle">خروف دوبير 95 كجم</div><div class="ometa">خالد محمود • أمس</div></div><div class="oprice">4,200 ج.م</div></div>
+              <span class="b bg">مؤكد</span>
+            </div>
+          </div>
+        </div>
+        <!-- Bottom nav -->
+        <div class="bbar">
+          <div class="bbt a"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt"><div class="be">🐄</div><div class="bl">قطيعي</div></div>
+          <div class="bbt"><div class="be">📋</div><div class="bl">إعلاناتي</div></div>
+          <div class="bbt" style="position:relative"><div class="be">📦</div><div class="bl">الطلبات</div><div style="position:absolute;top:4px;right:calc(50% - 18px);width:7px;height:7px;background:#EF4444;border-radius:50%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 5 — My Herd
+════════════════════════════════════════ -->
+<div class="slide" data-n="4">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="color:#fff;font-size:18px;font-weight:800">قطيعي 🐄</div>
+            <div style="color:rgba(255,255,255,.75);font-size:12px">38 رأس</div>
+          </div>
+          <!-- Stats row -->
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:10px;padding:8px;text-align:center"><div style="color:#fff;font-size:14px;font-weight:800">18</div><div style="color:rgba(255,255,255,.6);font-size:9px">أبقار</div></div>
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:10px;padding:8px;text-align:center"><div style="color:#fff;font-size:14px;font-weight:800">12</div><div style="color:rgba(255,255,255,.6);font-size:9px">أغنام</div></div>
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:10px;padding:8px;text-align:center"><div style="color:#fff;font-size:14px;font-weight:800">6</div><div style="color:rgba(255,255,255,.6);font-size:9px">ماعز</div></div>
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:10px;padding:8px;text-align:center"><div style="color:#fff;font-size:14px;font-weight:800">2</div><div style="color:rgba(255,255,255,.6);font-size:9px">جاموس</div></div>
+          </div>
+        </div>
+        <!-- Filter chips -->
+        <div style="background:#fff;padding:10px 14px 0;flex-shrink:0;border-bottom:1px solid var(--bd)">
+          <div class="chips">
+            <button class="chip chip-a">الكل</button>
+            <button class="chip chip-i">🐄 أبقار</button>
+            <button class="chip chip-i">🐑 أغنام</button>
+            <button class="chip chip-i">🐐 ماعز</button>
+            <button class="chip chip-i">🐃 جاموس</button>
+          </div>
+        </div>
+        <div class="content" style="position:relative">
+          <div class="content-scroll">
+            <div class="acard">
+              <div class="aemoji" style="background:#FEF3C7">🐄</div>
+              <div style="flex:1">
+                <div class="aname">B-12 — فريزيان</div>
+                <div class="atag">أنثى • 6 سنوات</div>
+                <div class="abad"><span class="abit">450 كجم</span><span class="abit">حلوب</span><span class="abit" style="color:#DC2626;background:#FEE2E2">تطعيم اليوم!</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--dm)">›</div>
+            </div>
+            <div class="acard">
+              <div class="aemoji" style="background:#DBEAFE">🐑</div>
+              <div style="flex:1">
+                <div class="aname">S-07 — دوبير</div>
+                <div class="atag">ذكر • 2 سنوات</div>
+                <div class="abad"><span class="abit">85 كجم</span><span class="abit">تسمين</span><span class="abit" style="color:#2563EB;background:#DBEAFE">وزن اليوم</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--dm)">›</div>
+            </div>
+            <div class="acard">
+              <div class="aemoji" style="background:#DCFCE7">🐐</div>
+              <div style="flex:1">
+                <div class="aname">G-03 — شامي</div>
+                <div class="atag">أنثى • 3 سنوات</div>
+                <div class="abad"><span class="abit">42 كجم</span><span class="abit">حلوب</span><span class="abit" style="color:#7C3AED;background:#EDE9FE">حمل - أسبوع</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--dm)">›</div>
+            </div>
+            <div class="acard">
+              <div class="aemoji" style="background:#F3F4F6">🐃</div>
+              <div style="flex:1">
+                <div class="aname">F-01 — مري</div>
+                <div class="atag">أنثى • 5 سنوات</div>
+                <div class="abad"><span class="abit">380 كجم</span><span class="abit">8 ل/يوم</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--dm)">›</div>
+            </div>
+            <div class="acard">
+              <div class="aemoji" style="background:#FEF3C7">🐄</div>
+              <div style="flex:1">
+                <div class="aname">B-05 — هجين</div>
+                <div class="atag">ذكر • 18 شهر</div>
+                <div class="abad"><span class="abit">220 كجم</span><span class="abit">تسمين</span></div>
+              </div>
+              <div style="font-size:18px;color:var(--dm)">›</div>
+            </div>
+          </div>
+          <div class="fab">➕</div>
+        </div>
+        <div class="bbar">
+          <div class="bbt"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt a"><div class="be">🐄</div><div class="bl">قطيعي</div></div>
+          <div class="bbt"><div class="be">📋</div><div class="bl">إعلاناتي</div></div>
+          <div class="bbt"><div class="be">📦</div><div class="bl">الطلبات</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 6 — Add Listing
+════════════════════════════════════════ -->
+<div class="slide" data-n="5">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <div style="font-size:20px;color:#fff;cursor:pointer">←</div>
+          <div style="flex:1;color:#fff;font-size:16px;font-weight:700;text-align:center">إعلان جديد 📋</div>
+          <div style="width:28px"></div>
+        </div>
+        <div class="content">
+          <div class="content-scroll">
+            <!-- Photo picker -->
+            <div class="card">
+              <div class="ct">📸 الصور</div>
+              <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
+                <div style="width:72px;height:72px;flex-shrink:0;background:#FEF3C7;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid var(--bd)">🐄</div>
+                <div style="width:72px;height:72px;flex-shrink:0;background:#F0F7F1;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;border:2px solid var(--bd)">🐄</div>
+                <div style="width:72px;height:72px;flex-shrink:0;background:#F9FAFB;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px dashed var(--bd);color:var(--mu)">+</div>
+                <div style="width:72px;height:72px;flex-shrink:0;background:#F9FAFB;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;border:2px dashed var(--bd);color:var(--mu)">+</div>
+              </div>
+            </div>
+            <!-- Animal details -->
+            <div class="card">
+              <div class="ct">🐄 تفاصيل الحيوان</div>
+              <label class="fl2">نوع الحيوان</label>
+              <select class="fi"><option>أبقار 🐄</option></select>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div><label class="fl2">السلالة</label><select class="fi" style="margin-bottom:0"><option>فريزيان</option></select></div>
+                <div><label class="fl2">الجنس</label><select class="fi" style="margin-bottom:0"><option>ذكر</option></select></div>
+              </div>
+              <div style="height:10px"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div><label class="fl2">الوزن (كجم)</label><input class="fi" value="520" readonly style="margin-bottom:0"></div>
+                <div><label class="fl2">العمر</label><input class="fi" value="18 شهر" readonly style="margin-bottom:0"></div>
+              </div>
+              <div style="height:10px"></div>
+              <label class="fl2">الوصف</label>
+              <textarea class="fi" rows="3" style="resize:none" readonly>عجل فريزيان خالص 520 كجم، لقاحاته مكتملة، تغذية طبيعية على البرسيم.</textarea>
+            </div>
+            <!-- Price -->
+            <div class="card">
+              <div class="ct">💰 السعر</div>
+              <label class="fl2">السعر (ج.م)</label>
+              <input class="fi" value="18,500" readonly>
+              <div style="display:flex;gap:14px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="neg" checked> قابل للتفاوض</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="radio" name="neg"> سعر ثابت</label>
+              </div>
+            </div>
+            <button class="btn" style="margin-top:4px">نشر الإعلان ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 7 — My Listings
+════════════════════════════════════════ -->
+<div class="slide" data-n="6">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="color:#fff;font-size:18px;font-weight:800">إعلاناتي 📋</div>
+            <div style="color:rgba(255,255,255,.75);font-size:12px">8 إعلانات</div>
+          </div>
+        </div>
+        <!-- Tabs -->
+        <div class="tabs" style="padding:0;overflow-x:auto">
+          <div class="tab a" style="flex-shrink:0">الكل (8)</div>
+          <div class="tab" style="flex-shrink:0">متاح (5)</div>
+          <div class="tab" style="flex-shrink:0">محجوز (2)</div>
+          <div class="tab" style="flex-shrink:0">مباع (1)</div>
+        </div>
+        <div class="content" style="position:relative">
+          <div class="content-scroll">
+            <div class="lcard">
+              <div class="limg" style="background:#FEF3C7">🐄</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">عجل فريزيان تسمين</span><span class="b bg">متاح</span></div>
+                <div class="lm">520 كجم • ذكر • 18 شهر</div>
+                <div class="lp">18,500 ج.م</div>
+                <div style="display:flex;gap:7px;margin-top:7px">
+                  <button style="flex:1;background:var(--g);color:#fff;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">تعديل</button>
+                  <button style="flex:1;background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lcard">
+              <div class="limg" style="background:#DBEAFE">🐑</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">خروف دوبير</span><span class="b bg">متاح</span></div>
+                <div class="lm">95 كجم • ذكر • 2 سنوات</div>
+                <div class="lp">4,200 ج.م</div>
+                <div style="display:flex;gap:7px;margin-top:7px">
+                  <button style="flex:1;background:var(--g);color:#fff;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">تعديل</button>
+                  <button style="flex:1;background:#FEE2E2;color:#B91C1C;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">حذف</button>
+                </div>
+              </div>
+            </div>
+            <div class="lcard">
+              <div class="limg" style="background:#DCFCE7">🐄</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">بقرة حلاب فريزيان</span><span class="b ba">محجوز</span></div>
+                <div class="lm">480 كجم • أنثى • 6 ل/يوم</div>
+                <div class="lp">22,000 ج.م</div>
+                <div style="display:flex;gap:7px;margin-top:7px">
+                  <button style="flex:1;background:#D97706;color:#fff;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">محجوز ✓</button>
+                  <button style="flex:1;background:#F3F4F6;color:#374151;border:none;border-radius:8px;padding:6px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer">التفاصيل</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="fab">➕</div>
+        </div>
+        <div class="bbar">
+          <div class="bbt"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt"><div class="be">🐄</div><div class="bl">قطيعي</div></div>
+          <div class="bbt a"><div class="be">📋</div><div class="bl">إعلاناتي</div></div>
+          <div class="bbt"><div class="be">📦</div><div class="bl">الطلبات</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 8 — Finance / Accounts
+════════════════════════════════════════ -->
+<div class="slide" data-n="7">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="color:#fff;font-size:18px;font-weight:800">المالية 💰</div>
+            <div style="display:flex;gap:6px">
+              <div style="background:rgba(255,255,255,.2);color:#fff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:16px;cursor:pointer">شهر</div>
+              <div style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);font-size:11px;padding:4px 12px;border-radius:16px;cursor:pointer">ربع</div>
+              <div style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);font-size:11px;padding:4px 12px;border-radius:16px;cursor:pointer">سنة</div>
+            </div>
+          </div>
+          <!-- KPI strip -->
+          <div style="display:flex;gap:8px">
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:10px;text-align:center">
+              <div style="color:#fff;font-size:15px;font-weight:800">47,500</div>
+              <div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:2px">💵 إيرادات</div>
+            </div>
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:10px;text-align:center">
+              <div style="color:#FBBF24;font-size:15px;font-weight:800">18,200</div>
+              <div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:2px">📤 مصروفات</div>
+            </div>
+            <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:10px;text-align:center">
+              <div style="color:#86EFAC;font-size:15px;font-weight:800">29,300</div>
+              <div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:2px">📈 صافي ربح</div>
+            </div>
+          </div>
+        </div>
+        <!-- Tabs -->
+        <div class="tabs" style="padding:0">
+          <div class="tab a" style="flex-shrink:0;padding:9px 18px">الملخص</div>
+          <div class="tab" style="flex-shrink:0;padding:9px 18px">المصروفات</div>
+          <div class="tab" style="flex-shrink:0;padding:9px 18px">الإيرادات</div>
+        </div>
+        <div class="content">
+          <div class="content-scroll">
+            <!-- Bar chart card -->
+            <div class="card">
+              <div class="ct">📊 الإيرادات مقابل المصروفات</div>
+              <!-- Legend -->
+              <div style="display:flex;gap:14px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:var(--g)"></div><span style="font-size:10px;color:var(--mu)">إيرادات</span></div>
+                <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:#FBBF24"></div><span style="font-size:10px;color:var(--mu)">مصروفات</span></div>
+              </div>
+              <!-- Bars -->
+              <div style="display:flex;align-items:flex-end;gap:5px;height:90px">
+                <!-- يناير -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:58%;opacity:.75"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:25%;opacity:.8"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu)">يناير</div>
+                </div>
+                <!-- فبراير -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:50%;opacity:.75"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:29%;opacity:.8"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu)">فبراير</div>
+                </div>
+                <!-- مارس -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:74%;opacity:.75"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:36%;opacity:.8"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu)">مارس</div>
+                </div>
+                <!-- أبريل -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:68%;opacity:.75"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:32%;opacity:.8"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu)">أبريل</div>
+                </div>
+                <!-- مايو -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:82%;opacity:.75"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:40%;opacity:.8"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu)">مايو</div>
+                </div>
+                <!-- يونيو -->
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+                  <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:80px">
+                    <div style="flex:1;background:var(--g);border-radius:3px 3px 0 0;height:95%;"></div>
+                    <div style="flex:1;background:#FBBF24;border-radius:3px 3px 0 0;height:33%;opacity:.9"></div>
+                  </div>
+                  <div style="font-size:8px;color:var(--mu);font-weight:700">يونيو</div>
+                </div>
+              </div>
+            </div>
+            <!-- Expense breakdown -->
+            <div class="card">
+              <div class="ct">📤 تفصيل المصروفات</div>
+              <!-- Feed -->
+              <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="font-size:12px;font-weight:600;color:var(--tx)">🌾 علف وتغذية</span>
+                  <span style="font-size:12px;font-weight:700;color:var(--tx)">8,190 ج.م <span style="color:var(--mu);font-weight:400">45%</span></span>
+                </div>
+                <div style="height:7px;background:#F3F4F6;border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:45%;background:#D97706;border-radius:4px"></div>
+                </div>
+              </div>
+              <!-- Medical -->
+              <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="font-size:12px;font-weight:600;color:var(--tx)">🏥 رعاية بيطرية</span>
+                  <span style="font-size:12px;font-weight:700;color:var(--tx)">4,550 ج.م <span style="color:var(--mu);font-weight:400">25%</span></span>
+                </div>
+                <div style="height:7px;background:#F3F4F6;border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:25%;background:#2563EB;border-radius:4px"></div>
+                </div>
+              </div>
+              <!-- Transport -->
+              <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="font-size:12px;font-weight:600;color:var(--tx)">🚛 نقل وشحن</span>
+                  <span style="font-size:12px;font-weight:700;color:var(--tx)">3,276 ج.م <span style="color:var(--mu);font-weight:400">18%</span></span>
+                </div>
+                <div style="height:7px;background:#F3F4F6;border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:18%;background:#7C3AED;border-radius:4px"></div>
+                </div>
+              </div>
+              <!-- Other -->
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="font-size:12px;font-weight:600;color:var(--tx)">📦 أخرى</span>
+                  <span style="font-size:12px;font-weight:700;color:var(--tx)">2,184 ج.م <span style="color:var(--mu);font-weight:400">12%</span></span>
+                </div>
+                <div style="height:7px;background:#F3F4F6;border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:12%;background:#9CA3AF;border-radius:4px"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Latest income -->
+            <div class="card">
+              <div class="ct">💵 آخر الإيرادات</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bd)">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="width:34px;height:34px;background:#DCFCE7;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px">🐄</div>
+                  <div><div style="font-size:12px;font-weight:600;color:var(--tx)">عجل فريزيان</div><div style="font-size:10px;color:var(--mu)">7 مايو 2026</div></div>
+                </div>
+                <div style="font-size:13px;font-weight:800;color:var(--g)">+18,500 ج.م</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bd)">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="width:34px;height:34px;background:#DBEAFE;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px">🐑</div>
+                  <div><div style="font-size:12px;font-weight:600;color:var(--tx)">خروف دوبير</div><div style="font-size:10px;color:var(--mu)">5 مايو 2026</div></div>
+                </div>
+                <div style="font-size:13px;font-weight:800;color:var(--g)">+4,200 ج.م</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="width:34px;height:34px;background:#F3E8FF;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px">🥛</div>
+                  <div><div style="font-size:12px;font-weight:600;color:var(--tx)">منتجات ألبان</div><div style="font-size:10px;color:var(--mu)">3 مايو 2026</div></div>
+                </div>
+                <div style="font-size:13px;font-weight:800;color:var(--g)">+2,800 ج.م</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Bottom nav -->
+        <div class="bbar">
+          <div class="bbt"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt"><div class="be">🐄</div><div class="bl">قطيعي</div></div>
+          <div class="bbt"><div class="be">📋</div><div class="bl">إعلاناتي</div></div>
+          <div class="bbt a"><div class="be">💰</div><div class="bl">المالية</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 9 — Buyer Browse
+════════════════════════════════════════ -->
+<div class="slide" data-n="8">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:#fff"><span class="sbar-time" style="color:var(--tx)">9:41</span><div class="sbar-icons"><span>📶</span><span>🔋</span></div></div>
+        <div style="background:#fff;padding:8px 14px 12px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div>
+              <div style="font-size:12px;color:var(--mu)">📍 القاهرة</div>
+              <div style="font-size:17px;font-weight:800;color:var(--tx)">تصفح المزارع 🗺️</div>
+            </div>
+            <div style="position:relative">
+              <div style="width:38px;height:38px;background:var(--gl);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px">🔔</div>
+              <div style="position:absolute;top:-2px;right:-2px;width:7px;height:7px;background:#EF4444;border-radius:50%"></div>
+            </div>
+          </div>
+          <div class="search">
+            <span style="font-size:16px;color:var(--mu)">🔍</span>
+            <input class="sinput" placeholder="ابحث عن مزرعة أو حيوان...">
+          </div>
+          <div class="chips">
+            <button class="chip chip-a">الكل</button>
+            <button class="chip chip-i">🐄 أبقار</button>
+            <button class="chip chip-i">🐑 أغنام</button>
+            <button class="chip chip-i">🐐 ماعز</button>
+            <button class="chip chip-i">🥛 ألبان</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="content-scroll">
+            <p style="font-size:11px;color:var(--mu);margin-bottom:10px">48 مزرعة في القاهرة والجيزة</p>
+            <div class="fcard">
+              <div class="facent" style="background:#E17055"></div>
+              <div class="fbody">
+                <div class="fhead"><div class="favt" style="background:#E17055">مش</div><div><div class="fname">مزرعة الشافعي</div><div class="floc">📍 الشرقية • ⭐ 4.8 (47)</div></div><span style="margin-right:auto;font-size:18px;cursor:pointer">❤️</span></div>
+                <div class="fchips"><span class="fch">🐄 أبقار</span><span class="fch">🐑 أغنام</span><span class="fch">🐐 ماعز</span></div>
+                <div style="font-size:11px;color:var(--mu);margin-bottom:10px">8 إعلانات نشطة • موثّق ✓</div>
+                <button class="fbtn">عرض المزرعة ←</button>
+              </div>
+            </div>
+            <div class="fcard">
+              <div class="facent" style="background:#00B894"></div>
+              <div class="fbody">
+                <div class="fhead"><div class="favt" style="background:#00B894">نخ</div><div><div class="fname">مزرعة النيل الخضراء</div><div class="floc">📍 الدقهلية • ⭐ 4.6 (31)</div></div><span style="margin-right:auto;font-size:18px;cursor:pointer">🤍</span></div>
+                <div class="fchips"><span class="fch">🐄 أبقار</span><span class="fch">🐃 جاموس</span><span class="fch">🥛 ألبان</span></div>
+                <div style="font-size:11px;color:var(--mu);margin-bottom:10px">12 إعلانات • موثّق ✓</div>
+                <button class="fbtn">عرض المزرعة ←</button>
+              </div>
+            </div>
+            <div class="fcard">
+              <div class="facent" style="background:#6C5CE7"></div>
+              <div class="fbody">
+                <div class="fhead"><div class="favt" style="background:#6C5CE7">أع</div><div><div class="fname">مزرعة أبو العلا</div><div class="floc">📍 الغربية • ⭐ 4.9 (63)</div></div><span style="margin-right:auto;font-size:18px;cursor:pointer">🤍</span></div>
+                <div class="fchips"><span class="fch">🐑 أغنام</span><span class="fch">🐐 ماعز</span></div>
+                <div style="font-size:11px;color:var(--mu);margin-bottom:10px">6 إعلانات • مميّز ⭐</div>
+                <button class="fbtn">عرض المزرعة ←</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bbar">
+          <div class="bbt a"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt"><div class="be">📦</div><div class="bl">طلباتي</div></div>
+          <div class="bbt"><div class="be">❤️</div><div class="bl">المفضلة</div></div>
+          <div class="bbt"><div class="be">👤</div><div class="bl">حسابي</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 10 — Farm Detail + Order
+════════════════════════════════════════ -->
+<div class="slide" data-n="9">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:var(--gdd)"><span class="sbar-time" style="color:#fff">9:41</span><div class="sbar-icons"><span style="filter:brightness(10)">📶</span><span style="filter:brightness(10)">🔋</span></div></div>
+        <!-- Farm hero -->
+        <div style="background:linear-gradient(135deg,var(--gdd),var(--g));padding:12px 16px 16px;flex-shrink:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="font-size:18px;color:#fff;cursor:pointer">←</div>
+            <div style="flex:1;color:#fff;font-size:14px;font-weight:700;text-align:center">مزرعة الشافعي</div>
+            <div style="font-size:18px;cursor:pointer">❤️</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:52px;height:52px;border-radius:50%;background:#E17055;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;border:2px solid rgba(255,255,255,.2)">مش</div>
+            <div style="flex:1">
+              <div style="color:#fff;font-size:15px;font-weight:800">مزرعة الشافعي للمواشي</div>
+              <div style="color:rgba(255,255,255,.7);font-size:11px;margin-top:2px">📍 الشرقية • موثّق ✓</div>
+              <div style="color:#FBBF24;font-size:12px;margin-top:3px">★★★★★ 4.8 (47 تقييم)</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button style="flex:1;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:9px;font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer">📞 اتصال</button>
+            <button style="flex:1;background:#25D366;color:#fff;border:none;border-radius:10px;padding:9px;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer">💬 واتساب</button>
+          </div>
+        </div>
+        <!-- Tabs -->
+        <div class="tabs" style="padding:0;overflow-x:auto">
+          <div class="tab a" style="flex-shrink:0">🐄 مواشي (8)</div>
+          <div class="tab" style="flex-shrink:0">🥛 ألبان (3)</div>
+          <div class="tab" style="flex-shrink:0">🛒 مستلزمات</div>
+          <div class="tab" style="flex-shrink:0">⭐ تقييمات (47)</div>
+        </div>
+        <div class="content">
+          <div class="content-scroll">
+            <div class="lcard">
+              <div class="limg" style="background:#FEF3C7">🐄</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">عجل فريزيان تسمين</span><span class="b bg">متاح</span></div>
+                <div class="lm">520 كجم • ذكر • 18 شهر • لقاحات ✓</div>
+                <div class="lp">18,500 ج.م</div>
+                <button class="btn" style="margin-top:8px;padding:10px;font-size:12px">طلب الآن →</button>
+              </div>
+            </div>
+            <div class="lcard">
+              <div class="limg" style="background:#DBEAFE">🐑</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">خروف دوبير</span><span class="b bg">متاح</span></div>
+                <div class="lm">95 كجم • ذكر • 2 سنوات</div>
+                <div class="lp">4,200 ج.م</div>
+                <button class="btn" style="margin-top:8px;padding:10px;font-size:12px">طلب الآن →</button>
+              </div>
+            </div>
+            <div class="lcard">
+              <div class="limg" style="background:#EDE9FE">🐐</div>
+              <div class="lbody">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="lt">ماعز شامي حلوب</span><span class="b ba">محجوز</span></div>
+                <div class="lm">65 كجم • أنثى • 2 سنوات</div>
+                <div class="lp">3,800 ج.م</div>
+                <button style="margin-top:8px;padding:10px;font-size:12px;width:100%;background:#F3F4F6;color:#374151;border:none;border-radius:10px;font-family:'Cairo',sans-serif;font-weight:600;cursor:not-allowed">محجوز</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bbar">
+          <div class="bbt a"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt"><div class="be">📦</div><div class="bl">طلباتي</div></div>
+          <div class="bbt"><div class="be">❤️</div><div class="bl">المفضلة</div></div>
+          <div class="bbt"><div class="be">👤</div><div class="bl">حسابي</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCREEN 11 — My Orders (Buyer) + Outro
+════════════════════════════════════════ -->
+<div class="slide" data-n="10">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="di"></div>
+        <div class="sbar" style="background:#fff"><span class="sbar-time" style="color:var(--tx)">9:41</span><div class="sbar-icons"><span>📶</span><span>🔋</span></div></div>
+        <div style="background:#fff;padding:8px 16px 14px;flex-shrink:0;border-bottom:1px solid var(--bd)">
+          <div style="font-size:18px;font-weight:800;color:var(--tx)">طلباتي 📦</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:2px">3 طلبات نشطة</div>
+        </div>
+        <!-- Tabs -->
+        <div class="tabs" style="padding:0">
+          <div class="tab a" style="flex-shrink:0;padding:8px 16px">الكل (5)</div>
+          <div class="tab" style="flex-shrink:0;padding:8px 16px">نشط (3)</div>
+          <div class="tab" style="flex-shrink:0;padding:8px 16px">مكتمل (2)</div>
+        </div>
+        <div class="content">
+          <div class="content-scroll">
+            <!-- Order 1 - pending -->
+            <div class="ocard">
+              <div class="ohead">
+                <div><div class="otitle">عجل فريزيان 520 كجم</div><div class="ometa">مزرعة الشافعي • اليوم 9:15 ص</div></div>
+                <div class="oprice">18,500 ج.م</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                <span class="b ba">قيد المراجعة</span>
+                <button style="background:transparent;color:var(--mu);border:none;font-family:'Cairo',sans-serif;font-size:11px;cursor:pointer">التفاصيل ›</button>
+              </div>
+              <!-- Progress steps -->
+              <div style="display:flex;align-items:center;margin-top:10px;gap:0">
+                <div style="width:20px;height:20px;background:var(--g);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0">✓</div>
+                <div style="flex:1;height:2px;background:var(--gb)"></div>
+                <div style="width:20px;height:20px;background:#FEF3C7;border:2px solid #D97706;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0">⏳</div>
+                <div style="flex:1;height:2px;background:#E5E7EB"></div>
+                <div style="width:20px;height:20px;background:#F3F4F6;border:2px solid #E5E7EB;border-radius:50%;flex-shrink:0"></div>
+                <div style="flex:1;height:2px;background:#E5E7EB"></div>
+                <div style="width:20px;height:20px;background:#F3F4F6;border:2px solid #E5E7EB;border-radius:50%;flex-shrink:0"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px">
+                <span style="font-size:9px;color:var(--g);font-weight:600">تم الطلب</span>
+                <span style="font-size:9px;color:#D97706;font-weight:600">مراجعة</span>
+                <span style="font-size:9px;color:var(--dm)">تأكيد</span>
+                <span style="font-size:9px;color:var(--dm)">تسليم</span>
+              </div>
+            </div>
+            <!-- Order 2 - confirmed -->
+            <div class="ocard">
+              <div class="ohead">
+                <div><div class="otitle">خروف دوبير 95 كجم</div><div class="ometa">مزرعة الشافعي • أمس</div></div>
+                <div class="oprice">4,200 ج.م</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                <span class="b bg">مؤكد ✓</span>
+                <button style="background:transparent;color:var(--mu);border:none;font-family:'Cairo',sans-serif;font-size:11px;cursor:pointer">التفاصيل ›</button>
+              </div>
+            </div>
+            <!-- Order 3 - completed -->
+            <div class="ocard" style="opacity:.7">
+              <div class="ohead">
+                <div><div class="otitle">ماعز شامي حلوب</div><div class="ometa">مزرعة أبو العلا • 3 مايو</div></div>
+                <div class="oprice">3,800 ج.م</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                <span class="b bx">مكتمل ✓</span>
+                <button style="background:var(--gl);color:var(--g);border:none;border-radius:8px;padding:5px 11px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:600;cursor:pointer">تقييم ⭐</button>
+              </div>
+            </div>
+            <!-- CTA -->
+            <div style="background:linear-gradient(135deg,var(--gdd),var(--g));border-radius:16px;padding:18px;text-align:center;margin-top:4px">
+              <div style="font-size:28px;margin-bottom:8px">🌿</div>
+              <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">ابدأ مع FarmFlow</div>
+              <div style="color:rgba(255,255,255,.7);font-size:12px;margin-bottom:12px">مجّاني • دقيقتان فقط للتسجيل • 0% عمولة</div>
+              <div style="background:#fff;color:var(--g);border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer">سجّل الآن مجاناً →</div>
+            </div>
+          </div>
+        </div>
+        <div class="bbar">
+          <div class="bbt"><div class="be">🏠</div><div class="bl">الرئيسية</div></div>
+          <div class="bbt a"><div class="be">📦</div><div class="bl">طلباتي</div></div>
+          <div class="bbt"><div class="be">❤️</div><div class="bl">المفضلة</div></div>
+          <div class="bbt"><div class="be">👤</div><div class="bl">حسابي</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /sw -->
+
+<!-- Dots nav -->
+<div id="nav">
+  <div id="dots"></div>
+  <div id="ctr">1 / 10</div>
+</div>
+
+<script>
+const LABELS=['شاشة البداية','اختيار الدور','تسجيل كبائع','لوحة التحكم','إدارة القطيع','إضافة إعلان','إعلاناتي','المالية والحسابات','تصفح كمشتري','صفحة المزرعة','طلباتي'];
+const slides=document.querySelectorAll('.slide');
+const n=slides.length;
+let cur=0;
+
+function buildDots(){
+  const d=document.getElementById('dots');
+  for(let i=0;i<n;i++){
+    const el=document.createElement('div');
+    el.className='dot'+(i===0?' active':'');
+    el.onclick=()=>goTo(i);
+    d.appendChild(el);
+  }
+}
+
+function goTo(i){
+  if(i<0||i>=n)return;
+  slides[cur].classList.remove('active');
+  document.querySelectorAll('.dot')[cur].classList.remove('active');
+  cur=i;
+  slides[cur].classList.add('active');
+  document.querySelectorAll('.dot')[cur].classList.add('active');
+  document.getElementById('ctr').textContent=(i+1)+' / 11';
+  document.getElementById('pf').style.width=(((i+1)/n)*100)+'%';
+  document.getElementById('lbl').textContent=LABELS[i]+' • '+(i+1)+' من '+n;
+  document.getElementById('arr-p').disabled=i===0;
+  document.getElementById('arr-n').disabled=i===n-1;
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')goTo(cur+1);
+  if(e.key==='ArrowRight')goTo(cur-1);
+});
+
+let tx=0;
+document.addEventListener('touchstart',e=>{tx=e.touches[0].clientX},{passive:true});
+document.addEventListener('touchend',e=>{
+  const dx=tx-e.changedTouches[0].clientX;
+  if(Math.abs(dx)>50)goTo(dx>0?cur+1:cur-1);
+});
+
+buildDots();
+goTo(0);
+</script>
+</body>
+</html>

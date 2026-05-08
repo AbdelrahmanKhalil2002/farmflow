@@ -7,15 +7,15 @@ import {
 } from '../../services/adminService';
 import { fmt, getImageUrl } from '../../utils/format';
 
+import { C as _C } from '../../tokens';
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#F8FAFC', card:   '#FFFFFF', header: '#F9FAFB',
-  border:  '#E5E7EB',
-  text:    '#111827', dim:    '#6B7280', dimMid: '#9CA3AF',
-  green:   '#16A34A', greenBg:'#F0FDF4',
-  red:     '#DC2626', redBg:  '#FEF2F2',
-  amber:   '#D97706', amberBg:'#FFFBEB',
-  slate:   '#64748B', slateBg:'#F8FAFC',
+  ..._C,
+  header:  '#F9FAFB',
+  dim:     '#6B7280',
+  dimMid:  '#9CA3AF',
+  slateBg: '#F8FAFC',
 };
 
 const STATUS = {

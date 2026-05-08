@@ -128,6 +128,27 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref:  'User',
     }],
+
+    // ── Notification preferences ───────────────────────────────────────────────
+    notifPrefs: {
+      orders:    { type: Boolean, default: true },
+      reminders: { type: Boolean, default: true },
+      dairy:     { type: Boolean, default: true },
+      messages:  { type: Boolean, default: true },
+    },
+
+    // ── Password reset ─────────────────────────────────────────────────────────
+    resetPasswordToken:  { type: String, select: false },
+    resetPasswordExpiry: { type: Date,   select: false },
+
+    // ── Email verification ─────────────────────────────────────────────────────
+    emailVerificationToken:  { type: String, select: false },
+    emailVerificationExpiry: { type: Date,   select: false },
+    isEmailVerified:         { type: Boolean, default: false },
+
+    // ── Admin 2FA (email OTP) ─────────────────────────────────────────────────
+    twoFactorCode:   { type: String, select: false },
+    twoFactorExpiry: { type: Date,   select: false },
   },
   { timestamps: true }
 );

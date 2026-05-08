@@ -6,6 +6,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/auth/auth_notifier.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/user_model.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/gov_picker.dart';
 
@@ -70,27 +71,27 @@ class BuyerProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _MenuItem(
                     icon: Icons.edit_outlined,
-                    label: 'تعديل الملف الشخصي',
+                    label: context.l10n.editProfile,
                     onTap: () => _showEditProfile(context, ref, user),
                   ),
                   _MenuItem(
                     icon: Icons.receipt_long_outlined,
-                    label: 'طلباتي',
+                    label: context.l10n.myOrders,
                     onTap: () => context.go('/buyer/orders'),
                   ),
                   _MenuItem(
                     icon: Icons.favorite_outline,
-                    label: 'المفضلة',
+                    label: context.l10n.favorites,
                     onTap: () => context.go('/buyer/favorites'),
                   ),
                   _MenuItem(
                     icon: Icons.notifications_outlined,
-                    label: 'الإشعارات',
+                    label: context.l10n.notificationsTitle,
                     onTap: () => context.push('/buyer/notifications'),
                   ),
                   _MenuItem(
                     icon: Icons.lock_outline,
-                    label: 'تغيير كلمة المرور',
+                    label: context.l10n.changePassword,
                     onTap: () => _showChangePassword(context, ref),
                   ),
                   const SizedBox(height: 8),
@@ -147,18 +148,18 @@ class _ProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('بياناتك',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+          Text(context.l10n.myData,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
                   fontWeight: FontWeight.w700, color: AppColors.muted)),
           const SizedBox(height: 10),
           if (user.email != null)
-            _InfoRow(icon: Icons.email_outlined, label: 'البريد',
+            _InfoRow(icon: Icons.email_outlined, label: context.l10n.emailField,
                 value: user.email!),
           if (user.phone != null)
-            _InfoRow(icon: Icons.phone_outlined, label: 'الهاتف',
+            _InfoRow(icon: Icons.phone_outlined, label: context.l10n.phoneField,
                 value: user.phone!),
           if (user.governorate != null)
-            _InfoRow(icon: Icons.location_on_outlined, label: 'المحافظة',
+            _InfoRow(icon: Icons.location_on_outlined, label: context.l10n.governorateField,
                 value: user.governorate!),
         ],
       ),
@@ -230,9 +231,9 @@ class _LogoutButton extends ConsumerWidget {
         onPressed: () async {
           final ok = await showConfirmDialog(
             context,
-            title: 'تسجيل الخروج',
-            message: 'هل أنت متأكد من تسجيل الخروج؟',
-            confirmLabel: 'خروج',
+            title: context.l10n.logoutConfirmTitle,
+            message: context.l10n.logoutConfirmMessage,
+            confirmLabel: context.l10n.logoutConfirmButton,
             dangerous: true,
           );
           if (ok && context.mounted) {
@@ -240,8 +241,8 @@ class _LogoutButton extends ConsumerWidget {
           }
         },
         icon: const Icon(Icons.logout, color: AppColors.red),
-        label: const Text('تسجيل الخروج',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+        label: Text(context.l10n.logoutButton,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
                 color: AppColors.red)),
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: AppColors.red),
@@ -291,7 +292,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
 
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'الاسم مطلوب');
+      setState(() => _error = context.l10n.nameRequired2);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -310,7 +311,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في تحديث البيانات. حاول مجدداً.';
+        _error = context.l10n.updateFailed;
         _loading = false;
       });
     }
@@ -334,19 +335,19 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Text('تعديل الملف الشخصي',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+            Text(context.l10n.editProfileTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                     fontWeight: FontWeight.w800, color: AppColors.text)),
             const SizedBox(height: 16),
 
             // Name
-            _SheetField(controller: _nameCtrl, label: 'الاسم',
-                hint: 'اسمك الكامل'),
+            _SheetField(controller: _nameCtrl, label: context.l10n.name,
+                hint: context.l10n.namePlaceholder),
             const SizedBox(height: 12),
 
             // Phone
-            _SheetField(controller: _phoneCtrl, label: 'رقم الهاتف',
-                hint: '01XXXXXXXXX',
+            _SheetField(controller: _phoneCtrl, label: context.l10n.phone,
+                hint: context.l10n.phonePlaceholder,
                 keyboardType: TextInputType.phone),
             const SizedBox(height: 12),
 
@@ -372,8 +373,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('حفظ التعديلات',
-                      style: TextStyle(fontFamily: 'Cairo',
+                  : Text(context.l10n.saveChanges,
+                      style: const TextStyle(fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
           ],
@@ -417,15 +418,15 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     if (_currentCtrl.text.trim().isEmpty ||
         _newCtrl.text.trim().isEmpty ||
         _confirmCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'يرجى ملء جميع الحقول');
+      setState(() => _error = context.l10n.fillAllFields);
       return;
     }
     if (_newCtrl.text != _confirmCtrl.text) {
-      setState(() => _error = 'كلمتا المرور الجديدتان غير متطابقتين');
+      setState(() => _error = context.l10n.newPasswordMismatch);
       return;
     }
     if (_newCtrl.text.length < 6) {
-      setState(() => _error = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setState(() => _error = context.l10n.passwordMinLength);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -440,7 +441,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'كلمة المرور الحالية غير صحيحة';
+        _error = context.l10n.currentPasswordWrong;
         _loading = false;
       });
     }
@@ -464,28 +465,28 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Text('تغيير كلمة المرور',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+            Text(context.l10n.changePasswordTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                     fontWeight: FontWeight.w800, color: AppColors.text)),
             const SizedBox(height: 16),
 
             _PasswordField(
               controller: _currentCtrl,
-              label: 'كلمة المرور الحالية',
+              label: context.l10n.currentPassword,
               visible: _showCurrent,
               onToggle: () => setState(() => _showCurrent = !_showCurrent),
             ),
             const SizedBox(height: 12),
             _PasswordField(
               controller: _newCtrl,
-              label: 'كلمة المرور الجديدة',
+              label: context.l10n.newPassword,
               visible: _showNew,
               onToggle: () => setState(() => _showNew = !_showNew),
             ),
             const SizedBox(height: 12),
             _PasswordField(
               controller: _confirmCtrl,
-              label: 'تأكيد كلمة المرور الجديدة',
+              label: context.l10n.confirmNewPassword,
               visible: _showConfirm,
               onToggle: () => setState(() => _showConfirm = !_showConfirm),
             ),
@@ -498,8 +499,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             ],
             if (_success) ...[
               const SizedBox(height: 10),
-              const Text('تم تغيير كلمة المرور بنجاح ✅',
-                  style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+              Text(context.l10n.passwordChangedSuccess,
+                  style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                       color: AppColors.green, fontWeight: FontWeight.w700)),
             ],
 
@@ -513,8 +514,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('تغيير كلمة المرور',
-                      style: TextStyle(fontFamily: 'Cairo',
+                  : Text(context.l10n.changePassword,
+                      style: const TextStyle(fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
           ],

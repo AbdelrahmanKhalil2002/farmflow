@@ -1,13 +1,16 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_compress_util.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/widgets/image_picker_grid.dart';
+import 'breed_service.dart';
 import 'seller_listings_service.dart';
 
 class EditListingScreen extends ConsumerStatefulWidget {
@@ -21,8 +24,9 @@ class EditListingScreen extends ConsumerStatefulWidget {
 class _EditListingScreenState extends ConsumerState<EditListingScreen> {
   late String _type;
   late String _deliveryType;
+  String? _selectedBreed;
 
-  late final TextEditingController _breedCtrl;
+  late final TextEditingController _customBreedCtrl;
   late final TextEditingController _weightCtrl;
   final _ageCtrl   = TextEditingController();
   final _priceCtrl = TextEditingController();
@@ -40,11 +44,6 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
     ('camel',   '🐪', 'إبل'),    ('horse',   '🐴', 'خيول'),
     ('poultry', '🐔', 'دواجن'),  ('rabbit',  '🐇', 'أرانب'),
   ];
-  static const _deliveryTypes = [
-    ('none',  '🚫 بدون توصيل'),
-    ('farm',  '🚛 توصيل من المزرعة'),
-    ('admin', '📦 توصيل من المنصة'),
-  ];
 
   @override
   void initState() {
@@ -54,7 +53,12 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
     _deliveryType = l.deliveryType;
     _eidAvailable     = l.eidAvailable;
     _slaughterService = l.slaughterService;
-    _breedCtrl  = TextEditingController(text: l.breed ?? '');
+    final savedBreed = l.breed;
+    final isDefaultBreed = savedBreed != null &&
+        (kDefaultBreeds[l.type] ?? []).contains(savedBreed);
+    _selectedBreed = isDefaultBreed ? savedBreed : null;
+    _customBreedCtrl = TextEditingController(
+        text: (savedBreed != null && !isDefaultBreed) ? savedBreed : '');
     _weightCtrl = TextEditingController(
         text: l.weight > 0 ? l.weight.toStringAsFixed(0) : '');
     _ageCtrl.text   = l.age > 0 ? l.age.toString() : '';
@@ -64,26 +68,29 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
 
   @override
   void dispose() {
-    _breedCtrl.dispose(); _weightCtrl.dispose(); _ageCtrl.dispose();
+    _customBreedCtrl.dispose(); _weightCtrl.dispose(); _ageCtrl.dispose();
     _priceCtrl.dispose(); _descCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (_weightCtrl.text.trim().isEmpty || _priceCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'الوزن والسعر مطلوبان');
+      setState(() => _error = context.l10n.weightPriceRequired);
       return;
     }
     final weight = double.tryParse(_weightCtrl.text);
     final price  = double.tryParse(_priceCtrl.text);
     final age    = int.tryParse(_ageCtrl.text);
     if (weight == null || price == null) {
-      setState(() => _error = 'أدخل أرقاماً صحيحة للوزن والسعر');
+      setState(() => _error = context.l10n.weightPriceInvalid);
       return;
     }
 
     setState(() { _loading = true; _error = null; });
     try {
+      final breedVal = _customBreedCtrl.text.trim().isNotEmpty
+          ? _customBreedCtrl.text.trim()
+          : _selectedBreed;
       final dio = ref.read(dioProvider);
       if (_images.isEmpty) {
         await dio.put(ApiEndpoints.listingById(widget.listing.id), data: {
@@ -93,7 +100,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
           'deliveryType':     _deliveryType,
           'eidAvailable':     _eidAvailable,
           'slaughterService': _slaughterService,
-          if (_breedCtrl.text.trim().isNotEmpty) 'breed': _breedCtrl.text.trim(),
+          if (breedVal != null && breedVal.isNotEmpty) 'breed': breedVal,
           if (age != null) 'age': age,
           if (_descCtrl.text.trim().isNotEmpty)
             'description': _descCtrl.text.trim(),
@@ -106,7 +113,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
           'deliveryType':     _deliveryType,
           'eidAvailable':     _eidAvailable.toString(),
           'slaughterService': _slaughterService.toString(),
-          if (_breedCtrl.text.trim().isNotEmpty) 'breed': _breedCtrl.text.trim(),
+          if (breedVal != null && breedVal.isNotEmpty) 'breed': breedVal,
           if (age != null) 'age': age.toString(),
           if (_descCtrl.text.trim().isNotEmpty)
             'description': _descCtrl.text.trim(),
@@ -122,7 +129,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في تحديث الإعلان. حاول مجدداً.';
+        _error = context.l10n.updateListingFailed2;
         _loading = false;
       });
     }
@@ -136,8 +143,8 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
         backgroundColor: AppColors.green,
         elevation: 0,
         leading: const BackButton(color: AppColors.white),
-        title: const Text('تعديل الإعلان',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+        title: Text(context.l10n.editListingTitle2,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
                 color: AppColors.white)),
       ),
       body: SingleChildScrollView(
@@ -146,12 +153,16 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Type ──────────────────────────────────────────────────────────
-            _Label('نوع الحيوان'),
+            _Label(context.l10n.listingTypeLabel),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8, runSpacing: 8,
               children: _types.map((t) => GestureDetector(
-                onTap: () => setState(() => _type = t.$1),
+                onTap: () => setState(() {
+                  _type = t.$1;
+                  _selectedBreed = null;
+                  _customBreedCtrl.clear();
+                }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   padding: const EdgeInsets.symmetric(
@@ -176,33 +187,44 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Breed & Age ───────────────────────────────────────────────────
-            Row(children: [
-              Expanded(child: _Field(controller: _breedCtrl,
-                  label: 'السلالة', hint: 'مثال: فريزيان')),
-              const SizedBox(width: 12),
-              Expanded(child: _Field(controller: _ageCtrl,
-                  label: 'العمر (شهور)', hint: '0',
-                  keyboardType: TextInputType.number)),
-            ]),
+            // ── Breed ─────────────────────────────────────────────────────────
+            _BreedPicker(
+              type: _type,
+              selected: _selectedBreed,
+              customCtrl: _customBreedCtrl,
+              onSelected: (b) => setState(() {
+                _selectedBreed = b;
+                _customBreedCtrl.clear();
+              }),
+            ),
+            const SizedBox(height: 14),
+
+            // ── Age ───────────────────────────────────────────────────────────
+            _Field(controller: _ageCtrl,
+                label: context.l10n.ageMonthsLabel, hint: '0',
+                keyboardType: TextInputType.number),
             const SizedBox(height: 14),
 
             // ── Weight & Price ────────────────────────────────────────────────
             Row(children: [
               Expanded(child: _Field(controller: _weightCtrl,
-                  label: 'الوزن (كجم) *', hint: '0',
+                  label: context.l10n.weightRequiredLabel, hint: '0',
                   keyboardType: TextInputType.number)),
               const SizedBox(width: 12),
               Expanded(child: _Field(controller: _priceCtrl,
-                  label: 'السعر (ج.م) *', hint: '0',
+                  label: context.l10n.priceRequiredLabel, hint: '0',
                   keyboardType: TextInputType.number)),
             ]),
             const SizedBox(height: 14),
 
             // ── Delivery ──────────────────────────────────────────────────────
-            _Label('طريقة التسليم'),
+            _Label(context.l10n.deliveryTypeLabel),
             const SizedBox(height: 8),
-            ...(_deliveryTypes.map((d) => RadioListTile<String>(
+            ...[
+              ('none',  '🚫 ${context.l10n.deliveryNone}'),
+              ('farm',  '🚛 ${context.l10n.deliveryFarm}'),
+              ('admin', '📦 ${context.l10n.deliveryAdmin}'),
+            ].map((d) => RadioListTile<String>(
               value: d.$1,
               groupValue: _deliveryType,
               onChanged: (v) => setState(() => _deliveryType = v!),
@@ -211,7 +233,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
               activeColor: AppColors.green,
               contentPadding: EdgeInsets.zero,
               dense: true,
-            ))),
+            )),
             const SizedBox(height: 14),
 
             // ── Eid ───────────────────────────────────────────────────────────
@@ -225,8 +247,8 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
               child: Column(children: [
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('🌙 متاح للعيد',
-                        style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                    Text('🌙 ${context.l10n.eidSectionLabel}',
+                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: AppColors.amber)),
                     Switch(value: _eidAvailable,
@@ -238,8 +260,8 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
                   const Divider(height: 12),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('🔪 خدمة ذبح',
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                      Text('🔪 ${context.l10n.slaughterSectionLabel}',
+                          style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
                               color: AppColors.text)),
                       Switch(value: _slaughterService,
                           onChanged: (v) =>
@@ -252,12 +274,12 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
             const SizedBox(height: 14),
 
             // ── Description ───────────────────────────────────────────────────
-            _Field(controller: _descCtrl, label: 'الوصف',
-                hint: 'أي تفاصيل إضافية...', maxLines: 3),
+            _Field(controller: _descCtrl, label: context.l10n.descriptionLabel2,
+                hint: context.l10n.descriptionHint2, maxLines: 3),
             const SizedBox(height: 20),
 
             // ── Photos ────────────────────────────────────────────────────────
-            _Label('إضافة صور'),
+            _Label(context.l10n.addPhotosLabel2),
             const SizedBox(height: 10),
             ImagePickerGrid(
               images: _images,
@@ -284,14 +306,125 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
                   ? const SizedBox(width: 22, height: 22,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('حفظ التعديلات',
-                      style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+                  : Text(context.l10n.saveListingButton,
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 15,
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
             const SizedBox(height: 24),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Breed picker ──────────────────────────────────────────────────────────────
+
+class _BreedPicker extends ConsumerWidget {
+  const _BreedPicker({
+    required this.type,
+    required this.selected,
+    required this.customCtrl,
+    required this.onSelected,
+  });
+  final String type;
+  final String? selected;
+  final TextEditingController customCtrl;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(breedNotifierProvider.notifier);
+    ref.watch(breedNotifierProvider);
+    final breeds = notifier.breedsFor(type);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'السلالة (اختياري)',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.muted),
+            ),
+            GestureDetector(
+              onTap: () => context.push('/seller/breed-settings'),
+              child: const Text(
+                '⚙ إعدادات السلالات',
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: AppColors.green,
+                    decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: breeds.map((b) {
+            final isSelected = selected == b && customCtrl.text.isEmpty;
+            return GestureDetector(
+              onTap: () => onSelected(isSelected ? null : b),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.green : AppColors.card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? AppColors.green : AppColors.border,
+                  ),
+                ),
+                child: Text(
+                  b,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? AppColors.white : AppColors.text,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: customCtrl,
+          textDirection: TextDirection.rtl,
+          onChanged: (_) => onSelected(null),
+          style: const TextStyle(
+              fontFamily: 'Cairo', fontSize: 13, color: AppColors.text),
+          decoration: InputDecoration(
+            hintText: 'أو اكتب سلالة أخرى...',
+            hintStyle: const TextStyle(
+                fontFamily: 'Cairo', fontSize: 13, color: AppColors.muted),
+            filled: true,
+            fillColor: AppColors.card,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: AppColors.green, width: 1.5)),
+          ),
+        ),
+      ],
     );
   }
 }

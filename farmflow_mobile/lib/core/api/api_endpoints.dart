@@ -44,6 +44,8 @@ abstract class ApiEndpoints {
   static const String expenses       = '/finance/expenses';
   static const String income         = '/finance/income';
   static String expenseById(String id) => '/finance/expenses/$id';
+  static String incomeById(String id)  => '/finance/income/$id';
+  static const String budget         = '/budget';
 
   // ── Statements ──────────────────────────────────────────────────────────────
   static const String statements     = '/statements';
@@ -89,6 +91,10 @@ abstract class ApiEndpoints {
   // ── Admin — dairy ─────────────────────────────────────────────────────────
   static const String adminDairyAll           = '/dairy/admin/all';
   static String adminApproveDairy(String id)  => '/dairy/$id/approve';
+
+  // ── Vet records (cross-herd) ─────────────────────────────────────────────
+  static const String vetMedical      = '/animals/vet/medical';
+  static const String vetVaccinations = '/animals/vet/vaccinations';
 
   // ── Admin — reviews ──────────────────────────────────────────────────────
   static const String adminAllReviews         = '/reviews/admin/all';

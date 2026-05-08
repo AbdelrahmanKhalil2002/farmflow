@@ -12,6 +12,7 @@ const {
   deleteIncome,
   updateIncome,
   getSummary,
+  getAnalytics,
 } = require('../controllers/financeController');
 
 const EXPENSE_CATEGORIES = ['feed', 'doctor', 'transport', 'electricity', 'salary', 'rent', 'water', 'maintenance', 'other'];
@@ -145,6 +146,17 @@ router.get(
     query('sellerId').optional().isMongoId(),
   ],
   getSummary
+);
+
+router.get(
+  '/analytics',
+  protect,
+  authorizeRoles('seller', 'admin'),
+  [
+    query('months').optional().isInt({ min: 1, max: 24 }).withMessage('months must be between 1 and 24'),
+    query('sellerId').optional().isMongoId(),
+  ],
+  getAnalytics
 );
 
 module.exports = router;

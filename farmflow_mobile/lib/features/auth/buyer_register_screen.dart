@@ -8,6 +8,7 @@ import '../../core/auth/auth_notifier.dart';
 import '../../core/api/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/national_id_util.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/primary_button.dart';
 
@@ -66,7 +67,7 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
     } on DioException catch (e) {
       setState(() => _error = dioErrorMessage(e));
     } catch (e) {
-      setState(() => _error = 'حدث خطأ غير متوقع');
+      setState(() => _error = context.l10n.unexpectedError);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -83,7 +84,7 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: AppColors.text),
           onPressed: () => context.pop(),
         ),
-        title: const Text('تسجيل مشتري', style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w800)),
+        title: Text(context.l10n.buyerRegisterTitle, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w800)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -97,15 +98,15 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                 const SizedBox(height: 24),
 
                 AppTextField(
-                  label: 'الاسم الكامل',
-                  hint:  'اسمك الثلاثي',
+                  label: context.l10n.fullName,
+                  hint:  context.l10n.fullNameHint,
                   controller: _name,
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'الاسم مطلوب' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? context.l10n.nameRequired : null,
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  label: 'البريد الإلكتروني',
+                  label: context.l10n.emailLabel,
                   hint:  'example@email.com',
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
@@ -113,14 +114,14 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                   textDirection: TextDirection.ltr,
                   autofillHints: const [AutofillHints.email],
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'البريد مطلوب';
-                    if (!v.contains('@')) return 'بريد إلكتروني غير صحيح';
+                    if (v == null || v.trim().isEmpty) return context.l10n.emailRequired;
+                    if (!v.contains('@')) return context.l10n.emailInvalid;
                     return null;
                   },
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  label: 'رقم الهاتف',
+                  label: context.l10n.phoneLabel,
                   hint:  '01X XXXX XXXX',
                   controller: _phone,
                   keyboardType: TextInputType.phone,
@@ -128,12 +129,12 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                   textDirection: TextDirection.ltr,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   autofillHints: const [AutofillHints.telephoneNumber],
-                  validator: (v) => (v == null || v.trim().length < 10) ? 'رقم هاتف غير صحيح' : null,
+                  validator: (v) => (v == null || v.trim().length < 10) ? context.l10n.phoneInvalid : null,
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  label: 'رقم الهوية الوطنية',
-                  hint:  '14 رقم',
+                  label: context.l10n.nationalIdLabel,
+                  hint:  context.l10n.nationalIdHint,
                   controller: _natId,
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.next,
@@ -143,9 +144,9 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                     LengthLimitingTextInputFormatter(14),
                   ],
                   validator: (v) {
-                    if (v == null || v.length != 14) return 'الهوية يجب أن تكون 14 رقم';
+                    if (v == null || v.length != 14) return context.l10n.nationalIdInvalid;
                     final info = parseNationalId(v);
-                    if (!info.isValid) return info.error ?? 'رقم الهوية غير صحيح';
+                    if (!info.isValid) return info.error ?? context.l10n.nationalIdError;
                     return null;
                   },
                 ),
@@ -155,23 +156,23 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                 ],
                 const SizedBox(height: 14),
                 AppTextField(
-                  label: 'كلمة المرور',
-                  hint:  '8 أحرف على الأقل',
+                  label: context.l10n.passwordLabel,
+                  hint:  context.l10n.passwordHint,
                   controller: _pw,
                   obscureText: true,
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.newPassword],
-                  validator: (v) => (v == null || v.length < 8) ? 'كلمة المرور قصيرة جداً' : null,
+                  validator: (v) => (v == null || v.length < 8) ? context.l10n.passwordTooShort : null,
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  label: 'تأكيد كلمة المرور',
-                  hint:  'أعد كتابة كلمة المرور',
+                  label: context.l10n.confirmPasswordLabel,
+                  hint:  context.l10n.confirmPasswordHint,
                   controller: _pwConf,
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   autofillHints: const [AutofillHints.newPassword],
-                  validator: (v) => v != _pw.text ? 'كلمتا المرور غير متطابقتين' : null,
+                  validator: (v) => v != _pw.text ? context.l10n.passwordMismatch : null,
                   onFieldSubmitted: (_) => _submit(),
                 ),
 
@@ -180,7 +181,7 @@ class _BuyerRegisterScreenState extends ConsumerState<BuyerRegisterScreen> {
                   _ErrorBanner(message: _error!),
                 ],
                 const SizedBox(height: 24),
-                PrimaryButton(label: 'إنشاء حساب', onPressed: _submit, loading: _loading),
+                PrimaryButton(label: context.l10n.createAccountButton, onPressed: _submit, loading: _loading),
               ],
             ),
           ),
@@ -231,7 +232,7 @@ class _NationalIdInfoCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                info.error ?? 'رقم الهوية غير صحيح',
+                info.error ?? context.l10n.nationalIdError,
                 style: const TextStyle(fontFamily: 'Cairo', color: AppColors.red, fontSize: 12),
               ),
             ),
@@ -252,12 +253,12 @@ class _NationalIdInfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.check_circle_outline, color: AppColors.green, size: 16),
-              SizedBox(width: 6),
+            children: [
+              const Icon(Icons.check_circle_outline, color: AppColors.green, size: 16),
+              const SizedBox(width: 6),
               Text(
-                'تم التحقق من الهوية',
-                style: TextStyle(fontFamily: 'Cairo', color: AppColors.green,
+                context.l10n.nationalIdVerified,
+                style: const TextStyle(fontFamily: 'Cairo', color: AppColors.green,
                     fontWeight: FontWeight.w700, fontSize: 12),
               ),
             ],
@@ -267,10 +268,10 @@ class _NationalIdInfoCard extends StatelessWidget {
             spacing: 16,
             runSpacing: 4,
             children: [
-              _InfoChip(label: 'تاريخ الميلاد', value: dateFmt.format(info.birthDate!)),
-              _InfoChip(label: 'العمر', value: '${info.age} سنة'),
-              _InfoChip(label: 'المحافظة', value: info.governorate!),
-              _InfoChip(label: 'النوع', value: info.gender!),
+              _InfoChip(label: context.l10n.birthDate, value: dateFmt.format(info.birthDate!)),
+              _InfoChip(label: context.l10n.age, value: '${info.age} سنة'),
+              _InfoChip(label: context.l10n.governorate, value: info.governorate!),
+              _InfoChip(label: context.l10n.gender, value: info.gender!),
             ],
           ),
         ],

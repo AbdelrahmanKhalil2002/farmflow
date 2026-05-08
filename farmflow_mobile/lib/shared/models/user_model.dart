@@ -19,6 +19,7 @@ class UserModel {
     this.farmCertificates = const [],
     this.averageRating = 0.0,
     this.reviewCount = 0,
+    this.workingHours,
     // Buyer
     this.phone,
     this.savedFarms = const [],
@@ -43,6 +44,7 @@ class UserModel {
   final List<String> farmCertificates;
   final double averageRating;
   final int reviewCount;
+  final String? workingHours;
 
   // Buyer fields
   final String? phone;
@@ -78,6 +80,7 @@ class UserModel {
       farmCertificates: toStrings(json['farmCertificates']),
       averageRating:    (json['averageRating'] as num?)?.toDouble() ?? 0.0,
       reviewCount:      json['reviewCount'] as int? ?? 0,
+      workingHours:     json['workingHours'] as String?,
       phone:            json['phone'] as String?,
       savedFarms:       toStrings(json['savedFarms']),
     );
@@ -101,6 +104,7 @@ class UserModel {
     'farmCertificates': farmCertificates,
     'averageRating':    averageRating,
     'reviewCount':      reviewCount,
+    if (workingHours != null) 'workingHours':  workingHours,
     if (phone        != null) 'phone':         phone,
     'savedFarms':       savedFarms,
   };
@@ -123,6 +127,7 @@ class UserModel {
     List<String>? farmCertificates,
     double? averageRating,
     int? reviewCount,
+    String? workingHours,
     String? phone,
     List<String>? savedFarms,
   }) => UserModel(
@@ -143,6 +148,7 @@ class UserModel {
     farmCertificates: farmCertificates ?? this.farmCertificates,
     averageRating:    averageRating    ?? this.averageRating,
     reviewCount:      reviewCount      ?? this.reviewCount,
+    workingHours:     workingHours     ?? this.workingHours,
     phone:            phone            ?? this.phone,
     savedFarms:       savedFarms       ?? this.savedFarms,
   );

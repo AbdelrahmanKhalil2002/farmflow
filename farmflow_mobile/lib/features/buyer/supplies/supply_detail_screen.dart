@@ -8,6 +8,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/api/image_helper.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/supply_model.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../shared/widgets/contact_buttons.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
 
@@ -138,8 +139,8 @@ class _SupplyDetailBody extends ConsumerWidget {
                               color: AppColors.greenBg,
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text('🚚 توصيل متاح',
-                                style: TextStyle(fontFamily: 'Cairo',
+                            child: Text('🚚 ${context.l10n.deliveryAvailable}',
+                                style: const TextStyle(fontFamily: 'Cairo',
                                     fontSize: 11, fontWeight: FontWeight.w700,
                                     color: AppColors.greenText)),
                           ),
@@ -178,33 +179,33 @@ class _SupplyDetailBody extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('تفاصيل المنتج',
-                        style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+                    Text(context.l10n.supplyDetailTitle,
+                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 15,
                             fontWeight: FontWeight.w800, color: AppColors.text)),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(child: _SpecCard(
-                            label: 'الكمية المتاحة',
+                            label: context.l10n.availableQuantity,
                             value: '${supply.quantity.toStringAsFixed(0)} ${supply.unit}')),
                         const SizedBox(width: 8),
                         Expanded(child: _SpecCard(
-                            label: 'الحد الأدنى للطلب',
+                            label: context.l10n.minOrderQuantity,
                             value: '${supply.minOrderQty} ${supply.unit}')),
                       ],
                     ),
                     if (supply.location != null) ...[
                       const SizedBox(height: 8),
                       _SpecCard(
-                          label: 'الموقع',
+                          label: context.l10n.location,
                           value: supply.location!,
                           wide: true),
                     ],
                     if (supply.description != null &&
                         supply.description!.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      const Text('الوصف',
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
+                      Text(context.l10n.supplyDescription2,
+                          style: const TextStyle(fontFamily: 'Cairo', fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: AppColors.muted)),
                       const SizedBox(height: 6),
@@ -308,8 +309,8 @@ class _SellerCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('البائع',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 15,
+          Text(context.l10n.supplySellerSection,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 15,
                   fontWeight: FontWeight.w800, color: AppColors.text)),
           const SizedBox(height: 12),
           asyncSeller.when(
@@ -337,8 +338,8 @@ class _SellerCard extends ConsumerWidget {
                     ),
                     TextButton(
                       onPressed: () => context.push('/buyer/farm/$sellerId'),
-                      child: const Text('عرض المزرعة',
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 12,
+                      child: Text(context.l10n.viewFarm,
+                          style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                               color: AppColors.green,
                               fontWeight: FontWeight.w700)),
                     ),

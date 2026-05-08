@@ -4,24 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { registerUser, verifyNationalId } from '../services/authService';
 import { validateEgyptianId } from '../utils/egyptianId';
 import { useLang, LangToggle } from '../context/LangContext';
+import { C as _C } from '../tokens';
+import { animalImg, imgFallback } from '../utils/animalImg';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:           '#FFFDF8',
-  white:        '#FFFFFF',
-  buyerPanel:   'linear-gradient(155deg, #0E2E1A 0%, #1A5C30 50%, #2D7A42 100%)',
-  sellerPanel:  'linear-gradient(155deg, #1C0E05 0%, #4A2208 48%, #6B3518 100%)',
-  green:        '#3A7D44',
-  greenDk:      '#2D6235',
-  greenLt:      '#F0F7F1',
-  tan:          '#C49A6C',
-  amberLt:      '#FFFBEB',
-  border:       '#E8D5C0',
-  text:         '#1C0E05',
-  muted:        '#8B6B5A',
-  errorBg:      '#FFF5F5',
-  errorBorder:  '#FECACA',
-  errorText:    '#B91C1C',
+  ..._C,
+  buyerPanel:  'linear-gradient(155deg, #0E2E1A 0%, #1A5C30 50%, #2D7A42 100%)',
+  sellerPanel: 'linear-gradient(155deg, #1C0E05 0%, #4A2208 48%, #6B3518 100%)',
+  amberLt:     '#FFFBEB',
 };
 
 // ─── Bilingual data arrays ────────────────────────────────────────────────────
@@ -55,16 +46,86 @@ const GOVERNORATES = [
   { ar: 'البحر الأحمر',  en: 'Red Sea'        },
 ];
 
-const ANIMAL_TYPES = [
-  { id: 'cattle',  emoji: '🐄', ar: 'أبقار',  en: 'Cattle'  },
-  { id: 'buffalo', emoji: '🐃', ar: 'جاموس',  en: 'Buffalo' },
-  { id: 'sheep',   emoji: '🐑', ar: 'أغنام',  en: 'Sheep'   },
-  { id: 'goat',    emoji: '🐐', ar: 'ماعز',   en: 'Goats'   },
-  { id: 'camel',   emoji: '🐪', ar: 'إبل',    en: 'Camels'  },
-  { id: 'horse',   emoji: '🐎', ar: 'خيول',   en: 'Horses'  },
-  { id: 'poultry', emoji: '🐓', ar: 'دواجن',  en: 'Poultry' },
-  { id: 'rabbit',  emoji: '🐇', ar: 'أرانب',  en: 'Rabbits' },
+// ── Context-aware animal options per farm type ────────────────────────────────
+const FARM_ANIMAL_OPTIONS = {
+  livestock: [
+    { id: 'cattle',  emoji: '🐄', ar: 'أبقار', en: 'Cattle'  },
+    { id: 'buffalo', emoji: '🐃', ar: 'جاموس', en: 'Buffalo' },
+    { id: 'sheep',   emoji: '🐑', ar: 'أغنام', en: 'Sheep'   },
+    { id: 'goat',    emoji: '🐐', ar: 'ماعز',  en: 'Goats'   },
+    { id: 'camel',   emoji: '🐪', ar: 'إبل',   en: 'Camels'  },
+  ],
+  horses: [
+    { id: 'horse', emoji: '🐎', ar: 'خيول', en: 'Horses' },
+  ],
+  poultry: [
+    { id: 'chicken_baladi',  emoji: '🐓', ar: 'فراخ بلدي',  en: 'Local Chicken' },
+    { id: 'chicken_broiler', emoji: '🐔', ar: 'فراخ تسمين', en: 'Broiler'       },
+    { id: 'chicken_layers',  emoji: '🥚', ar: 'فراخ بياضة', en: 'Layers'        },
+    { id: 'duck',            emoji: '🦆', ar: 'بط',         en: 'Duck'          },
+    { id: 'turkey',          emoji: '🦃', ar: 'ديك رومي',  en: 'Turkey'        },
+    { id: 'pigeon',          emoji: '🕊️', ar: 'حمام',       en: 'Pigeon'        },
+    { id: 'quail',           emoji: '🐦', ar: 'سمان',       en: 'Quail'         },
+    { id: 'goose',           emoji: '🦢', ar: 'إوز',        en: 'Goose'         },
+    { id: 'guinea',          emoji: '🦜', ar: 'دراج',       en: 'Guinea Fowl'   },
+    { id: 'peacock',         emoji: '🦚', ar: 'طاووس',      en: 'Peacock'       },
+  ],
+  dairy: [
+    { id: 'cattle',  emoji: '🐄', ar: 'أبقار', en: 'Cattle'  },
+    { id: 'buffalo', emoji: '🐃', ar: 'جاموس', en: 'Buffalo' },
+    { id: 'goat',    emoji: '🐐', ar: 'ماعز',  en: 'Goats'   },
+    { id: 'sheep',   emoji: '🐑', ar: 'أغنام', en: 'Sheep'   },
+  ],
+  exotic: [
+    { id: 'ostrich',   emoji: '🦢', ar: 'نعام',    en: 'Ostrich'   },
+    { id: 'gazelle',   emoji: '🦌', ar: 'غزلان',   en: 'Gazelles'  },
+    { id: 'oryx',      emoji: '🦬', ar: 'مها',     en: 'Oryx'      },
+    { id: 'deer',      emoji: '🦌', ar: 'أيل',     en: 'Deer'      },
+    { id: 'llama',     emoji: '🦙', ar: 'لاما',    en: 'Llama'     },
+    { id: 'alpaca',    emoji: '🦙', ar: 'ألبكا',   en: 'Alpaca'    },
+    { id: 'donkey',    emoji: '🐴', ar: 'حمير',    en: 'Donkeys'   },
+    { id: 'mule',      emoji: '🐴', ar: 'بغال',    en: 'Mules'     },
+  ],
+};
+// mixed shows a broad set
+FARM_ANIMAL_OPTIONS.mixed = [
+  ...FARM_ANIMAL_OPTIONS.livestock,
+  ...FARM_ANIMAL_OPTIONS.horses,
+  { id: 'chicken_baladi', emoji: '🐓', ar: 'فراخ بلدي',  en: 'Local Chicken' },
+  { id: 'duck',           emoji: '🦆', ar: 'بط',         en: 'Duck'          },
+  { id: 'turkey',         emoji: '🦃', ar: 'ديك رومي',  en: 'Turkey'        },
 ];
+FARM_ANIMAL_OPTIONS.other = FARM_ANIMAL_OPTIONS.mixed;
+
+// ── Breed chips per animal type ───────────────────────────────────────────────
+const ANIMAL_BREEDS_REG = {
+  cattle:          ['فريزيان', 'هولشتاين', 'براهمان', 'سيمنتال', 'ليموزين', 'واجو', 'أنغوس', 'بلدي'],
+  buffalo:         ['بلدي مصري', 'مري', 'نيلي رافي'],
+  sheep:           ['نجدي', 'عواسي', 'بربرة', 'نعيمي', 'ميرينو', 'سفولك', 'بلدي'],
+  goat:            ['نوبي', 'بور', 'شامي', 'بلدي', 'سانن', 'ألباين'],
+  camel:           ['دروميدار', 'مجاهيم', 'حُمُر', 'وضحاء'],
+  horse:           ['عربي أصيل', 'ثوروبرد', 'كوارتر هورس', 'أندلسي', 'فريزيان', 'خيل عمل'],
+  // poultry sub-types
+  chicken_baladi:  ['فيومي', 'دمياطي', 'سيناوي', 'بلدي مصري', 'عسيل', 'دجاج الصخرة', 'حساني'],
+  chicken_broiler: ['روس 308', 'كوب 500', 'هبارد', 'أريبياكلس', 'راس', 'مارشال'],
+  chicken_layers:  ['هاي لاين', 'لومان براون', 'نوفوجن', 'إيزا براون', 'شيفر', 'باب كوك'],
+  duck:            ['بكين', 'مسكوفي', 'كايوغا', 'رووين', 'إيندير رانر'],
+  turkey:          ['برونز الكبير', 'ذهبي', 'أبيض عريض الصدر', 'نيكولاس 300', 'بيوتي'],
+  pigeon:          ['زاجل', 'مموه', 'مروب', 'تيلر', 'جيكوبان', 'رومان', 'الملك', 'قاصر'],
+  quail:           ['ياباني', 'أمريكي', 'فرنسي', 'بوب وايت', 'كوتورنيكس'],
+  goose:           ['إمبدن', 'تولوز', 'أفريكان', 'بيلجريم', 'أوروبي'],
+  guinea:          ['بيرل', 'أبيض', 'لافندر', 'كورنيش'],
+  peacock:         ['هندي أزرق', 'أبيض', 'شابو', 'بياض العين'],
+  // exotic animals
+  ostrich:         ['أفريقي الرقبة الحمراء', 'أفريقي الرقبة الزرقاء', 'أسترالي', 'أمريكي', 'صومالي'],
+  gazelle:         ['غزال الريم', 'غزال الدوركاس', 'غزال السبلة', 'غزال الجبلي', 'غزال عفري'],
+  oryx:            ['مها عربي أبيض', 'مها عربي أسمر'],
+  deer:            ['أيل أحمر', 'أيل الأكسيس', 'أيل الدام'],
+  llama:           ['كلاسيكية', 'بنية', 'بيضاء'],
+  alpaca:          ['هواكايا', 'سوري'],
+  donkey:          ['مصري بلدي', 'صومالي', 'نوبي', 'إيطالي', 'أمريكي'],
+  mule:            ['بغل عمل', 'بغل رياضي'],
+};
 
 const BUYER_PERKS = [
   { ar: 'أكثر من ١٢٠٠ إعلان معتمد',   en: '1,200+ verified listings'        },
@@ -151,6 +212,7 @@ const PhoneField = ({ label, name, value, onChange, required = true, autoFocus =
         </div>
         <input id={name} name={name} type="tel" value={value} onChange={onChange}
           placeholder="1X XXXX XXXX" required={required} autoFocus={autoFocus}
+          maxLength={11} inputMode="numeric"
           style={{ flex: 1, border: 'none', padding: '12px 14px', fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none', background: 'transparent', minWidth: 0, direction: 'ltr' }} />
       </div>
     </div>
@@ -337,6 +399,8 @@ const Register = () => {
   const [isMobile,   setMobile]   = useState(window.innerWidth < 768);
   const [idStatus,   setIdStatus] = useState('idle');
 
+  const defaultFarm = () => ({ name: '', type: 'livestock', governorate: '', farmPhone: '', animalTypes: [], typicalPrices: {}, breeds: {}, dairyProducts: false });
+
   const [form, setForm] = useState({
     name: '', password: '', confirm: '', agreed: false,
     role: roleFromUrl || 'buyer', nationalId: '',
@@ -344,9 +408,8 @@ const Register = () => {
     email: '', phone: '', governorate: '',
     // seller step 1
     personalPhone: '',
-    // seller step 2
-    farmName: '', farmPhone: '', sellerGov: '',
-    experience: '', animalTypes: [], bio: '',
+    // seller step 2 — multi-farm
+    farms: [defaultFarm()],
   });
 
   useEffect(() => { if (user) navigate('/dashboard', { replace: true }); }, [user, navigate]);
@@ -367,12 +430,44 @@ const Register = () => {
 
   const pickRole = (role) => { setForm(p => ({ ...p, role })); setIdStatus('idle'); setStep(1); };
 
-  const toggleAnimal = (id) =>
+  // ── Farm helpers ─────────────────────────────────────────────────────────────
+  const setFarmCount = (n) => {
+    setForm(p => {
+      const cur = p.farms;
+      if (n > cur.length) return { ...p, farms: [...cur, ...Array(n - cur.length).fill(null).map(defaultFarm)] };
+      return { ...p, farms: cur.slice(0, n) };
+    });
+  };
+
+  const updateFarm = (idx, patch) =>
+    setForm(p => ({ ...p, farms: p.farms.map((f, i) => i === idx ? { ...f, ...patch } : f) }));
+
+  const toggleFarmAnimal = (idx, animalId) =>
     setForm(p => ({
       ...p,
-      animalTypes: p.animalTypes.includes(id)
-        ? p.animalTypes.filter(x => x !== id)
-        : [...p.animalTypes, id],
+      farms: p.farms.map((f, i) => {
+        if (i !== idx) return f;
+        const has = f.animalTypes.includes(animalId);
+        const animalTypes = has ? f.animalTypes.filter(x => x !== animalId) : [...f.animalTypes, animalId];
+        const typicalPrices = has ? Object.fromEntries(Object.entries(f.typicalPrices).filter(([k]) => k !== animalId)) : f.typicalPrices;
+        return { ...f, animalTypes, typicalPrices };
+      }),
+    }));
+
+  const setAnimalPrice = (idx, animalId, price) =>
+    setForm(p => ({
+      ...p,
+      farms: p.farms.map((f, i) => i !== idx ? f : { ...f, typicalPrices: { ...f.typicalPrices, [animalId]: price } }),
+    }));
+
+  const toggleAnimalBreed = (farmIdx, animalId, breed) =>
+    setForm(p => ({
+      ...p,
+      farms: p.farms.map((f, i) => {
+        if (i !== farmIdx) return f;
+        const cur = f.breeds[animalId] || [];
+        return { ...f, breeds: { ...f.breeds, [animalId]: cur.includes(breed) ? cur.filter(b => b !== breed) : [...cur, breed] } };
+      }),
     }));
 
   const validateStep1 = () => {
@@ -390,8 +485,12 @@ const Register = () => {
   };
 
   const validateStep2 = () => {
-    if (!form.farmName.trim())  { setError(t('reg.err.farmName'));  return false; }
-    if (!form.farmPhone.trim()) { setError(t('reg.err.farmPhone')); return false; }
+    const ORDINALS = ['الأولى','الثانية','الثالثة','الرابعة'];
+    for (let i = 0; i < form.farms.length; i++) {
+      const f = form.farms[i];
+      if (!f.name.trim())      { setError(`أدخل اسم المزرعة ${ORDINALS[i] || i+1}`);     return false; }
+      if (!f.farmPhone.trim()) { setError(`أدخل تليفون المزرعة ${ORDINALS[i] || i+1}`); return false; }
+    }
     setError(''); return true;
   };
 
@@ -408,13 +507,25 @@ const Register = () => {
         payload.email = form.email; payload.phone = form.phone; payload.governorate = form.governorate;
       } else {
         payload.personalPhone = form.personalPhone;
-        if (form.email)      payload.email       = form.email;
-        payload.farmName     = form.farmName.trim();
-        payload.farmPhone    = form.farmPhone;
-        if (form.sellerGov)  payload.governorate = form.sellerGov;
-        if (form.experience) payload.experience  = form.experience;
-        payload.animalTypes  = form.animalTypes;
-        if (form.bio.trim()) payload.bio         = form.bio.trim();
+        if (form.email) payload.email = form.email;
+        // backward-compat scalar fields (used by login-by-farmPhone etc.)
+        payload.farmName  = form.farms[0]?.name?.trim() || '';
+        payload.farmPhone = form.farms[0]?.farmPhone   || '';
+        if (form.farms[0]?.governorate) payload.governorate = form.farms[0].governorate;
+        payload.animalTypes = [...new Set(form.farms.flatMap(f => f.animalTypes))];
+        // new multi-farm payload
+        payload.farms = form.farms.map(f => ({
+          name:          f.name.trim(),
+          type:          f.dairyProducts ? 'dairy' : f.type,
+          governorate:   f.governorate,
+          farmPhone:     f.farmPhone,
+          animalTypes:   f.animalTypes,
+          typicalPrices: Object.entries(f.typicalPrices)
+            .filter(([, v]) => v !== '' && Number(v) > 0)
+            .map(([animalType, price]) => ({ animalType, price: Number(price) })),
+          tradedBreeds:  Object.entries(f.breeds)
+            .flatMap(([animalType, breeds]) => breeds.map(breed => ({ animalType, breed }))),
+        }));
       }
       const { data } = await registerUser(payload);
       login(data.user, data.token);
@@ -548,10 +659,14 @@ const Register = () => {
             </div>
 
             <h2 style={{ fontSize: '22px', fontWeight: '800', margin: '0 0 2px', lineHeight: 1.3 }}>
-              {step === 2 ? t('reg.farmDetailsTitle') : (isBuyer ? t('reg.welcomeBuyer') : t('reg.welcomeSeller'))}
+              {step === 2
+                ? (form.farms.length === 1 ? 'إعداد مزرعتك' : `إعداد ${form.farms.length} مزارع`)
+                : (isBuyer ? t('reg.welcomeBuyer') : t('reg.welcomeSeller'))}
             </h2>
             <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', margin: '0 0 18px', fontStyle: 'italic' }}>
-              {step === 2 ? t('reg.farmDetailsDesc') : (isBuyer ? t('reg.buyerPanelDesc') : t('reg.sellerPanelDesc'))}
+              {step === 2
+                ? 'حدد النوع والحيوانات وأسعارك التقريبية'
+                : (isBuyer ? t('reg.buyerPanelDesc') : t('reg.sellerPanelDesc'))}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -735,95 +850,220 @@ const Register = () => {
             </form>
           )}
 
-          {/* ── STEP 2 ── */}
+          {/* ── STEP 2 — Multi-farm setup ── */}
           {step === 2 && (
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-              {/* Farm name */}
-              <Field label={t('reg.farmName')} name="farmName">
-                {({ focused, setFocused }) => (
-                  <input id="farmName" name="farmName" type="text" value={form.farmName} onChange={handleChange}
-                    placeholder={t('reg.farmNamePlaceholder')} required autoFocus
-                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', background: C.white, fontSize: '15px', color: C.text, fontFamily: 'inherit', outline: 'none' }} />
-                )}
-              </Field>
-
-              {/* Farm phone */}
-              <PhoneField label={t('reg.farmPhone')} name="farmPhone" value={form.farmPhone} onChange={handleChange} />
-
-              {/* Governorate (optional for seller) */}
+              {/* Farm count selector */}
               <div>
-                <label htmlFor="sellerGov" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.governorate')}</span>
-                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
-                </label>
-                <select id="sellerGov" name="sellerGov" value={form.sellerGov} onChange={handleChange}
-                  style={selStyle(!!form.sellerGov)}
-                  onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = C.border}>
-                  <option value="">{t('reg.govSelect')}</option>
-                  {GOVERNORATES.map(g => (
-                    <option key={g.en} value={g.en}>{lang === 'ar' ? g.ar : g.en}</option>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: C.text, marginBottom: '10px' }}>
+                  كم عدد مزارعك؟
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[1,2,3,4].map(n => (
+                    <button key={n} type="button"
+                      onClick={() => setFarmCount(n)}
+                      style={{
+                        flex: 1, padding: '10px 4px',
+                        border: `2px solid ${form.farms.length === n ? C.green : C.border}`,
+                        borderRadius: '10px',
+                        background: form.farms.length === n ? C.greenLt : C.white,
+                        color: form.farms.length === n ? C.green : C.text,
+                        fontSize: '15px', fontWeight: '800',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        transition: 'all 0.15s',
+                      }}>
+                      {n}
+                    </button>
                   ))}
-                </select>
-              </div>
-
-              {/* Experience */}
-              <div>
-                <label htmlFor="experience" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.experience')}</span>
-                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
-                </label>
-                <select id="experience" name="experience" value={form.experience} onChange={handleChange}
-                  style={selStyle(!!form.experience)}
-                  onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = C.border}>
-                  <option value="">{t('reg.expSelect')}</option>
-                  <option value="<1">{t('reg.expLt1')}</option>
-                  <option value="1-3">{t('reg.exp13')}</option>
-                  <option value="3-5">{t('reg.exp35')}</option>
-                  <option value="5-10">{t('reg.exp510')}</option>
-                  <option value=">10">{t('reg.expGt10')}</option>
-                </select>
-              </div>
-
-              {/* Animal types */}
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, marginBottom: '4px' }}>
-                  {t('reg.animalTypesTitle')}
-                  <span style={{ fontSize: '11px', color: C.muted, fontWeight: '400', marginInlineStart: '6px' }}>{t('common.optional')}</span>
                 </div>
-                <p style={{ fontSize: '11px', color: C.muted, margin: '0 0 10px' }}>{t('reg.animalTypesHint')}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                  {ANIMAL_TYPES.map(({ id, emoji, ar, en }) => {
-                    const active = form.animalTypes.includes(id);
-                    return (
-                      <div key={id}
-                        role="checkbox" aria-checked={active} tabIndex={0}
-                        onClick={() => toggleAnimal(id)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAnimal(id); } }}
-                        style={{ border: `2px solid ${active ? C.green : C.border}`, borderRadius: '12px', padding: '11px 6px', textAlign: 'center', cursor: 'pointer', background: active ? C.greenLt : C.white, transition: 'all 0.15s' }}>
-                        <div style={{ fontSize: '22px', lineHeight: 1, marginBottom: '4px' }}>{emoji}</div>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: active ? C.green : C.text }}>{lang === 'ar' ? ar : en}</div>
+                <p style={{ margin: '6px 0 0', fontSize: '11px', color: C.muted }}>يمكنك إضافة مزارع إضافية لاحقًا من لوحة التحكم</p>
+              </div>
+
+              {/* Farm cards */}
+              {form.farms.map((farm, idx) => {
+                const ORDINALS = ['الأولى','الثانية','الثالثة','الرابعة'];
+                const FARM_TYPES = [
+                  { value: 'livestock', label: '🐄 مواشي'  },
+                  { value: 'horses',    label: '🐎 خيول'    },
+                  { value: 'poultry',   label: '🐓 دواجن'   },
+                  { value: 'dairy',     label: '🥛 ألبان'   },
+                  { value: 'mixed',     label: '🌾 متنوع'   },
+                ];
+                return (
+                  <div key={idx} style={{
+                    border: `1.5px solid ${C.border}`, borderRadius: '14px',
+                    overflow: 'hidden',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  }}>
+                    {/* Card header */}
+                    <div style={{ background: C.greenLt, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: `1px solid ${C.border}` }}>
+                      <span style={{ fontSize: '18px' }}>🏡</span>
+                      <span style={{ fontSize: '14px', fontWeight: '800', color: C.green }}>
+                        المزرعة {ORDINALS[idx] || idx + 1}
+                      </span>
+                    </div>
+
+                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                      {/* Name */}
+                      <div>
+                        <label style={{ fontSize: '12px', fontWeight: '700', color: C.text, display: 'block', marginBottom: '5px' }}>
+                          اسم المزرعة <span style={{ color: '#DC2626' }}>*</span>
+                        </label>
+                        <input value={farm.name} autoFocus={idx === 0}
+                          onChange={e => updateFarm(idx, { name: e.target.value })}
+                          placeholder="مثال: مزرعة النيل للمواشي"
+                          style={{ width: '100%', padding: '10px 13px', boxSizing: 'border-box', border: `1.5px solid ${C.border}`, borderRadius: '9px', background: C.white, fontSize: '14px', color: C.text, fontFamily: 'inherit', outline: 'none' }}
+                          onFocus={e => e.target.style.borderColor = C.green}
+                          onBlur={e => e.target.style.borderColor = C.border} />
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
 
-              {/* Bio */}
-              <div>
-                <label htmlFor="bio" style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{t('reg.bio')}</span>
-                  <span style={{ fontSize: '11px', color: C.muted }}>{t('common.optional')}</span>
-                </label>
-                <textarea id="bio" name="bio" value={form.bio} onChange={handleChange}
-                  rows={3} placeholder={t('reg.bioPlaceholder')}
-                  style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', border: `1.5px solid ${C.border}`, borderRadius: '10px', background: C.white, fontSize: '14px', color: C.text, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }}
-                  onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = C.border} />
-              </div>
+                      {/* Farm category — 4 main choices */}
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: C.text, marginBottom: '8px' }}>نوع المزرعة</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[
+                            { value: 'livestock', emoji: '🐄', label: 'مواشي'      },
+                            { value: 'horses',    emoji: '🐎', label: 'خيول'        },
+                            { value: 'poultry',   emoji: '🐔', label: 'دواجن'       },
+                            { value: 'exotic',    emoji: '🦢', label: 'نعام ونادر' },
+                          ].map(ft => {
+                            const active = farm.type === ft.value;
+                            return (
+                              <button key={ft.value} type="button"
+                                onClick={() => updateFarm(idx, { type: ft.value, animalTypes: [], typicalPrices: {}, breeds: {} })}
+                                style={{ padding: '12px 6px', borderRadius: '12px', border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenLt : C.white, color: active ? C.green : C.text, fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.13s', textAlign: 'center' }}>
+                                <div style={{ fontSize: '22px', marginBottom: '4px' }}>{ft.emoji}</div>
+                                {ft.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* Dairy products toggle — shown when livestock is selected */}
+                        {farm.type === 'livestock' && (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', cursor: 'pointer', padding: '8px 12px', background: farm.dairyProducts ? `${C.green}10` : C.bg, borderRadius: '8px', border: `1px solid ${farm.dairyProducts ? C.green : C.border}`, transition: 'all 0.15s' }}>
+                            <input type="checkbox" checked={!!farm.dairyProducts} onChange={e => updateFarm(idx, { dairyProducts: e.target.checked })}
+                              style={{ width: '16px', height: '16px', accentColor: C.green, cursor: 'pointer' }} />
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: farm.dairyProducts ? C.green : C.text }}>🥛 تشمل منتجات الألبان</span>
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Governorate + Phone */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: '700', color: C.text, display: 'block', marginBottom: '5px' }}>المحافظة</label>
+                          <select value={farm.governorate} onChange={e => updateFarm(idx, { governorate: e.target.value })}
+                            style={{ width: '100%', padding: '10px 11px', border: `1.5px solid ${C.border}`, borderRadius: '9px', background: C.white, fontSize: '13px', color: farm.governorate ? C.text : C.muted, fontFamily: 'inherit', cursor: 'pointer' }}
+                            onFocus={e => e.target.style.borderColor = C.green}
+                            onBlur={e => e.target.style.borderColor = C.border}>
+                            <option value="">اختر المحافظة</option>
+                            {GOVERNORATES.map(g => (
+                              <option key={g.en} value={g.ar}>{lang === 'ar' ? g.ar : g.en}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '12px', fontWeight: '700', color: C.text, display: 'block', marginBottom: '5px' }}>
+                            تليفون المزرعة <span style={{ color: '#DC2626' }}>*</span>
+                          </label>
+                          <input value={farm.farmPhone} onChange={e => updateFarm(idx, { farmPhone: e.target.value })}
+                            placeholder="01xxxxxxxxx" type="tel" inputMode="numeric" maxLength={11}
+                            style={{ width: '100%', padding: '10px 13px', boxSizing: 'border-box', border: `1.5px solid ${C.border}`, borderRadius: '9px', background: C.white, fontSize: '14px', color: C.text, fontFamily: 'inherit', outline: 'none' }}
+                            onFocus={e => e.target.style.borderColor = C.green}
+                            onBlur={e => e.target.style.borderColor = C.border} />
+                        </div>
+                      </div>
+
+                      {/* Context-aware animal types */}
+                      {(() => {
+                        const animalOptions = FARM_ANIMAL_OPTIONS[farm.type] || FARM_ANIMAL_OPTIONS.livestock;
+                        const cols = farm.type === 'poultry' ? 'repeat(4, 1fr)' : 'repeat(4, 1fr)';
+                        return (
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: C.text, marginBottom: '4px' }}>
+                              {farm.type === 'poultry' ? 'أنواع الدواجن' : farm.type === 'horses' ? 'نوع الخيول' : 'الحيوانات'}
+                              <span style={{ fontSize: '11px', color: C.muted, fontWeight: '400', marginInlineStart: '6px' }}>اختياري</span>
+                            </div>
+                            <p style={{ margin: '0 0 10px', fontSize: '11px', color: C.muted }}>اختر الأنواع التي تتعامل بها</p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '7px', marginBottom: '12px' }}>
+                              {animalOptions.map(({ id, emoji, ar, en }) => {
+                                const active = farm.animalTypes.includes(id);
+                                return (
+                                  <div key={id} role="checkbox" aria-checked={active} tabIndex={0}
+                                    onClick={() => toggleFarmAnimal(idx, id)}
+                                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFarmAnimal(idx, id); } }}
+                                    style={{ border: `2px solid ${active ? C.green : C.border}`, borderRadius: '12px', padding: '12px 6px 8px', textAlign: 'center', cursor: 'pointer', background: active ? C.greenLt : C.white, transition: 'all 0.15s', boxShadow: active ? `0 0 0 3px ${C.green}22` : 'none' }}>
+                                    <img src={animalImg(id, emoji)} alt={ar} onError={imgFallback(emoji)} style={{ width: '40px', height: '40px', objectFit: 'contain', display: 'block', margin: '0 auto 8px', borderRadius: '8px' }} />
+                                    <div style={{ fontSize: '10px', fontWeight: '700', color: active ? C.green : C.text, lineHeight: 1.3 }}>{lang === 'ar' ? ar : en}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Breed chips per selected animal */}
+                            {farm.animalTypes.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px', background: C.bg, borderRadius: '10px', border: `1px solid ${C.border}`, marginBottom: '12px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: '700', color: C.green }}>السلالات التي تتعامل بها</div>
+                                {farm.animalTypes.map(animalId => {
+                                  const animal = animalOptions.find(a => a.id === animalId);
+                                  const breedList = ANIMAL_BREEDS_REG[animalId] || [];
+                                  if (!animal || !breedList.length) return null;
+                                  const selectedBreeds = farm.breeds[animalId] || [];
+                                  return (
+                                    <div key={animalId}>
+                                      <div style={{ fontSize: '11px', fontWeight: '700', color: C.text, marginBottom: '6px' }}>
+                                        {animal.emoji} {lang === 'ar' ? animal.ar : animal.en}
+                                      </div>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                        {breedList.map(breed => {
+                                          const sel = selectedBreeds.includes(breed);
+                                          return (
+                                            <button key={breed} type="button" onClick={() => toggleAnimalBreed(idx, animalId, breed)}
+                                              style={{ padding: '4px 11px', borderRadius: '99px', border: `1px solid ${sel ? C.green : C.border}`, background: sel ? C.greenLt : 'transparent', color: sel ? C.green : C.muted, fontSize: '11px', fontWeight: sel ? '700' : '500', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
+                                              {breed}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Price inputs for selected animals */}
+                            {farm.animalTypes.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', background: C.bg, borderRadius: '10px', border: `1px solid ${C.border}` }}>
+                                <div style={{ fontSize: '11px', fontWeight: '700', color: C.green, marginBottom: '2px' }}>متوسط سعر الرأس (جنيه مصري)</div>
+                                {farm.animalTypes.map(animalId => {
+                                  const animal = animalOptions.find(a => a.id === animalId);
+                                  if (!animal) return null;
+                                  return (
+                                    <div key={animalId} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <span style={{ fontSize: '16px', width: '22px', textAlign: 'center', flexShrink: 0 }}>{animal.emoji}</span>
+                                      <span style={{ fontSize: '12px', fontWeight: '600', color: C.text, minWidth: '60px' }}>{lang === 'ar' ? animal.ar : animal.en}</span>
+                                      <input value={farm.typicalPrices[animalId] || ''} onChange={e => setAnimalPrice(idx, animalId, e.target.value)}
+                                        placeholder="مثال: 8000" type="number" min="0" inputMode="numeric"
+                                        style={{ flex: 1, padding: '7px 10px', border: `1.5px solid ${C.border}`, borderRadius: '8px', fontSize: '13px', color: C.text, background: C.white, fontFamily: 'inherit', outline: 'none' }}
+                                        onFocus={e => e.target.style.borderColor = C.green}
+                                        onBlur={e => e.target.style.borderColor = C.border} />
+                                      <span style={{ fontSize: '11px', color: C.muted, flexShrink: 0 }}>جنيه</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                    </div>
+                  </div>
+                );
+              })}
 
               {error && <ErrorBox msg={error} />}
 
@@ -836,7 +1076,7 @@ const Register = () => {
                   style={{ flex: 2, padding: '13px', background: submitting ? '#6AAF74' : C.green, color: '#fff', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s', letterSpacing: '-0.2px' }}
                   onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = C.greenDk; }}
                   onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.green; }}>
-                  {submitting ? t('reg.creating') : t('reg.createFarm') + ' →'}
+                  {submitting ? t('reg.creating') : `إنشاء ${form.farms.length > 1 ? form.farms.length + ' مزارع' : 'المزرعة'} →`}
                 </button>
               </div>
             </form>

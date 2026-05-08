@@ -15,6 +15,7 @@ import '../../../shared/widgets/contact_buttons.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/shimmer_widget.dart';
 import '../favorites/favorites_service.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import 'farm_detail_service.dart';
 
 class FarmDetailScreen extends ConsumerStatefulWidget {
@@ -54,9 +55,9 @@ class _FarmDetailScreenState extends ConsumerState<FarmDetailScreen>
           appBar: AppBar(leading: BackButton(onPressed: () => context.pop())),
           body: EmptyState(
             icon: Icons.wifi_off_rounded,
-            title: 'تعذّر التحميل',
+            title: context.l10n.farmDetailLoadFailed,
             subtitle: e.toString(),
-            actionLabel: 'إعادة المحاولة',
+            actionLabel: context.l10n.retry,
             action: () => ref.invalidate(farmDetailProvider(widget.sellerId)),
           ),
         ),
@@ -139,10 +140,10 @@ class _FarmDetailBody extends StatelessWidget {
               fontSize: 13,
             ),
             tabs: [
-              Tab(text: 'مواشي (${data.listings.length})'),
-              Tab(text: 'ألبان (${data.dairy.length})'),
-              Tab(text: 'مستلزمات (${data.supplies.length})'),
-              const Tab(text: 'التقييمات'),
+              Tab(text: '${context.l10n.tabLivestock} (${data.listings.length})'),
+              Tab(text: '${context.l10n.tabDairy} (${data.dairy.length})'),
+              Tab(text: '${context.l10n.tabSuppliesLabel} (${data.supplies.length})'),
+              Tab(text: context.l10n.tabReviews),
             ],
           ),
         ),
@@ -200,13 +201,13 @@ class _HeaderCard extends StatelessWidget {
                 iconColor: AppColors.amber,
                 label: seller.averageRating > 0
                     ? seller.averageRating.toStringAsFixed(1)
-                    : 'جديد',
+                    : context.l10n.newBadge,
               ),
               const SizedBox(width: 12),
               _StatBadge(
                 icon: Icons.rate_review_outlined,
                 iconColor: AppColors.blue,
-                label: '${seller.reviewCount} تقييم',
+                label: context.l10n.reviewCount(seller.reviewCount),
               ),
               if (seller.experience != null) ...[
                 const SizedBox(width: 12),
@@ -218,6 +219,7 @@ class _HeaderCard extends StatelessWidget {
               ],
             ],
           ),
+          // Bio / description
           if (seller.bio != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -225,6 +227,18 @@ class _HeaderCard extends StatelessWidget {
               style: const TextStyle(
                   fontFamily: 'Cairo', fontSize: 13, color: AppColors.text, height: 1.5),
             ),
+          ] else if (seller.farmDescription != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              seller.farmDescription!,
+              style: const TextStyle(
+                  fontFamily: 'Cairo', fontSize: 13, color: AppColors.text, height: 1.5),
+            ),
+          ],
+          // Working hours
+          if (seller.workingHours != null) ...[
+            const SizedBox(height: 10),
+            _WorkingHoursRow(workingHours: seller.workingHours!),
           ],
           if (seller.farmCertificates.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -256,16 +270,41 @@ class _HeaderCard extends StatelessWidget {
               seller.personalPhone != seller.farmPhone) ...[
             const SizedBox(height: 8),
             Row(children: [
-              const Icon(Icons.person_outline,
-                  size: 14, color: AppColors.muted),
+              const Icon(Icons.person_outline, size: 14, color: AppColors.muted),
               const SizedBox(width: 4),
-              Text('هاتف شخصي: ${seller.personalPhone}',
+              Text(context.l10n.personalPhone(seller.personalPhone!),
                   style: const TextStyle(fontFamily: 'Cairo',
                       fontSize: 12, color: AppColors.muted)),
             ]),
           ],
         ],
       ),
+    );
+  }
+}
+
+// ── Working hours row ─────────────────────────────────────────────────────────
+class _WorkingHoursRow extends StatelessWidget {
+  const _WorkingHoursRow({required this.workingHours});
+  final String workingHours;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.access_time_outlined, size: 14, color: AppColors.muted),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            workingHours,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: AppColors.muted,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -296,9 +335,9 @@ class _LivestockTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (listings.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.pets_outlined,
-        title: 'لا توجد مواشي للبيع حالياً',
+        title: context.l10n.noLivestockForSale,
       );
     }
     return ListView.separated(
@@ -453,9 +492,9 @@ class _DairyTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (dairy.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.local_drink_outlined,
-        title: 'لا توجد منتجات ألبان متاحة',
+        title: context.l10n.noDairyProducts,
       );
     }
     return GridView.builder(
@@ -546,7 +585,7 @@ class _DairyCard extends StatelessWidget {
   );
 }
 
-// ── Supplies tab (M4.6) ───────────────────────────────────────────────────────
+// ── Supplies tab ──────────────────────────────────────────────────────────────
 class _SuppliesTab extends StatelessWidget {
   const _SuppliesTab({required this.supplies});
   final List<SupplyModel> supplies;
@@ -554,9 +593,9 @@ class _SuppliesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (supplies.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.inventory_2_outlined,
-        title: 'لا توجد مستلزمات متاحة',
+        title: context.l10n.noSuppliesAvailable,
       );
     }
     return ListView.separated(
@@ -602,7 +641,6 @@ class _SupplyCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Icon / image placeholder
           Container(
             width: 80,
             height: 80,
@@ -697,7 +735,7 @@ class _SupplyCard extends StatelessWidget {
   }
 }
 
-// ── Reviews tab (M6.7 — add review button) ───────────────────────────────────
+// ── Reviews tab ───────────────────────────────────────────────────────────────
 class _ReviewsTab extends ConsumerWidget {
   const _ReviewsTab({required this.sellerId});
   final String sellerId;
@@ -711,41 +749,43 @@ class _ReviewsTab extends ConsumerWidget {
         padding: EdgeInsets.all(16),
         child: ShimmerList(count: 3, cardHeight: 80),
       ),
-      error: (_, __) => const EmptyState(
+      error: (_, __) => EmptyState(
         icon: Icons.rate_review_outlined,
-        title: 'تعذّر تحميل التقييمات',
+        title: context.l10n.loadReviewsFailed,
       ),
       data: (reviews) => Stack(
         children: [
           reviews.isEmpty
-              ? const EmptyState(
+              ? EmptyState(
                   icon: Icons.rate_review_outlined,
-                  title: 'لا توجد تقييمات بعد',
-                  subtitle: 'كن أول من يقيّم هذه المزرعة',
+                  title: context.l10n.noReviewsYet,
+                  subtitle: context.l10n.noReviewsSubtitle,
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 72),
-                  itemCount: reviews.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) => _ReviewTile(review: reviews[i]),
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                  children: [
+                    // ── Rating breakdown ──────────────────────────────────
+                    _RatingBreakdown(reviews: reviews),
+                    const SizedBox(height: 16),
+                    // ── Review list ───────────────────────────────────────
+                    ...reviews.map((r) => _ReviewTile(review: r)),
+                  ],
                 ),
-          // ── Add review FAB ────────────────────────────────────────────────
+          // ── Add review FAB ─────────────────────────────────────────────
           Positioned(
             left: 16,
             right: 16,
             bottom: 16,
             child: FilledButton.icon(
-              onPressed: () =>
-                  _showAddReviewSheet(context, ref, sellerId),
+              onPressed: () => _showAddReviewSheet(context, ref, sellerId),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.green,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              icon: const Icon(Icons.rate_review_outlined,
-                  color: AppColors.white),
-              label: const Text(
-                'اكتب تقييمك',
-                style: TextStyle(
+              icon: const Icon(Icons.rate_review_outlined, color: AppColors.white),
+              label: Text(
+                context.l10n.writeReview,
+                style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w700,
                   color: AppColors.white,
@@ -770,6 +810,208 @@ class _ReviewsTab extends ConsumerWidget {
       builder: (_) => _AddReviewSheet(
         sellerId: sellerId,
         onSubmitted: () => ref.invalidate(sellerReviewsProvider(sellerId)),
+      ),
+    );
+  }
+}
+
+// ── Rating breakdown chart ────────────────────────────────────────────────────
+class _RatingBreakdown extends StatelessWidget {
+  const _RatingBreakdown({required this.reviews});
+  final List<ReviewModel> reviews;
+
+  @override
+  Widget build(BuildContext context) {
+    if (reviews.isEmpty) return const SizedBox.shrink();
+
+    final counts = List.filled(5, 0);
+    for (final r in reviews) {
+      final idx = (r.rating - 1).clamp(0, 4);
+      counts[idx]++;
+    }
+    final total = reviews.length;
+    final avg   = reviews.fold<double>(0, (s, r) => s + r.rating) / total;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Average rating circle
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                avg.toStringAsFixed(1),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  5,
+                  (i) => Icon(
+                    i < avg.round()
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    size: 12,
+                    color: AppColors.amber,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$total تقييم',
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 10,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          // Star bars
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(5, (i) {
+                final star  = 5 - i;
+                final count = counts[star - 1];
+                final pct   = total > 0 ? count / total : 0.0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        '$star',
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.star_rounded,
+                          size: 10, color: AppColors.amber),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct,
+                            minHeight: 7,
+                            backgroundColor: AppColors.border,
+                            color: AppColors.amber,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 20,
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 10,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Review tile ───────────────────────────────────────────────────────────────
+class _ReviewTile extends StatelessWidget {
+  const _ReviewTile({required this.review});
+  final ReviewModel review;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('d MMM yyyy', 'ar');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 16,
+                backgroundColor: AppColors.greenBg,
+                child: Icon(Icons.person, color: AppColors.green, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(review.buyerName ?? context.l10n.buyer,
+                        style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.text)),
+                    Text(
+                      fmt.format(review.createdAt),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Star rating
+              Row(
+                children: List.generate(
+                  5,
+                  (i) => Icon(
+                    i < review.rating
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    size: 14,
+                    color: AppColors.amber,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (review.comment != null) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(right: 40),
+              child: Text(review.comment!,
+                  style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      color: AppColors.text,
+                      height: 1.4)),
+            ),
+          ],
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: AppColors.border),
+        ],
       ),
     );
   }
@@ -816,7 +1058,7 @@ class _AddReviewSheetState extends ConsumerState<_AddReviewSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'تعذّر إرسال التقييم. تأكد من إكمال طلب سابق مع هذه المزرعة.';
+        _error = context.l10n.reviewFailed;
         _loading = false;
       });
     }
@@ -842,9 +1084,9 @@ class _AddReviewSheetState extends ConsumerState<_AddReviewSheet> {
               ),
             ),
           ),
-          const Text(
-            'قيّم هذه المزرعة',
-            style: TextStyle(
+          Text(
+            context.l10n.rateThisFarm,
+            style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -873,7 +1115,7 @@ class _AddReviewSheetState extends ConsumerState<_AddReviewSheet> {
             maxLines: 3,
             textDirection: TextDirection.rtl,
             decoration: InputDecoration(
-              hintText: 'اكتب تعليقك (اختياري)...',
+              hintText: context.l10n.reviewComment,
               hintStyle: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 13,
@@ -916,74 +1158,15 @@ class _AddReviewSheetState extends ConsumerState<_AddReviewSheet> {
                     child: CircularProgressIndicator(
                         color: AppColors.white, strokeWidth: 2),
                   )
-                : const Text(
-                    'إرسال التقييم',
-                    style: TextStyle(
+                : Text(
+                    context.l10n.submitReview,
+                    style: const TextStyle(
                       fontFamily: 'Cairo',
                       fontWeight: FontWeight.w700,
                       color: AppColors.white,
                     ),
                   ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReviewTile extends StatelessWidget {
-  const _ReviewTile({required this.review});
-  final ReviewModel review;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.greenBg,
-                child: Icon(Icons.person, color: AppColors.green, size: 18),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(review.buyerName ?? 'مشتري',
-                    style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text)),
-              ),
-              Row(
-                children: List.generate(
-                  5,
-                  (i) => Icon(
-                    i < review.rating
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    size: 14,
-                    color: AppColors.amber,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (review.comment != null) ...[
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.only(right: 40),
-              child: Text(review.comment!,
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 13,
-                      color: AppColors.text,
-                      height: 1.4)),
-            ),
-          ],
         ],
       ),
     );

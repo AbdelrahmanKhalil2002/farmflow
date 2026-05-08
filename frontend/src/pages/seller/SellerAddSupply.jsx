@@ -1,20 +1,15 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createSupply } from '../../services/supplyService';
-
-const C = {
-  bg: '#F7FBF7', card: '#FFFFFF',
-  green: '#3A7D44', greenDk: '#2D6235', greenLt: '#F0F7F1',
-  border: '#D4E8D6', text: '#1A2E1C', muted: '#4B6B4E', textMuted: '#6B8F71',
-  shadow: '0 2px 8px rgba(26,46,28,0.08)', red: '#DC2626', redBg: '#FEF2F2',
-};
+import { useLang } from '../../context/LangContext';
+import { C } from '../../tokens';
 
 const CATEGORIES = [
-  { val: 'feed',       label: 'علف',               emoji: '🌾' },
-  { val: 'veterinary', label: 'مستلزمات بيطرية',   emoji: '💊' },
-  { val: 'equipment',  label: 'معدات ومستلزمات',   emoji: '🔧' },
-  { val: 'seeds',      label: 'بذور ونباتات',       emoji: '🌱' },
-  { val: 'other',      label: 'أخرى',               emoji: '📦' },
+  { val: 'feed',       labelKey: 'supplies.cat.feed',       emoji: '🌾' },
+  { val: 'veterinary', labelKey: 'supplies.cat.veterinary', emoji: '💊' },
+  { val: 'equipment',  labelKey: 'supplies.cat.equipment',  emoji: '🔧' },
+  { val: 'seeds',      labelKey: 'supplies.cat.seeds',      emoji: '🌱' },
+  { val: 'other',      labelKey: 'supplies.cat.other',      emoji: '📦' },
 ];
 
 const COMMON_UNITS = ['كجم', 'طن', 'كيس', 'قطعة', 'لتر', 'عبوة', 'جرة', 'كرتون'];
@@ -41,6 +36,7 @@ const ErrMsg = ({ msg }) => msg ? <p style={{ color: C.red, fontSize: 12, margin
 const SellerAddSupply = () => {
   const navigate = useNavigate();
   const photoRef = useRef(null);
+  const { t, isRTL } = useLang();
 
   const [form, setForm] = useState({
     name: '', category: 'feed', description: '',
@@ -59,10 +55,10 @@ const SellerAddSupply = () => {
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())      e.name      = 'أدخل اسم المنتج';
-    if (!form.quantity || Number(form.quantity) <= 0) e.quantity = 'أدخل الكمية';
-    if (!form.unit.trim())      e.unit      = 'أدخل وحدة القياس';
-    if (!form.pricePerUnit || Number(form.pricePerUnit) < 0) e.pricePerUnit = 'أدخل السعر';
+    if (!form.name.trim())      e.name      = t('addSupply.err.name');
+    if (!form.quantity || Number(form.quantity) <= 0) e.quantity = t('addSupply.err.quantity');
+    if (!form.unit.trim())      e.unit      = t('addSupply.err.unit');
+    if (!form.pricePerUnit || Number(form.pricePerUnit) < 0) e.pricePerUnit = t('addSupply.err.price');
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -101,14 +97,14 @@ const SellerAddSupply = () => {
       await createSupply(fd);
       navigate('/seller/supplies');
     } catch (err) {
-      setSubmitErr(err?.response?.data?.message || 'حدث خطأ. حاول مرة أخرى.');
+      setSubmitErr(err?.response?.data?.message || t('common.unknownErr'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", maxWidth: 680, margin: '0 auto' }} dir="rtl">
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", maxWidth: 680, margin: '0 auto' }} dir={isRTL ? 'rtl' : 'ltr'}>
       <style>{`@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       {/* Header */}
@@ -116,12 +112,12 @@ const SellerAddSupply = () => {
         <div aria-hidden="true" style={{ position: 'absolute', right: -10, top: -20, fontSize: 100, opacity: 0.07, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🛒</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff' }}>إضافة منتج للبيع 🛒</h1>
-            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>علف · مستلزمات بيطرية · معدات · بذور</p>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff' }}>{t('addSupply.title')} 🛒</h1>
+            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{t('addSupply.subtitle')}</p>
           </div>
           <button type="button" onClick={() => navigate('/seller/supplies')}
             style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            ← العودة
+            ← {t('addSupply.back')}
           </button>
         </div>
       </div>
@@ -130,7 +126,7 @@ const SellerAddSupply = () => {
 
         {/* Category picker */}
         <div>
-          <Lbl req>الفئة</Lbl>
+          <Lbl req>{t('addSupply.cat')}</Lbl>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {CATEGORIES.map(cat => {
               const active = form.category === cat.val;
@@ -138,7 +134,7 @@ const SellerAddSupply = () => {
                 <button key={cat.val} type="button" onClick={() => set('category', cat.val)}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: `2px solid ${active ? C.green : C.border}`, background: active ? C.greenLt : C.card, cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit' }}>
                   <span style={{ fontSize: 20 }}>{cat.emoji}</span>
-                  <span style={{ fontSize: 13, fontWeight: active ? 800 : 500, color: active ? C.green : C.muted }}>{cat.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: active ? 800 : 500, color: active ? C.green : C.muted }}>{t(cat.labelKey)}</span>
                 </button>
               );
             })}
@@ -147,17 +143,17 @@ const SellerAddSupply = () => {
 
         {/* Name */}
         <div>
-          <Lbl req>اسم المنتج</Lbl>
-          <FocusInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="مثال: علف فول الصويا، أمبولات مضادات حيوية…" />
+          <Lbl req>{t('addSupply.name')}</Lbl>
+          <FocusInput value={form.name} onChange={e => set('name', e.target.value)} placeholder={t('addSupply.namePlaceholder')} />
           <ErrMsg msg={errors.name} />
         </div>
 
         {/* Description */}
         <div>
-          <Lbl>الوصف <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>(اختياري)</span></Lbl>
+          <Lbl>{t('addSupply.desc')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>({t('common.optional')})</span></Lbl>
           <textarea value={form.description} onChange={e => set('description', e.target.value)}
-            placeholder="صِف المنتج بالتفصيل — المواصفات، مناسب لأي حيوانات…"
-            rows={3} dir="rtl"
+            placeholder={t('addSupply.descPlaceholder')}
+            rows={3} dir={isRTL ? 'rtl' : 'ltr'}
             style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: '#fff', fontSize: 14, color: C.text, resize: 'vertical', fontFamily: 'inherit', outline: 'none', transition: 'border-color 0.15s' }}
             onFocus={e => e.target.style.borderColor = C.green}
             onBlur={e => e.target.style.borderColor = C.border}
@@ -167,12 +163,12 @@ const SellerAddSupply = () => {
         {/* Quantity + Unit row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
-            <Lbl req>الكمية المتاحة</Lbl>
-            <FocusInput type="number" min="0" step="0.1" value={form.quantity} onChange={e => set('quantity', e.target.value)} placeholder="مثال: 500" />
+            <Lbl req>{t('addSupply.quantity')}</Lbl>
+            <FocusInput type="number" min="0" step="0.1" value={form.quantity} onChange={e => set('quantity', e.target.value)} placeholder={t('addSupply.quantityPlaceholder')} />
             <ErrMsg msg={errors.quantity} />
           </div>
           <div>
-            <Lbl req>وحدة القياس</Lbl>
+            <Lbl req>{t('addSupply.unit')}</Lbl>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
               {COMMON_UNITS.map(u => (
                 <button key={u} type="button" onClick={() => set('unit', u)}
@@ -181,7 +177,7 @@ const SellerAddSupply = () => {
                 </button>
               ))}
             </div>
-            <FocusInput value={form.unit} onChange={e => set('unit', e.target.value)} placeholder="أو اكتب وحدة أخرى" />
+            <FocusInput value={form.unit} onChange={e => set('unit', e.target.value)} placeholder={t('addSupply.unitPlaceholder')} />
             <ErrMsg msg={errors.unit} />
           </div>
         </div>
@@ -189,23 +185,23 @@ const SellerAddSupply = () => {
         {/* Price + Min order row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
-            <Lbl req>السعر لكل وحدة (ج.م)</Lbl>
+            <Lbl req>{t('addSupply.price')}</Lbl>
             <div style={{ position: 'relative' }}>
-              <FocusInput type="number" min="0" step="0.01" value={form.pricePerUnit} onChange={e => set('pricePerUnit', e.target.value)} placeholder="مثال: 15.50" style={{ paddingLeft: 60 }} />
+              <FocusInput type="number" min="0" step="0.01" value={form.pricePerUnit} onChange={e => set('pricePerUnit', e.target.value)} placeholder={t('addSupply.pricePlaceholder')} style={{ paddingLeft: 60 }} />
               <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
             </div>
             <ErrMsg msg={errors.pricePerUnit} />
           </div>
           <div>
-            <Lbl>الحد الأدنى للطلب</Lbl>
+            <Lbl>{t('addSupply.minOrder')}</Lbl>
             <FocusInput type="number" min="1" step="1" value={form.minOrderQty} onChange={e => set('minOrderQty', e.target.value)} placeholder="1" />
           </div>
         </div>
 
         {/* Location */}
         <div>
-          <Lbl>موقع الاستلام</Lbl>
-          <FocusInput value={form.location} onChange={e => set('location', e.target.value)} placeholder="مثال: القاهرة — مدينة نصر" />
+          <Lbl>{t('addSupply.location')}</Lbl>
+          <FocusInput value={form.location} onChange={e => set('location', e.target.value)} placeholder={t('addSupply.locationPlaceholder')} />
         </div>
 
         {/* Delivery toggle */}
@@ -214,13 +210,13 @@ const SellerAddSupply = () => {
             <input type="checkbox" checked={form.deliveryAvailable} onChange={e => set('deliveryAvailable', e.target.checked)}
               style={{ marginTop: 2, accentColor: C.green, width: 16, height: 16, flexShrink: 0 }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>توصيل متاح</div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>يمكنك توصيل المنتج للمشتري مقابل رسوم إضافية</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{t('addSupply.delivery')}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t('addSupply.deliveryHint')}</div>
             </div>
           </label>
           {form.deliveryAvailable && (
             <div style={{ animation: 'slideDown 0.2s ease' }}>
-              <Lbl>تكلفة التوصيل <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>(اتركه فارغًا إذا كانت قابلة للتفاوض)</span></Lbl>
+              <Lbl>{t('addSupply.deliveryCost')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>({t('addSupply.deliveryCostHint')})</span></Lbl>
               <div style={{ position: 'relative' }}>
                 <FocusInput type="number" min="0" step="1" value={form.deliveryCost} onChange={e => set('deliveryCost', e.target.value)} placeholder="مثال: 50" style={{ paddingLeft: 60 }} />
                 <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
@@ -231,7 +227,7 @@ const SellerAddSupply = () => {
 
         {/* Photo upload */}
         <div>
-          <Lbl>صور المنتج <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>(حتى 5 صور — اختياري)</span></Lbl>
+          <Lbl>{t('addSupply.photos')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 11 }}>({t('addSupply.photosHint')})</span></Lbl>
           <div
             onClick={() => photoRef.current?.click()}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -239,7 +235,7 @@ const SellerAddSupply = () => {
             onDrop={e => { e.preventDefault(); setDragOver(false); handlePhotos(e.dataTransfer.files); }}
             style={{ border: `2px dashed ${dragOver ? C.green : C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', cursor: 'pointer', background: dragOver ? C.greenLt : '#FAFAFA', transition: 'all 0.15s' }}>
             <div style={{ fontSize: 28, marginBottom: 6 }}>📷</div>
-            <div style={{ fontSize: 13, color: C.muted }}>اسحب الصور هنا أو <span style={{ color: C.green, fontWeight: 700 }}>اختر من الجهاز</span></div>
+            <div style={{ fontSize: 13, color: C.muted }}>{t('addSupply.photoDrag')} <span style={{ color: C.green, fontWeight: 700 }}>{t('addSupply.photoBrowse')}</span></div>
           </div>
           <input ref={photoRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handlePhotos(e.target.files)} />
 
@@ -268,11 +264,11 @@ const SellerAddSupply = () => {
         <div style={{ display: 'flex', gap: 12, paddingTop: 4 }}>
           <button type="button" onClick={() => navigate('/seller/supplies')}
             style={{ padding: '12px 20px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.card, color: C.muted, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            إلغاء
+            {t('common.cancel')}
           </button>
           <button type="button" onClick={handleSubmit} disabled={submitting}
             style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: submitting ? '#A7C4AD' : C.green, color: '#fff', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
-            {submitting ? 'جاري الإرسال…' : 'إرسال للمراجعة ✓'}
+            {submitting ? t('addSupply.saving') : t('addSupply.submit')}
           </button>
         </div>
       </div>

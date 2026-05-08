@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/locale_provider.dart';
+import '../../core/l10n/l10n_ext.dart';
 
 class RegisterRoleScreen extends ConsumerWidget {
   const RegisterRoleScreen({super.key});
@@ -44,9 +45,9 @@ class RegisterRoleScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              const Text(
-                'إنشاء حساب جديد',
-                style: TextStyle(
+              Text(
+                context.l10n.registerTitle,
+                style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                   color: AppColors.text,
@@ -54,17 +55,17 @@ class RegisterRoleScreen extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              const Text(
-                'اختر نوع حسابك للبدء',
-                style: TextStyle(fontSize: 15, color: AppColors.muted),
+              Text(
+                context.l10n.registerSubtitle,
+                style: const TextStyle(fontSize: 15, color: AppColors.muted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
 
               _RoleCard(
                 emoji: '🌾',
-                title: 'مزارع / بائع',
-                subtitle: 'أعرض ماشيتك ومنتجاتك للبيع وإدارة قطيعك',
+                title: context.l10n.sellerRoleTitle,
+                subtitle: context.l10n.sellerRoleSubtitle,
                 accentColor: AppColors.green,
                 accentBg: AppColors.greenLight,
                 onTap: () => context.push('/register/seller'),
@@ -72,8 +73,8 @@ class RegisterRoleScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _RoleCard(
                 emoji: '🛒',
-                title: 'مشتري',
-                subtitle: 'تصفّح المزارع واشترِ الماشية والمنتجات الطازجة',
+                title: context.l10n.buyerRoleTitle,
+                subtitle: context.l10n.buyerRoleSubtitle,
                 accentColor: AppColors.blue,
                 accentBg: AppColors.blueBg,
                 onTap: () => context.push('/register/buyer'),
@@ -82,12 +83,12 @@ class RegisterRoleScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('لديك حساب بالفعل؟', style: TextStyle(color: AppColors.muted, fontSize: 14)),
+                  Text(context.l10n.alreadyHaveAccount, style: const TextStyle(color: AppColors.muted, fontSize: 14)),
                   TextButton(
                     onPressed: () => context.go('/login'),
-                    child: const Text(
-                      'سجّل دخولك',
-                      style: TextStyle(color: AppColors.green, fontWeight: FontWeight.w700, fontSize: 14),
+                    child: Text(
+                      context.l10n.loginLink,
+                      style: const TextStyle(color: AppColors.green, fontWeight: FontWeight.w700, fontSize: 14),
                     ),
                   ),
                 ],

@@ -21,6 +21,8 @@ const createListing = async (req, res) => {
       try { parsedQurbaniShares = JSON.parse(qurbaniShares); } catch {}
     }
 
+    const saveDraft = req.body.status === 'draft';
+
     const listing = await Listing.create({
       type, breed, age, weight, price, pricePerKg, description, location,
       deliveryType: deliveryType || 'none',
@@ -33,17 +35,20 @@ const createListing = async (req, res) => {
       depositPercentage: depositPercentage || undefined,
       seller: req.user.id,
       images,
+      status: saveDraft ? 'draft' : 'pending',
     });
 
-    // Notify all admins of new pending listing
-    User.find({ role: 'admin' }, '_id').then(admins => {
-      admins.forEach(admin => createNotification(admin._id, {
-        type:    'listing_pending',
-        title:   'إعلان جديد للمراجعة',
-        message: 'تم إرسال إعلان ماشية جديد ويحتاج إلى مراجعة',
-        link:    '/admin/listings',
-      }));
-    }).catch(() => {});
+    // Only notify admins for listings going to review (not drafts)
+    if (!saveDraft) {
+      User.find({ role: 'admin' }, '_id').then(admins => {
+        admins.forEach(admin => createNotification(admin._id, {
+          type:    'listing_pending',
+          title:   'إعلان جديد للمراجعة',
+          message: 'تم إرسال إعلان ماشية جديد ويحتاج إلى مراجعة',
+          link:    '/admin/listings',
+        }));
+      }).catch(() => {});
+    }
 
     res.status(201).json(listing);
   } catch (err) {
@@ -52,7 +57,7 @@ const createListing = async (req, res) => {
 };
 
 // GET /api/listings
-// - buyer / public : approved only
+// - buyer / public : approved only; supports ?type, ?minPrice, ?maxPrice, ?minWeight, ?maxWeight, ?location, ?delivery=true, ?q, ?sort
 // - seller         : their own listings (all statuses)
 // - admin          : everything
 // Supports optional ?page=1&limit=20 for pagination; returns all if omitted.
@@ -69,20 +74,57 @@ const getListings = async (req, res) => {
     }
     // admin: no filter — sees all
 
+    // Search/filter params — applied for buyer/public requests only
+    const role = req.user?.role;
+    if (!role || role === 'buyer') {
+      const { type, minPrice, maxPrice, minWeight, maxWeight, location, delivery, q } = req.query;
+
+      if (type && type !== 'all')    filter.type = type;
+      if (delivery === 'true')       filter.deliveryType = { $ne: 'none' };
+
+      if (minPrice || maxPrice) {
+        filter.price = {};
+        if (minPrice) filter.price.$gte = Number(minPrice);
+        if (maxPrice) filter.price.$lte = Number(maxPrice);
+      }
+
+      if (minWeight || maxWeight) {
+        filter.weight = {};
+        if (minWeight) filter.weight.$gte = Number(minWeight);
+        if (maxWeight) filter.weight.$lte = Number(maxWeight);
+      }
+
+      if (location && location.trim()) {
+        filter.location = { $regex: location.trim(), $options: 'i' };
+      }
+
+      if (q && q.trim()) {
+        const re = { $regex: q.trim(), $options: 'i' };
+        filter.$or = [{ breed: re }, { description: re }];
+      }
+    }
+
+    const SORTS = {
+      price_asc:  { price:  1 },
+      price_desc: { price: -1 },
+      newest:     { createdAt: -1 },
+    };
+    const sort = SORTS[req.query.sort] || { createdAt: -1 };
+
     const { page, limit } = req.query;
     if (page && limit) {
       const p = Math.max(1, parseInt(page, 10));
       const l = Math.min(100, Math.max(1, parseInt(limit, 10)));
       const [items, total] = await Promise.all([
-        Listing.find(filter).populate('seller', 'name phone').sort({ createdAt: -1 }).skip((p - 1) * l).limit(l),
+        Listing.find(filter).populate('seller', 'name farmName governorate phone').sort(sort).skip((p - 1) * l).limit(l),
         Listing.countDocuments(filter),
       ]);
       return res.json({ items, total, page: p, pages: Math.ceil(total / l), hasMore: p * l < total });
     }
 
     const listings = await Listing.find(filter)
-      .populate('seller', 'name phone')
-      .sort({ createdAt: -1 });
+      .populate('seller', 'name farmName governorate phone')
+      .sort(sort);
 
     res.json(listings);
   } catch (err) {
@@ -143,7 +185,19 @@ const updateListing = async (req, res) => {
     // Strip undefined keys so partial updates don't overwrite with undefined
     Object.keys(updates).forEach((k) => updates[k] === undefined && delete updates[k]);
 
-    // Only admin can change status
+    // Seller can publish their own draft (draft → pending)
+    if (req.user.role === 'seller' && req.body.status === 'pending' && listing.status === 'draft') {
+      updates.status = 'pending';
+      // Notify admins now that the listing is going to review
+      User.find({ role: 'admin' }, '_id').then(admins => {
+        admins.forEach(admin => createNotification(admin._id, {
+          type: 'listing_pending', title: 'إعلان جديد للمراجعة',
+          message: 'تم إرسال إعلان ماشية جديد ويحتاج إلى مراجعة', link: '/admin/listings',
+        }));
+      }).catch(() => {});
+    }
+
+    // Only admin can change to other statuses
     if (req.user.role === 'admin' && req.body.status) {
       updates.status = req.body.status;
     }

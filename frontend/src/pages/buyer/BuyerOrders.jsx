@@ -1,30 +1,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getMyOrders } from '../../services/orderService';
-import { createReview } from '../../services/reviewService';
+import { createReview, getMyReviewedOrders } from '../../services/reviewService';
 import { fmt, getImageUrl } from '../../utils/format';
+import { useLang } from '../../context/LangContext';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:      '#F8F4EE',
-  white:   '#FFFFFF',
-  green:   '#3A7D44',
-  greenDk: '#2D6235',
-  greenLt: '#F0F7F1',
-  border:  '#E8D5C0',
-  text:    '#2C1810',
-  muted:   '#8B6B5A',
-  shadow:  '0 2px 10px rgba(44,24,16,0.08)',
-  shadowHv:'0 8px 24px rgba(44,24,16,0.14)',
-};
+import { C } from '../../tokens';
 
 const TYPE_META = {
-  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', ar: 'أبقار' },
-  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', ar: 'أغنام' },
-  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', ar: 'ماعز'  },
-  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', ar: 'إبل'   },
-  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', ar: 'خيول'  },
-  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', ar: 'أخرى'  },
+  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', typeKey: 'herd.type.cattle' },
+  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', typeKey: 'herd.type.sheep'  },
+  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', typeKey: 'herd.type.goat'   },
+  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', typeKey: 'herd.type.camel'  },
+  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', typeKey: 'herd.type.horse'  },
+  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', typeKey: 'herd.type.other'  },
 };
 
 const AVATAR_COLORS = ['#E17055','#00B894','#0984E3','#6C5CE7','#D4A017','#d63031','#74B9FF','#00CEC9'];
@@ -33,14 +22,19 @@ const initials    = (name = '') => name.split(' ').map(w => w[0]).join('').slice
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 const STATUS_META = {
-  pending:   { label: 'معلق',         color: '#92400E', bg: '#FEF3C7', badge: '#EF4444', dot: '🔴', step: 0 },
-  confirmed: { label: 'مؤكد',         color: '#0369A1', bg: '#DBEAFE', badge: '#22C55E', dot: '🟢', step: 1 },
-  transit:   { label: 'قيد التسليم',  color: '#92400E', bg: '#FEF9C3', badge: '#EAB308', dot: '🟡', step: 2 },
-  completed: { label: 'تم التسليم',   color: '#166534', bg: '#DCFCE7', badge: C.green,   dot: '✅', step: 3 },
-  cancelled: { label: 'ملغي',         color: '#991B1B', bg: '#FEE2E2', badge: '#EF4444', dot: '🔴', step: -1 },
+  pending:   { labelKey: 'orders.status.pending',   color: '#92400E', bg: '#FEF3C7', badge: '#EF4444', dot: '🔴', step: 0 },
+  confirmed: { labelKey: 'orders.status.confirmed', color: '#0369A1', bg: '#DBEAFE', badge: '#22C55E', dot: '🟢', step: 1 },
+  transit:   { labelKey: 'orders.status.transit',   color: '#92400E', bg: '#FEF9C3', badge: '#EAB308', dot: '🟡', step: 2 },
+  completed: { labelKey: 'orders.status.completed', color: '#166534', bg: '#DCFCE7', badge: C.green,   dot: '✅', step: 3 },
+  cancelled: { labelKey: 'orders.status.cancelled', color: '#991B1B', bg: '#FEE2E2', badge: '#EF4444', dot: '🔴', step: -1 },
 };
 
-const STAGES_AR = ['تم الطلب', 'مؤكد', 'قيد التسليم', 'تم التسليم'];
+const STAGE_KEYS = [
+  'orders.stage.placed',
+  'orders.stage.confirmed',
+  'orders.stage.transit',
+  'orders.stage.delivered',
+];
 
 // Resolves a 4-step stage index that accounts for admin delivery status
 const effectiveStatus = (order) => {
@@ -77,11 +71,11 @@ const estimatedDelivery = (createdAt, notes = '') => {
   return fmtDate(base);
 };
 
-const parseAddress    = (notes = '') => { const m = notes.match(/Address:\s*([^|]+)/); return m ? m[1].trim() : null; };
-const parseDelivType  = (notes = '') => {
-  if (notes.includes('Self Pickup'))    return 'استلام شخصي';
-  if (notes.includes('Local Delivery')) return 'توصيل محلي';
-  if (notes.includes('Long Distance'))  return 'توصيل بعيد';
+const parseAddress   = (notes = '') => { const m = notes.match(/Address:\s*([^|]+)/); return m ? m[1].trim() : null; };
+const parseDelivType = (notes = '', tFn) => {
+  if (notes.includes('Self Pickup'))    return tFn('orders.deliv.selfPickup');
+  if (notes.includes('Local Delivery')) return tFn('orders.deliv.local');
+  if (notes.includes('Long Distance'))  return tFn('orders.deliv.long');
   return null;
 };
 
@@ -99,7 +93,7 @@ const downloadReceipt = (order) => {
     '',
     `${pad('رقم الطلب:')}  ${shortId(order._id)}`,
     `${pad('التاريخ:')}    ${fmtDate(order.createdAt)}`,
-    `${pad('الحالة:')}     ${STATUS_META[order.status]?.label ?? order.status}`,
+    `${pad('الحالة:')}     ${STATUS_META[order.status]?.labelKey ?? order.status}`,
     '', hr, '  الحيوان', hr,
     `${pad('النوع:')}     ${[l.breed, l.type].filter(Boolean).join(' — ') || 'غير محدد'}`,
     `${pad('السعر:')}     ${fmt(l.price ?? order.totalAmount)} ج.م`,
@@ -124,24 +118,25 @@ const downloadReceipt = (order) => {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
-// ─── ProgressTracker (Arabic) ─────────────────────────────────────────────────
-const ProgressTracker = ({ order }) => {
+// ─── ProgressTracker ──────────────────────────────────────────────────────────
+const ProgressTracker = ({ order, tFn }) => {
   const status    = effectiveStatus(order);
   const idx       = stageIndex(status);
   const cancelled = order?.status === 'cancelled';
   return (
     <div style={{ padding: '16px 0 4px' }}>
       <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-        مسار الطلب
+        {tFn('orders.trackTitle')}
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        {STAGES_AR.map((label, i) => {
+        {STAGE_KEYS.map((labelKey, i) => {
+          const label   = tFn(labelKey);
           const done    = !cancelled && idx >= i;
           const current = !cancelled && idx === i;
           const dotBg   = cancelled ? '#FCA5A5' : done ? C.green : C.border;
           const lineBg  = cancelled ? '#FCA5A5' : (i < idx && !cancelled) ? C.green : C.border;
           return (
-            <div key={label} style={{ display: 'flex', alignItems: 'flex-start', flex: i < STAGES_AR.length - 1 ? 1 : 0 }}>
+            <div key={labelKey} style={{ display: 'flex', alignItems: 'flex-start', flex: i < STAGE_KEYS.length - 1 ? 1 : 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                 <div style={{
                   width: current ? '16px' : '12px', height: current ? '16px' : '12px',
@@ -156,7 +151,7 @@ const ProgressTracker = ({ order }) => {
                   {label}
                 </span>
               </div>
-              {i < STAGES_AR.length - 1 && (
+              {i < STAGE_KEYS.length - 1 && (
                 <div style={{ flex: 1, height: '2px', background: lineBg, margin: '7px 3px 0', minWidth: '16px', transition: 'background 0.3s' }} />
               )}
             </div>
@@ -167,21 +162,24 @@ const ProgressTracker = ({ order }) => {
   );
 };
 
-// ─── StatusTimeline (Arabic) ──────────────────────────────────────────────────
-const StatusTimeline = ({ order }) => {
+// ─── StatusTimeline ───────────────────────────────────────────────────────────
+const StatusTimeline = ({ order, tFn }) => {
   const status    = effectiveStatus(order);
   const idx       = stageIndex(status);
   const cancelled = order.status === 'cancelled';
   const estDel    = estimatedDelivery(order.createdAt, order.notes || '');
 
+  const tl    = order.timeline || [];
+  const tlAt  = (s) => { const e = tl.find(x => x.status === s); return e ? fmtDateTime(e.at) : null; };
+
   const events = [
-    { label: 'تم تقديم الطلب',     sub: `طلب #${shortId(order._id)}`,                         time: fmtDateTime(order.createdAt),    done: true,    icon: '📋' },
-    { label: idx >= 1 ? 'تأكيد البائع' : 'في انتظار التأكيد', sub: idx >= 1 ? 'قبل البائع طلبك' : 'سيرد البائع خلال 24 ساعة', time: idx >= 1 ? fmtDateTime(order.updatedAt) : null, done: idx >= 1, icon: '✅' },
-    { label: 'في الطريق',           sub: idx >= 3 ? 'تم شحن الحيوان' : `متوقع: ${estDel}`,    time: idx >= 3 ? `${estDel}` : null,   done: idx >= 3, icon: '🚚' },
-    { label: idx >= 3 ? 'تم التسليم' : 'التسليم المتوقع', sub: idx >= 3 ? 'اكتملت العملية بنجاح' : `${estDel}`, time: idx >= 3 ? fmtDateTime(order.updatedAt) : null, done: idx >= 3, icon: '📦' },
+    { label: tFn('orders.tl.placed'),     sub: `${tFn('orders.tl.orderNo')} #${shortId(order._id)}`,                                                time: fmtDateTime(order.createdAt),    done: true,    icon: '📋' },
+    { label: idx >= 1 ? tFn('orders.tl.sellerConfirmed') : tFn('orders.tl.awaitConfirm'), sub: idx >= 1 ? tFn('orders.tl.sellerAccepted') : tFn('orders.tl.sellerReply'), time: tlAt('confirmed') || (idx >= 1 ? fmtDateTime(order.updatedAt) : null), done: idx >= 1, icon: '✅' },
+    { label: idx >= 2 ? tFn('orders.tl.onTheWay') : tFn('orders.tl.shipping'),       sub: idx >= 2 ? tFn('orders.tl.animalShipped') : `${tFn('orders.tl.expected')}: ${estDel}`,    time: tlAt('dispatched') || (idx >= 2 ? estDel : null),   done: idx >= 2, icon: '🚚' },
+    { label: idx >= 3 ? tFn('orders.tl.delivered') : tFn('orders.tl.estDelivery'), sub: idx >= 3 ? tFn('orders.tl.completed') : `${estDel}`, time: tlAt('completed') || (idx >= 3 ? fmtDateTime(order.updatedAt) : null), done: idx >= 3, icon: '📦' },
   ];
 
-  if (cancelled) events.push({ label: 'تم الإلغاء', sub: `بتاريخ ${fmtDate(order.updatedAt)}`, time: fmtDateTime(order.updatedAt), done: true, icon: '✕', cancel: true });
+  if (cancelled) events.push({ label: tFn('orders.tl.cancelled'), sub: `${tFn('orders.tl.on')} ${fmtDate(order.updatedAt)}`, time: tlAt('cancelled') || fmtDateTime(order.updatedAt), done: true, icon: '✕', cancel: true });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -218,7 +216,7 @@ const StatusTimeline = ({ order }) => {
 };
 
 // ─── ReviewModal ─────────────────────────────────────────────────────────────
-const ReviewModal = ({ order, onClose, onSubmitted }) => {
+const ReviewModal = ({ order, onClose, onSubmitted, tFn }) => {
   const [rating,   setRating]  = useState(0);
   const [hoverStar, setHover]  = useState(0);
   const [comment,  setComment] = useState('');
@@ -226,7 +224,7 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
   const [error,    setError]   = useState('');
 
   const handleSubmit = async () => {
-    if (!rating) { setError('يرجى اختيار عدد النجوم'); return; }
+    if (!rating) { setError(tFn('orders.review.selectStars')); return; }
     setLoading(true);
     setError('');
     try {
@@ -234,7 +232,7 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
       onSubmitted();
       onClose();
     } catch (e) {
-      const msg = e.response?.data?.errors?.[0]?.msg || e.response?.data?.message || 'فشل إرسال التقييم';
+      const msg = e.response?.data?.errors?.[0]?.msg || e.response?.data?.message || tFn('orders.review.submitErr');
       setError(msg);
     } finally {
       setLoading(false);
@@ -245,7 +243,7 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div onClick={e => e.stopPropagation()} dir="rtl" style={{ background:C.white, borderRadius:16, padding:'24px', width:'100%', maxWidth:400, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-          <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:C.text }}>تقييم طلبك</h3>
+          <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:C.text }}>{tFn('orders.review.title')}</h3>
           <button type="button" onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:C.muted, padding:0, lineHeight:1 }}>✕</button>
         </div>
 
@@ -268,7 +266,7 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
         <textarea
           value={comment}
           onChange={e => setComment(e.target.value)}
-          placeholder="أضف تعليقًا (اختياري)…"
+          placeholder={tFn('orders.review.commentPlaceholder')}
           maxLength={500}
           rows={3}
           style={{ width:'100%', boxSizing:'border-box', padding:'10px 12px', border:`1.5px solid ${C.border}`, borderRadius:10, fontSize:14, color:C.text, resize:'vertical', fontFamily:'inherit', outline:'none' }}
@@ -278,11 +276,11 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
 
         <div style={{ display:'flex', gap:8, marginTop:16 }}>
           <button type="button" onClick={onClose} style={{ flex:1, padding:'10px', background:'#F9F5F0', color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-            إلغاء
+            {tFn('common.cancel')}
           </button>
           <button type="button" onClick={handleSubmit} disabled={loading || !rating}
             style={{ flex:2, padding:'10px', background: loading || !rating ? C.muted : C.green, color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:700, cursor: loading || !rating ? 'not-allowed' : 'pointer', fontFamily:'inherit', transition:'background 0.15s' }}>
-            {loading ? 'جاري الإرسال…' : 'إرسال التقييم'}
+            {loading ? tFn('orders.review.submitting') : tFn('orders.review.submit')}
           </button>
         </div>
       </div>
@@ -291,11 +289,11 @@ const ReviewModal = ({ order, onClose, onSubmitted }) => {
 };
 
 // ─── OrderCard ────────────────────────────────────────────────────────────────
-const OrderCard = ({ order }) => {
+const OrderCard = ({ order, alreadyReviewed, onReviewed, tFn }) => {
   const [showTrack,  setShowTrack]  = useState(false);
   const [cancelMsg,  setCancelMsg]  = useState(false);
   const [showReview, setShowReview] = useState(false);
-  const [reviewed,   setReviewed]   = useState(false);
+  const [reviewed,   setReviewed]   = useState(!!alreadyReviewed);
 
   const listing  = order.listing || {};
   const seller   = order.seller  || {};
@@ -303,7 +301,7 @@ const OrderCard = ({ order }) => {
   const sm       = STATUS_META[effectiveStatus(order)] ?? STATUS_META.pending;
   const thumb    = listing.images?.[0];
   const address  = parseAddress(order.notes || '');
-  const delivType= parseDelivType(order.notes || '');
+  const delivType= parseDelivType(order.notes || '', tFn);
   const estDel   = estimatedDelivery(order.createdAt, order.notes || '');
   const isPending = order.status === 'pending';
   const isCancelled = order.status === 'cancelled';
@@ -332,13 +330,13 @@ const OrderCard = ({ order }) => {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '16px', fontWeight: '800', color: C.text, textTransform: 'capitalize', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {listing.breed || listing.type || 'مواشي'}
+                {listing.breed || listing.type || tFn('orders.livestock')}
               </div>
               {listing.type && (
                 <div style={{ fontSize: '11px', color: C.muted, marginTop: '1px' }}>
-                  {meta.emoji} {meta.ar}
-                  {listing.weight ? ` · ${listing.weight} كجم` : ''}
-                  {listing.age    ? ` · ${listing.age} شهر`    : ''}
+                  {meta.emoji} {tFn(meta.typeKey)}
+                  {listing.weight ? ` · ${listing.weight} ${tFn('common.kg')}` : ''}
+                  {listing.age    ? ` · ${listing.age} ${tFn('common.month')}` : ''}
                 </div>
               )}
             </div>
@@ -348,23 +346,23 @@ const OrderCard = ({ order }) => {
               fontSize: '12px', fontWeight: '800', padding: '4px 10px', borderRadius: '20px',
               whiteSpace: 'nowrap', flexShrink: 0,
             }}>
-              {sm.dot} {sm.label}
+              {sm.dot} {tFn(sm.labelKey)}
             </span>
           </div>
 
           {/* Row 2: dates */}
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', color: C.muted }}>
-              <span style={{ color: C.text, fontWeight: '600' }}>📅 الطلب:</span> {fmtDate(order.createdAt)}
+              <span style={{ color: C.text, fontWeight: '600' }}>📅 {tFn('orders.orderedOn')}:</span> {fmtDate(order.createdAt)}
             </span>
             {!isCancelled && !isCompleted && (
               <span style={{ fontSize: '12px', color: C.muted }}>
-                <span style={{ color: C.text, fontWeight: '600' }}>🚚 التسليم المتوقع:</span> {estDel}
+                <span style={{ color: C.text, fontWeight: '600' }}>🚚 {tFn('orders.estDelivery')}:</span> {estDel}
               </span>
             )}
             {isCompleted && order.updatedAt && (
               <span style={{ fontSize: '12px', color: C.green, fontWeight: '600' }}>
-                ✅ تم التسليم: {fmtDate(order.updatedAt)}
+                ✅ {tFn('orders.deliveredOn')}: {fmtDate(order.updatedAt)}
               </span>
             )}
           </div>
@@ -381,11 +379,11 @@ const OrderCard = ({ order }) => {
               <>
                 <a href={`tel:${seller.phone}`}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', color: C.green, fontWeight: '700', textDecoration: 'none', background: C.greenLt, padding: '2px 8px', borderRadius: '10px', border: `1px solid ${C.green}30` }}>
-                  📞 اتصال
+                  📞 {tFn('orders.call')}
                 </a>
                 <a href={waPhone} target="_blank" rel="noreferrer"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', color: '#166534', fontWeight: '700', textDecoration: 'none', background: '#DCFCE7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #16653430' }}>
-                  💬 واتساب
+                  💬 {tFn('orders.whatsapp')}
                 </a>
               </>
             )}
@@ -396,30 +394,30 @@ const OrderCard = ({ order }) => {
       {/* ═══════════ TOTAL ROW ═══════════ */}
       <div style={{ margin: '0 20px', padding: '12px 16px', background: '#F9F5F0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span style={{ fontSize: '11px', color: C.muted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>الإجمالي</span>
+          <span style={{ fontSize: '11px', color: C.muted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{tFn('common.total')}</span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
             <span style={{ fontSize: '22px', fontWeight: '800', color: C.text, letterSpacing: '-0.5px', lineHeight: 1 }}>{fmt(order.totalAmount)}</span>
-            <span style={{ fontSize: '13px', color: C.muted, fontWeight: '600' }}>ج.م</span>
+            <span style={{ fontSize: '13px', color: C.muted, fontWeight: '600' }}>{tFn('common.egp')}</span>
           </div>
           {order.paymentType === 'deposit' && order.depositAmount > 0 && (
             <span style={{ fontSize: '11px', color: C.green, fontWeight: '600' }}>
-              دفع مقدم: {fmt(order.depositAmount)} ج.م · الباقي: {fmt(order.totalAmount - order.depositAmount)} ج.م
+              {tFn('orders.advance')}: {fmt(order.depositAmount)} {tFn('common.egp')} · {tFn('orders.remaining')}: {fmt(order.totalAmount - order.depositAmount)} {tFn('common.egp')}
             </span>
           )}
           {order.deliveryCost > 0 && (
             <span style={{ fontSize: '11px', color: '#D97706', fontWeight: '600' }}>
-              🚚 تكلفة التوصيل: {fmt(order.deliveryCost)} ج.م
+              🚚 {tFn('orders.deliveryCost')}: {fmt(order.deliveryCost)} {tFn('common.egp')}
             </span>
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
           <span style={{ fontSize: '12px', color: C.muted, fontWeight: '600' }}>
             {order.paymentType === 'instapay' ? '📱 InstaPay'
-             : order.paymentType === 'deposit' ? '🏦 دفعة مقدمة'
-             : '💵 الدفع عند الاستلام'}
+             : order.paymentType === 'deposit' ? `🏦 ${tFn('orders.pay.deposit')}`
+             : `💵 ${tFn('cart.pay.cod')}`}
           </span>
           <span style={{ fontSize: '11px', color: C.muted }}>
-            طلب #{shortId(order._id)}
+            {tFn('orders.orderNo')} #{shortId(order._id)}
           </span>
         </div>
       </div>
@@ -427,46 +425,41 @@ const OrderCard = ({ order }) => {
       {/* ═══════════ ACTION BUTTONS ═══════════ */}
       <div style={{ padding: '0 20px 16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
 
-        {/* تتبع */}
         <button type="button" onClick={() => setShowTrack(p => !p)}
           style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 16px', background: showTrack ? C.green : C.greenLt, color: showTrack ? '#fff' : C.green, border: `1.5px solid ${C.green}40`, borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-          📍 تتبع الطلب
+          📍 {tFn('orders.track')}
           <span style={{ fontSize: '10px', transition: 'transform 0.2s', transform: showTrack ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>▾</span>
         </button>
 
-        {/* رسالة للبائع */}
         {waPhone && (
           <a href={waPhone} target="_blank" rel="noreferrer"
             style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 16px', background: '#DCFCE7', color: '#166534', border: '1.5px solid #16653430', borderRadius: '10px', fontSize: '13px', fontWeight: '700', textDecoration: 'none' }}>
-            💬 رسالة للبائع
+            💬 {tFn('orders.msgSeller')}
           </a>
         )}
 
-        {/* إلغاء */}
         {isPending && !cancelMsg && (
           <button type="button" onClick={() => setCancelMsg(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 16px', background: '#FEF2F2', color: '#991B1B', border: '1.5px solid #FECACA', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-            ✕ إلغاء
+            ✕ {tFn('orders.cancel')}
           </button>
         )}
 
-        {/* Rate for completed orders */}
         {isCompleted && !reviewed && (
           <button type="button" onClick={() => setShowReview(true)}
             style={{ display:'flex', alignItems:'center', gap:5, padding:'9px 14px', background:'#FEF3C7', color:'#92400E', border:'1.5px solid #FDE68A', borderRadius:'10px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-            ⭐ تقييم
+            ⭐ {tFn('orders.rate')}
           </button>
         )}
         {isCompleted && reviewed && (
           <span style={{ display:'flex', alignItems:'center', gap:5, padding:'9px 14px', background:'#F0F7F1', color:C.green, border:`1px solid ${C.border}`, borderRadius:'10px', fontSize:13, fontWeight:700 }}>
-            ✓ تم التقييم
+            ✓ {tFn('orders.rated')}
           </span>
         )}
 
-        {/* Receipt */}
         <button type="button" onClick={() => downloadReceipt(order)}
           style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 14px', background: '#F9F5F0', color: C.muted, border: `1px solid ${C.border}`, borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-          📥 إيصال
+          📥 {tFn('orders.receipt')}
         </button>
       </div>
 
@@ -475,7 +468,8 @@ const OrderCard = ({ order }) => {
         <ReviewModal
           order={order}
           onClose={() => setShowReview(false)}
-          onSubmitted={() => { setReviewed(true); setShowReview(false); }}
+          onSubmitted={() => { setReviewed(true); setShowReview(false); onReviewed?.(order._id); }}
+          tFn={tFn}
         />
       )}
 
@@ -484,21 +478,21 @@ const OrderCard = ({ order }) => {
         <div style={{ margin: '0 20px 16px', padding: '12px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '12px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
           <span style={{ fontSize: '18px', flexShrink: 0 }}>ℹ️</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#991B1B', marginBottom: '4px' }}>طلب الإلغاء</div>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#991B1B', marginBottom: '4px' }}>{tFn('orders.cancelTitle')}</div>
             <div style={{ fontSize: '12px', color: '#B91C1C', lineHeight: 1.6 }}>
-              لإلغاء هذا الطلب، يرجى التواصل مع البائع مباشرة عبر واتساب أو الاتصال وطلب الإلغاء.
+              {tFn('orders.cancelHint')}
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
               {waPhone && (
-                <a href={`${waPhone}?text=${encodeURIComponent(`مرحبًا، أريد إلغاء الطلب #${shortId(order._id)}`)}`}
+                <a href={`${waPhone}?text=${encodeURIComponent(`${tFn('orders.cancelWaMsg')} #${shortId(order._id)}`)}`}
                   target="_blank" rel="noreferrer"
                   style={{ padding: '7px 14px', background: '#DCFCE7', color: '#166534', textDecoration: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '700', border: '1px solid #16653430' }}>
-                  💬 إرسال طلب الإلغاء
+                  💬 {tFn('orders.sendCancelReq')}
                 </a>
               )}
               <button type="button" onClick={() => setCancelMsg(false)}
                 style={{ padding: '7px 14px', background: '#F9F5F0', color: C.muted, border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                رجوع
+                {tFn('common.back')}
               </button>
             </div>
           </div>
@@ -512,54 +506,54 @@ const OrderCard = ({ order }) => {
 
             {/* Progress + Timeline */}
             <div>
-              <ProgressTracker order={order} />
+              <ProgressTracker order={order} tFn={tFn} />
               <div style={{ marginTop: '20px' }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                  التفاصيل
+                  {tFn('orders.details')}
                 </div>
-                <StatusTimeline order={order} />
+                <StatusTimeline order={order} tFn={tFn} />
               </div>
             </div>
 
             {/* Payment + delivery */}
             <div>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                تفاصيل الدفع
+                {tFn('orders.payDetails')}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                 <div style={{ padding: '10px 12px', background: '#F9F5F0', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', marginBottom: '3px' }}>طريقة الدفع</div>
+                  <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', marginBottom: '3px' }}>{tFn('cart.payMethod')}</div>
                   <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>
                     {order.paymentType === 'instapay' ? '📱 InstaPay'
-                     : order.paymentType === 'deposit' ? '🏦 دفعة مقدمة'
-                     : '💵 الدفع عند الاستلام'}
+                     : order.paymentType === 'deposit' ? `🏦 ${tFn('orders.pay.deposit')}`
+                     : `💵 ${tFn('cart.pay.cod')}`}
                   </div>
                 </div>
                 {order.deliveryCost > 0 && (
                   <div style={{ padding: '10px 12px', background: '#FEF9C3', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', border: '1px solid #FDE68A' }}>
-                    <span style={{ fontSize: '12px', color: '#92400E', fontWeight: '600' }}>🚚 تكلفة التوصيل</span>
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#D97706' }}>{fmt(order.deliveryCost)} ج.م</span>
+                    <span style={{ fontSize: '12px', color: '#92400E', fontWeight: '600' }}>🚚 {tFn('orders.deliveryCost')}</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#D97706' }}>{fmt(order.deliveryCost)} {tFn('common.egp')}</span>
                   </div>
                 )}
                 {order.paymentType === 'deposit' && (
                   <>
                     <div style={{ padding: '10px 12px', background: '#F9F5F0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '12px', color: C.muted }}>المدفوع مقدمًا</span>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: C.green }}>{fmt(order.depositAmount)} ج.م</span>
+                      <span style={{ fontSize: '12px', color: C.muted }}>{tFn('orders.advancePaid')}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: C.green }}>{fmt(order.depositAmount)} {tFn('common.egp')}</span>
                     </div>
                     <div style={{ padding: '10px 12px', background: '#F9F5F0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '12px', color: C.muted }}>الباقي عند الاستلام</span>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{fmt(order.totalAmount - order.depositAmount)} ج.م</span>
+                      <span style={{ fontSize: '12px', color: C.muted }}>{tFn('orders.remainingOnDelivery')}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{fmt(order.totalAmount - order.depositAmount)} {tFn('common.egp')}</span>
                     </div>
                   </>
                 )}
                 <div style={{ padding: '10px 12px', background: C.greenLt, borderRadius: '10px', display: 'flex', justifyContent: 'space-between', border: `1px solid ${C.green}25` }}>
-                  <span style={{ fontSize: '12px', color: C.green, fontWeight: '700' }}>الإجمالي</span>
-                  <span style={{ fontSize: '14px', fontWeight: '800', color: C.green }}>{fmt(order.totalAmount)} ج.م</span>
+                  <span style={{ fontSize: '12px', color: C.green, fontWeight: '700' }}>{tFn('common.total')}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: C.green }}>{fmt(order.totalAmount)} {tFn('common.egp')}</span>
                 </div>
                 {(address || delivType) && (
                   <div style={{ marginTop: '4px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '7px' }}>التسليم</div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '7px' }}>{tFn('orders.delivery')}</div>
                     {delivType && <div style={{ fontSize: '13px', fontWeight: '600', color: C.text, marginBottom: '4px' }}>🚚 {delivType}</div>}
                     {address && <div style={{ fontSize: '12px', color: C.muted, background: '#F9F5F0', padding: '8px 10px', borderRadius: '8px' }}>📍 {address}</div>}
                   </div>
@@ -576,21 +570,21 @@ const OrderCard = ({ order }) => {
             {order.items?.length > 0 && (
               <div>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                  منتجات الطلب ({order.items.length})
+                  {tFn('orders.orderItems')} ({order.items.length})
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   {order.items.map((item, i) => {
-                    const il  = item.listing || {};
+                    const il    = item.listing || {};
                     const imeta = TYPE_META[il.type] || TYPE_META.other;
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#F9F5F0', borderRadius: '10px' }}>
                         <span style={{ fontSize: '18px', flexShrink: 0 }}>{imeta.emoji}</span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{il.breed || imeta.ar || 'حيوان'}</div>
-                          <div style={{ fontSize: '11px', color: C.muted }}>{imeta.ar}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</div>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{il.breed || tFn(imeta.typeKey) || tFn('orders.livestock')}</div>
+                          <div style={{ fontSize: '11px', color: C.muted }}>{tFn(imeta.typeKey)}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</div>
                         </div>
                         {item.price > 0 && (
-                          <span style={{ fontSize: '13px', fontWeight: '800', color: C.green }}>{fmt(item.price)} ج.م</span>
+                          <span style={{ fontSize: '13px', fontWeight: '800', color: C.green }}>{fmt(item.price)} {tFn('common.egp')}</span>
                         )}
                       </div>
                     );
@@ -602,35 +596,35 @@ const OrderCard = ({ order }) => {
             {/* Seller detail */}
             <div>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                البائع
+                {tFn('orders.seller')}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#F9F5F0', borderRadius: '12px', marginBottom: '10px' }}>
                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: avatarColor(seller.name || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', color: '#fff', flexShrink: 0 }}>
                   {initials(seller.name || '')}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>{seller.name || 'بائع'}</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>{seller.name || tFn('orders.seller')}</div>
                   {seller.phone && <div style={{ fontSize: '12px', color: C.muted, marginTop: '1px' }}>📞 {seller.phone}</div>}
                 </div>
-                <span style={{ background: '#DCFCE7', color: '#166534', fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '8px' }}>✓ موثق</span>
+                <span style={{ background: '#DCFCE7', color: '#166534', fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '8px' }}>✓ {tFn('buyer.browse.verified')}</span>
               </div>
               {seller.phone && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   {waPhone && (
                     <a href={waPhone} target="_blank" rel="noreferrer"
                       style={{ display: 'block', padding: '10px 14px', background: '#DCFCE7', color: '#166534', textDecoration: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '13px', textAlign: 'center', border: '1px solid #16653425' }}>
-                      💬 رسالة واتساب
+                      💬 {tFn('orders.waMsg')}
                     </a>
                   )}
                   <a href={`tel:${seller.phone}`}
                     style={{ display: 'block', padding: '10px 14px', background: C.greenLt, color: C.green, textDecoration: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '13px', textAlign: 'center', border: `1px solid ${C.green}30` }}>
-                    📞 اتصال مباشر
+                    📞 {tFn('orders.directCall')}
                   </a>
                 </div>
               )}
               <button type="button" onClick={() => downloadReceipt(order)}
                 style={{ width: '100%', marginTop: '8px', padding: '10px 14px', background: '#F9F5F0', color: C.muted, border: `1px solid ${C.border}`, borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontFamily: 'inherit' }}>
-                📥 تحميل الإيصال
+                📥 {tFn('orders.downloadReceipt')}
               </button>
             </div>
           </div>
@@ -664,25 +658,32 @@ const SkeletonCard = () => (
   </div>
 );
 
-// ─── Filter config ────────────────────────────────────────────────────────────
-const FILTERS = [
-  { key: 'all',       label: 'كل الطلبات',  match: () => true },
-  { key: 'active',    label: 'نشطة',         match: o => ['pending','confirmed'].includes(o.status) },
-  { key: 'completed', label: 'مُسلَّمة',     match: o => o.status === 'completed' },
-  { key: 'cancelled', label: 'ملغية',        match: o => o.status === 'cancelled' },
-];
-
 // ─── BuyerOrders ──────────────────────────────────────────────────────────────
 const BuyerOrders = () => {
-  const [orders, setOrders]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
-  const [filter, setFilter]   = useState('all');
+  const { t, isRTL } = useLang();
+  const [orders,      setOrders]      = useState([]);
+  const [reviewedIds, setReviewedIds] = useState(new Set());
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState('');
+  const [filter,      setFilter]      = useState('all');
+
+  const FILTERS = [
+    { key: 'all',       labelKey: 'orders.filter.all',       match: () => true },
+    { key: 'active',    labelKey: 'orders.filter.active',    match: o => ['pending','confirmed'].includes(o.status) },
+    { key: 'completed', labelKey: 'orders.filter.completed', match: o => o.status === 'completed' },
+    { key: 'cancelled', labelKey: 'orders.filter.cancelled', match: o => o.status === 'cancelled' },
+  ];
 
   useEffect(() => {
-    getMyOrders()
-      .then(({ data }) => setOrders(data))
-      .catch(() => setError('تعذّر تحميل الطلبات. حاول مرة أخرى.'))
+    Promise.all([
+      getMyOrders(),
+      getMyReviewedOrders().catch(() => ({ data: [] })),
+    ])
+      .then(([ordersRes, reviewedRes]) => {
+        setOrders(ordersRes.data);
+        setReviewedIds(new Set(reviewedRes.data));
+      })
+      .catch(() => setError(t('orders.loadErr')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -702,24 +703,24 @@ const BuyerOrders = () => {
       <p style={{ color: '#B91C1C', margin: '0 0 16px' }}>{error}</p>
       <button onClick={() => window.location.reload()}
         style={{ padding: '10px 24px', background: C.green, color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
-        إعادة المحاولة
+        {t('common.retry')}
       </button>
     </div>
   );
 
   return (
-    <div style={{ margin: '-24px', padding: '24px', background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} style={{ margin: '-24px', padding: '24px', background: C.bg, minHeight: '100vh', fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
         <h1 style={{ fontSize: '22px', fontWeight: '800', color: C.text, margin: '0 0 4px', letterSpacing: '-0.3px' }}>
-          طلباتي 📦
+          {t('orders.title')} 📦
         </h1>
         <p style={{ color: C.muted, margin: 0, fontSize: '13px' }}>
-          {loading ? 'جارٍ التحميل…' : (
+          {loading ? t('common.loading') : (
             <>
-              {orders.length} طلب إجمالي
-              {counts.active > 0 && <span style={{ marginRight: '10px', color: C.green, fontWeight: '700' }}>· {counts.active} نشط</span>}
+              {orders.length} {t('orders.totalCount')}
+              {counts.active > 0 && <span style={{ marginRight: '10px', color: C.green, fontWeight: '700' }}>· {counts.active} {t('orders.activeCount')}</span>}
             </>
           )}
         </p>
@@ -732,7 +733,7 @@ const BuyerOrders = () => {
           return (
             <button key={f.key} type="button" onClick={() => setFilter(f.key)}
               style={{ padding: '8px 16px', background: active ? C.green : C.white, color: active ? '#fff' : C.text, border: `1.5px solid ${active ? C.green : C.border}`, borderRadius: '20px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s', boxShadow: active ? 'none' : C.shadow, fontFamily: 'inherit' }}>
-              {f.label}
+              {t(f.labelKey)}
               {counts[f.key] > 0 && (
                 <span style={{ background: active ? 'rgba(255,255,255,0.3)' : C.border, color: active ? '#fff' : C.muted, fontSize: '11px', fontWeight: '700', padding: '0 6px', borderRadius: '10px', minWidth: '18px', textAlign: 'center' }}>
                   {counts[f.key]}
@@ -757,21 +758,21 @@ const BuyerOrders = () => {
             {filter === 'cancelled' ? '🚫' : filter === 'completed' ? '✅' : '📦'}
           </div>
           <h3 style={{ fontSize: '20px', fontWeight: '800', color: C.text, margin: '0 0 8px' }}>
-            {filter === 'all' ? 'لا توجد طلبات بعد' : `لا توجد طلبات ${FILTERS.find(f => f.key === filter)?.label}`}
+            {filter === 'all' ? t('orders.empty.all') : `${t('orders.empty.noLabel')} ${t(FILTERS.find(f => f.key === filter)?.labelKey ?? '')}`}
           </h3>
           <p style={{ color: C.muted, fontSize: '15px', margin: '0 0 24px', maxWidth: '340px', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.7 }}>
-            {filter === 'all'       ? 'ستظهر هنا طلباتك بعد إجراء عملية شراء.'
-             : filter === 'cancelled' ? 'لم يتم إلغاء أي طلبات.'
-             : filter === 'completed' ? 'ستظهر هنا الطلبات المكتملة.'
-             : 'لا توجد طلبات نشطة حاليًا.'}
+            {filter === 'all'       ? t('orders.empty.allHint')
+             : filter === 'cancelled' ? t('orders.empty.cancelledHint')
+             : filter === 'completed' ? t('orders.empty.completedHint')
+             : t('orders.empty.activeHint')}
           </p>
           {filter === 'all'
             ? <Link to="/buyer" style={{ display: 'inline-block', padding: '12px 28px', background: C.green, color: '#fff', textDecoration: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '15px' }}>
-                🌾 تصفح المواشي
+                🌾 {t('orders.browseLivestock')}
               </Link>
             : <button onClick={() => setFilter('all')}
                 style={{ padding: '10px 22px', background: 'transparent', color: C.green, border: `2px solid ${C.green}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '14px', fontFamily: 'inherit' }}>
-                عرض كل الطلبات
+                {t('orders.showAll')}
               </button>}
         </div>
       )}
@@ -779,7 +780,15 @@ const BuyerOrders = () => {
       {/* Orders list */}
       {!loading && filtered.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {filtered.map(order => <OrderCard key={order._id} order={order} />)}
+          {filtered.map(order => (
+            <OrderCard
+              key={order._id}
+              order={order}
+              alreadyReviewed={reviewedIds.has(order._id)}
+              onReviewed={id => setReviewedIds(prev => new Set([...prev, id]))}
+              tFn={t}
+            />
+          ))}
         </div>
       )}
 
@@ -787,15 +796,15 @@ const BuyerOrders = () => {
       {!loading && orders.length > 0 && (
         <div style={{ marginTop: '28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
           {[
-            { icon: '📦', label: 'إجمالي الطلبات', val: orders.length,  color: C.text },
-            { icon: '⏳', label: 'نشطة',            val: counts.active, color: '#92400E' },
-            { icon: '✅', label: 'مُسلَّمة',         val: counts.completed, color: C.green },
-            { icon: '💰', label: 'إجمالي الإنفاق',  val: `${fmt(orders.reduce((s, o) => s + (o.totalAmount || 0), 0))} ج.م`, color: C.text },
-          ].map(({ icon, label, val, color }) => (
-            <div key={label} style={{ background: C.white, borderRadius: '12px', padding: '14px 16px', boxShadow: C.shadow, textAlign: 'center' }}>
+            { icon: '📦', labelKey: 'orders.summary.total',   val: orders.length,         color: C.text     },
+            { icon: '⏳', labelKey: 'orders.summary.active',  val: counts.active,          color: '#92400E'  },
+            { icon: '✅', labelKey: 'orders.summary.delivered',val: counts.completed,      color: C.green    },
+            { icon: '💰', labelKey: 'orders.summary.spent',   val: `${fmt(orders.reduce((s, o) => s + (o.totalAmount || 0), 0))} ${t('common.egp')}`, color: C.text },
+          ].map(({ icon, labelKey, val, color }) => (
+            <div key={labelKey} style={{ background: C.white, borderRadius: '12px', padding: '14px 16px', boxShadow: C.shadow, textAlign: 'center' }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>{icon}</div>
               <div style={{ fontSize: '18px', fontWeight: '800', color, lineHeight: 1.1 }}>{val}</div>
-              <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', marginTop: '2px' }}>{label}</div>
+              <div style={{ fontSize: '11px', color: C.muted, fontWeight: '600', marginTop: '2px' }}>{t(labelKey)}</div>
             </div>
           ))}
         </div>

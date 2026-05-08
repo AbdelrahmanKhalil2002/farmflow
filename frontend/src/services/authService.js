@@ -27,3 +27,12 @@ export const updateProfile = (data) => {
   return api.put('/auth/profile', data, isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {});
 };
 export const updatePassword = (data) => api.put('/auth/password',  data);
+
+export const getNotifPrefs    = ()     => api.get('/auth/notif-prefs');
+export const updateNotifPrefs = (data) => api.put('/auth/notif-prefs', data);
+
+export const forgotPassword      = (identifier)        => api.post('/auth/forgot-password', { identifier });
+export const resetPassword       = (token, password)   => api.post('/auth/reset-password',  { token, password });
+export const verifyEmail         = (token)             => api.post('/auth/verify-email',     { token });
+export const resendVerification  = ()                  => api.post('/auth/resend-verification');
+export const verify2FA           = (tempToken, code)   => api.post('/auth/verify-2fa',       { tempToken, code });

@@ -35,6 +35,11 @@ const expenseSchema = new mongoose.Schema(
       ref:      'User',
       required: true,
     },
+    farm: {
+      type:  mongoose.Schema.Types.ObjectId,
+      ref:   'Farm',
+      index: true,
+    },
     listing: {
       type:    mongoose.Schema.Types.ObjectId,
       ref:     'Listing',
@@ -63,6 +68,14 @@ const expenseSchema = new mongoose.Schema(
     isMonthly: {
       type:    Boolean,
       default: false,
+    },
+
+    // Day of month (1-28) on which this expense auto-recurs. null = non-recurring.
+    recurringDay: {
+      type:    Number,
+      min:     1,
+      max:     28,
+      default: null,
     },
   },
   { timestamps: true }

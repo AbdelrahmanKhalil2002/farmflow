@@ -23,6 +23,8 @@ const notificationSchema = new mongoose.Schema(
         'medical_followup', 'weight_milestone',
         // generic
         'general',
+        // messaging
+        'new_message',
       ],
       default: 'general',
     },

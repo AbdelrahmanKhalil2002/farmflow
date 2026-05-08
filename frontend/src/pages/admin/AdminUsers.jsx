@@ -2,25 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getAllUsers, toggleUserStatus, deleteUser as deleteUserApi } from '../../services/adminService';
 
+import { C as _C } from '../../tokens';
+
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:        '#F8FAFC',
-  card:      '#FFFFFF',
-  header:    '#F9FAFB',
-  border:    '#E5E7EB',
-  text:      '#111827',
-  dim:       '#6B7280',
-  dimMid:    '#9CA3AF',
-  green:     '#16A34A',
-  greenBg:   '#F0FDF4',
-  red:       '#DC2626',
-  redBg:     '#FEF2F2',
-  amber:     '#D97706',
-  amberBg:   '#FFFBEB',
-  blue:      '#2563EB',
-  blueBg:    '#EFF6FF',
-  purple:    '#7C3AED',
-  purpleBg:  '#F5F3FF',
+  ..._C,
+  header: '#F9FAFB',
+  dim:    '#6B7280',
+  dimMid: '#9CA3AF',
 };
 
 const ROLE_META = {
@@ -244,6 +233,12 @@ const AdminUsers = () => {
   // Sort
   const [sort, setSort] = useState({ col: 'createdAt', dir: 'desc' });
 
+  // Pagination
+  const [page,       setPage]       = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const PAGE_SIZE = 20;
+
   // Bulk selection
   const [selected, setSelected] = useState(new Set());
 
@@ -258,14 +253,24 @@ const AdminUsers = () => {
 
   // ── Load ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    getAllUsers()
-      .then(({ data }) => setUsers(data))
+    setLoading(true);
+    getAllUsers(page, PAGE_SIZE)
+      .then(({ data }) => {
+        setUsers(data.users);
+        setTotalPages(data.pages);
+        setTotalUsers(data.total);
+      })
       .catch(() => setError('Failed to load users.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page]);
 
   // Drawer user is derived from the users array so it auto-updates after toggle
   const drawerUser = drawerUserId ? (users.find(u => u._id === drawerUserId) ?? null) : null;
+
+  // Reset to page 1 when filters change
+  const handleSearch    = (v) => { setSearch(v);    setPage(1); };
+  const handleRoleTab   = (v) => { setRoleTab(v);   setPage(1); };
+  const handleStatusTab = (v) => { setStatusTab(v); setPage(1); };
 
   // ── Filter + sort ────────────────────────────────────────────────────────
   const filtered = users
@@ -452,7 +457,7 @@ const AdminUsers = () => {
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
           <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: C.dim, pointerEvents: 'none' }}>🔍</span>
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input value={search} onChange={e => handleSearch(e.target.value)}
             placeholder="Search name or email…"
             aria-label="Search users by name or email"
             style={{ width: '100%', padding: '8px 12px 8px 30px', borderRadius: '9px', border: `1px solid ${C.border}`, background: '#FFFFFF', color: C.text, fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
@@ -462,7 +467,7 @@ const AdminUsers = () => {
           {['all', 'seller', 'buyer', 'admin'].map(r => {
             const color = r === 'seller' ? C.amber : r === 'admin' ? C.purple : r === 'buyer' ? C.blue : C.text;
             return (
-              <button key={r} type="button" onClick={() => setRoleTab(r)} aria-pressed={roleTab === r} style={tabBtn(roleTab === r, color)}>
+              <button key={r} type="button" onClick={() => handleRoleTab(r)} aria-pressed={roleTab === r} style={tabBtn(roleTab === r, color)}>
                 {r === 'all' ? 'All Roles' : r[0].toUpperCase() + r.slice(1)}
               </button>
             );
@@ -473,7 +478,7 @@ const AdminUsers = () => {
           {['all', 'active', 'inactive'].map(s => {
             const color = s === 'inactive' ? C.red : s === 'active' ? C.green : C.text;
             return (
-              <button key={s} type="button" onClick={() => setStatusTab(s)} aria-pressed={statusTab === s} style={tabBtn(statusTab === s, color)}>
+              <button key={s} type="button" onClick={() => handleStatusTab(s)} aria-pressed={statusTab === s} style={tabBtn(statusTab === s, color)}>
                 {s[0].toUpperCase() + s.slice(1)}
               </button>
             );
@@ -652,6 +657,45 @@ const AdminUsers = () => {
           );
         })}
       </div>
+
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '20px 0', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: page === 1 ? '#F9FAFB' : '#fff', color: page === 1 ? C.dim : C.text, fontWeight: '600', fontSize: '13px', cursor: page === 1 ? 'not-allowed' : 'pointer' }}>
+            ← Previous
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+            .reduce((acc, p, idx, arr) => {
+              if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…');
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, i) => p === '…' ? (
+              <span key={`ellipsis-${i}`} style={{ padding: '7px 4px', color: C.dim, fontSize: '13px' }}>…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                style={{ padding: '7px 12px', borderRadius: '8px', border: `1px solid ${p === page ? C.green : C.border}`, background: p === page ? C.green : '#fff', color: p === page ? '#fff' : C.text, fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}>
+                {p}
+              </button>
+            ))
+          }
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: page === totalPages ? '#F9FAFB' : '#fff', color: page === totalPages ? C.dim : C.text, fontWeight: '600', fontSize: '13px', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}>
+            Next →
+          </button>
+          <span style={{ fontSize: '12px', color: C.dim, marginLeft: '4px' }}>
+            {totalUsers} total users
+          </span>
+        </div>
+      )}
 
       {/* ── Profile drawer ── */}
       {drawerUser && (

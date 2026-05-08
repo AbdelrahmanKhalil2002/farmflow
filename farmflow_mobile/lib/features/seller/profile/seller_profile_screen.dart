@@ -8,6 +8,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/api/image_helper.dart';
 import '../../../core/auth/auth_notifier.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/image_compress_util.dart';
 import '../../../shared/models/user_model.dart';
@@ -70,23 +71,28 @@ class SellerProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _MenuItem(
                     icon: Icons.edit_outlined,
-                    label: 'تعديل الملف الشخصي',
+                    label: context.l10n.editProfile,
                     onTap: () => _showEditProfile(context, ref, user),
                   ),
                   _MenuItem(
                     icon: Icons.photo_camera_outlined,
-                    label: 'تغيير صورة المزرعة',
+                    label: context.l10n.editFarmBanner,
                     onTap: () => _changeBanner(context, ref),
                   ),
                   _MenuItem(
                     icon: Icons.lock_outline,
-                    label: 'تغيير كلمة المرور',
+                    label: context.l10n.changePassword,
                     onTap: () => _showChangePassword(context, ref),
                   ),
                   _MenuItem(
                     icon: Icons.notifications_outlined,
-                    label: 'الإشعارات',
+                    label: context.l10n.notificationsTitle,
                     onTap: () => context.push('/seller/notifications'),
+                  ),
+                  _MenuItem(
+                    icon: Icons.pets_outlined,
+                    label: 'إعدادات السلالات',
+                    onTap: () => context.push('/seller/breed-settings'),
                   ),
                   const SizedBox(height: 8),
                   _LogoutButton(),
@@ -115,17 +121,17 @@ class SellerProfileScreen extends ConsumerWidget {
           await ref.read(authRepositoryProvider).updateProfile(formData);
       ref.read(authNotifierProvider.notifier).updateUser(updated);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('تم تحديث صورة المزرعة',
-              style: TextStyle(fontFamily: 'Cairo')),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.l10n.profileUpdateSuccess,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.green,
         ));
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('فشل رفع الصورة',
-              style: TextStyle(fontFamily: 'Cairo')),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.l10n.profileUpdateFailed,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.red,
         ));
       }
@@ -213,7 +219,7 @@ class _BannerHeader extends StatelessWidget {
                   const Icon(Icons.star, color: Color(0xFFF59E0B), size: 14),
                   const SizedBox(width: 4),
                   Text(
-                    '${user.averageRating.toStringAsFixed(1)} (${user.reviewCount} تقييم)',
+                    '${user.averageRating.toStringAsFixed(1)} (${context.l10n.reviewCount(user.reviewCount)})',
                     style: const TextStyle(fontFamily: 'Cairo', fontSize: 12,
                         color: AppColors.white),
                   ),
@@ -258,7 +264,7 @@ class _InfoCard extends StatelessWidget {
             _InfoRow(icon: Icons.location_on_outlined, label: user.governorate!),
           if (user.experience != null)
             _InfoRow(icon: Icons.work_history_outlined,
-                label: '${user.experience} سنوات خبرة'),
+                label: '${user.experience} ${context.l10n.experience}'),
           if (user.animalTypes.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
@@ -352,9 +358,9 @@ class _LogoutButton extends ConsumerWidget {
     onPressed: () async {
       final ok = await showConfirmDialog(
         context,
-        title: 'تسجيل الخروج',
-        message: 'هل تريد تسجيل الخروج من حسابك؟',
-        confirmLabel: 'خروج',
+        title: context.l10n.logoutConfirmTitle,
+        message: context.l10n.logoutConfirmMessage,
+        confirmLabel: context.l10n.logoutConfirmButton,
         dangerous: false,
       );
       if (ok) {
@@ -362,8 +368,8 @@ class _LogoutButton extends ConsumerWidget {
       }
     },
     icon: const Icon(Icons.logout, color: AppColors.red),
-    label: const Text('تسجيل الخروج',
-        style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+    label: Text(context.l10n.logoutButton,
+        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700,
             color: AppColors.red)),
     style: OutlinedButton.styleFrom(
       side: const BorderSide(color: AppColors.red),
@@ -443,7 +449,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty ||
         _farmNameCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'الاسم واسم المزرعة مطلوبان');
+      setState(() => _error = context.l10n.farmNameRequired);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -471,7 +477,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _error = 'فشل في التحديث. حاول مجدداً.';
+        _error = context.l10n.updateFailed;
         _loading = false;
       });
     }
@@ -495,39 +501,39 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 width: 40, height: 4,
                 decoration: BoxDecoration(color: AppColors.border,
                     borderRadius: BorderRadius.circular(2)))),
-            const Text('تعديل الملف الشخصي',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+            Text(context.l10n.editProfileTitle,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                     fontWeight: FontWeight.w800, color: AppColors.text)),
             const SizedBox(height: 16),
-            _PField(ctrl: _nameCtrl, label: 'الاسم الكامل *'),
+            _PField(ctrl: _nameCtrl, label: context.l10n.fullName),
             const SizedBox(height: 10),
-            _PField(ctrl: _farmNameCtrl, label: 'اسم المزرعة *'),
+            _PField(ctrl: _farmNameCtrl, label: context.l10n.farmName),
             const SizedBox(height: 10),
-            _PField(ctrl: _farmPhoneCtrl, label: 'هاتف المزرعة',
+            _PField(ctrl: _farmPhoneCtrl, label: context.l10n.farmPhoneLabel,
                 keyboard: TextInputType.phone),
             const SizedBox(height: 10),
-            _PField(ctrl: _personalPhoneCtrl, label: 'الهاتف الشخصي',
+            _PField(ctrl: _personalPhoneCtrl, label: context.l10n.personalPhoneLabel,
                 keyboard: TextInputType.phone),
             const SizedBox(height: 10),
-            _PField(ctrl: _expCtrl, label: 'سنوات الخبرة',
+            _PField(ctrl: _expCtrl, label: context.l10n.experience,
                 keyboard: TextInputType.number),
             const SizedBox(height: 10),
             // Governorate picker
-            _PLabel('المحافظة'),
+            _PLabel(context.l10n.governorate),
             const SizedBox(height: 6),
             GovPickerField(
               value: _governorate,
               onChanged: (v) => setState(() => _governorate = v),
             ),
             const SizedBox(height: 10),
-            _PField(ctrl: _bioCtrl, label: 'نبذة عن المزرعة',
+            _PField(ctrl: _bioCtrl, label: context.l10n.bio,
                 maxLines: 3),
             const SizedBox(height: 10),
-            _PField(ctrl: _descCtrl, label: 'وصف تفصيلي',
+            _PField(ctrl: _descCtrl, label: context.l10n.listingDescription,
                 maxLines: 4),
             const SizedBox(height: 16),
             // Animal types
-            _PLabel('أنواع الحيوانات'),
+            _PLabel(context.l10n.animalType),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8, runSpacing: 8,
@@ -554,7 +560,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
             ),
             const SizedBox(height: 16),
             // Certificates
-            _PLabel('الشهادات والاعتمادات'),
+            _PLabel(context.l10n.certificatesSection),
             const SizedBox(height: 8),
             ..._kCertificates.map((c) {
               final selected = _certificates.contains(c);
@@ -600,8 +606,8 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(
                           color: AppColors.white, strokeWidth: 2))
-                  : const Text('حفظ التعديلات',
-                      style: TextStyle(fontFamily: 'Cairo',
+                  : Text(context.l10n.saveChanges,
+                      style: const TextStyle(fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700, color: AppColors.white)),
             ),
           ],
@@ -639,15 +645,15 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
 
   Future<void> _submit() async {
     if (_currentCtrl.text.isEmpty || _newCtrl.text.isEmpty) {
-      setState(() => _error = 'يرجى ملء جميع الحقول');
+      setState(() => _error = context.l10n.fillAllFields);
       return;
     }
     if (_newCtrl.text != _confirmCtrl.text) {
-      setState(() => _error = 'كلمة المرور الجديدة غير متطابقة');
+      setState(() => _error = context.l10n.newPasswordMismatch);
       return;
     }
     if (_newCtrl.text.length < 8) {
-      setState(() => _error = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+      setState(() => _error = context.l10n.passwordMinLength);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -658,15 +664,15 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
       });
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('تم تغيير كلمة المرور بنجاح',
-              style: TextStyle(fontFamily: 'Cairo')),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.l10n.passwordChangedSuccess,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.green,
         ));
       }
     } catch (_) {
       setState(() {
-        _error = 'فشل في تغيير كلمة المرور. تحقق من كلمة المرور الحالية.';
+        _error = context.l10n.currentPasswordWrong;
         _loading = false;
       });
     }
@@ -685,27 +691,27 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
               width: 40, height: 4,
               decoration: BoxDecoration(color: AppColors.border,
                   borderRadius: BorderRadius.circular(2)))),
-          const Text('تغيير كلمة المرور',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 17,
+          Text(context.l10n.changePasswordTitle,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 17,
                   fontWeight: FontWeight.w800, color: AppColors.text)),
           const SizedBox(height: 16),
           _PwField(
             controller: _currentCtrl,
-            label: 'كلمة المرور الحالية',
+            label: context.l10n.currentPassword,
             show: _showCurrent,
             onToggle: () => setState(() => _showCurrent = !_showCurrent),
           ),
           const SizedBox(height: 10),
           _PwField(
             controller: _newCtrl,
-            label: 'كلمة المرور الجديدة',
+            label: context.l10n.newPassword,
             show: _showNew,
             onToggle: () => setState(() => _showNew = !_showNew),
           ),
           const SizedBox(height: 10),
           _PwField(
             controller: _confirmCtrl,
-            label: 'تأكيد كلمة المرور الجديدة',
+            label: context.l10n.confirmNewPassword,
             show: _showConfirm,
             onToggle: () => setState(() => _showConfirm = !_showConfirm),
           ),
@@ -723,8 +729,8 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
                 ? const SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(
                         color: AppColors.white, strokeWidth: 2))
-                : const Text('تغيير كلمة المرور',
-                    style: TextStyle(fontFamily: 'Cairo',
+                : Text(context.l10n.changePassword,
+                    style: const TextStyle(fontFamily: 'Cairo',
                         fontWeight: FontWeight.w700, color: AppColors.white)),
           ),
         ],

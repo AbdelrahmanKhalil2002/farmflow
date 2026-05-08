@@ -2,15 +2,16 @@ const router = require('express').Router();
 const { param } = require('express-validator');
 const { protect } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/role');
-const { getStats, getUsers, toggleUserStatus, deleteUser } = require('../controllers/adminController');
+const { getStats, getUsers, toggleUserStatus, deleteUser, getPlatformAnalytics } = require('../controllers/adminController');
 const Order = require('../models/Order');
 const User  = require('../models/User');
 
 // All admin routes require a valid token + admin role
 router.use(protect, authorizeRoles('admin'));
 
-router.get('/stats',                                          getStats);
-router.get('/users',                                          getUsers);
+router.get('/stats',                getStats);
+router.get('/platform-analytics',  getPlatformAnalytics);
+router.get('/users',               getUsers);
 router.patch(
   '/users/:id/toggle',
   param('id').isMongoId().withMessage('Invalid user ID'),

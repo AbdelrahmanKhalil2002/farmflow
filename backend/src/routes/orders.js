@@ -19,7 +19,9 @@ router.post(
   protect,
   authorizeRoles('buyer'),
   [
-    body('listingId').isMongoId().withMessage('Valid listing ID is required'),
+    body('listingId').optional().isMongoId().withMessage('Valid listing ID is required'),
+    body('supplyId').optional().isMongoId().withMessage('Valid supply ID is required'),
+    body('quantity').optional().isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
     body('paymentType').isIn(['deposit', 'cod', 'instapay']).withMessage('Payment type must be deposit, cod, or instapay'),
     body('depositAmount')
       .optional()

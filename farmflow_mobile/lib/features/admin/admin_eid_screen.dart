@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_endpoints.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/shimmer_widget.dart';
 
@@ -66,17 +67,17 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
       });
       ref.invalidate(eidConfigProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('تم الحفظ بنجاح',
-              style: TextStyle(fontFamily: 'Cairo')),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.l10n.savedSuccess,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.green,
         ));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('فشل في الحفظ',
-              style: TextStyle(fontFamily: 'Cairo')),
+          content: Text(context.l10n.saveFailed,
+              style: const TextStyle(fontFamily: 'Cairo')),
           backgroundColor: AppColors.red,
         ));
       }
@@ -95,8 +96,8 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
         backgroundColor: AppColors.green,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text('إعدادات العيد',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+        title: Text(context.l10n.eidSettings,
+            style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800,
                 color: AppColors.white)),
       ),
       body: asyncCfg.when(
@@ -117,13 +118,13 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
             const Icon(Icons.wifi_off_rounded,
                 size: 48, color: AppColors.muted),
             const SizedBox(height: 10),
-            const Text('تعذّر التحميل',
-                style: TextStyle(
+            Text(context.l10n.loadingFailed,
+                style: const TextStyle(
                     fontFamily: 'Cairo', color: AppColors.muted)),
             TextButton(
               onPressed: () => ref.invalidate(eidConfigProvider),
-              child: const Text('إعادة المحاولة',
-                  style: TextStyle(
+              child: Text(context.l10n.retry,
+                  style: const TextStyle(
                       fontFamily: 'Cairo', color: AppColors.green)),
             ),
           ]),
@@ -132,7 +133,7 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
           _initFrom(cfg);
           final dateStr = _eidDate != null
               ? DateFormat('d MMMM yyyy', 'ar').format(_eidDate!)
-              : 'لم يُحدَّد';
+              : context.l10n.eidDateNotSet;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -148,22 +149,20 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Row(children: [
-                  Text('🌙', style: TextStyle(fontSize: 38)),
-                  SizedBox(width: 14),
+                child: Row(children: [
+                  const Text('🌙', style: TextStyle(fontSize: 38)),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                      Text('وضع العيد',
-                          style: TextStyle(fontFamily: 'Cairo',
+                      Text(context.l10n.eidModeBanner,
+                          style: const TextStyle(fontFamily: 'Cairo',
                               fontSize: 17, fontWeight: FontWeight.w800,
                               color: Colors.white)),
-                      SizedBox(height: 4),
-                      Text(
-                          'يُفعِّل تصنيف مواشي العيد '
-                          'ويُظهر مرشّح الأضاحي للمشترين',
-                          style: TextStyle(fontFamily: 'Cairo',
+                      const SizedBox(height: 4),
+                      Text(context.l10n.eidModeBannerSubtitle,
+                          style: const TextStyle(fontFamily: 'Cairo',
                               fontSize: 12,
                               color: Color(0xCCFFFFFF))),
                     ]),
@@ -182,17 +181,17 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Row(children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                      Text('تفعيل وضع العيد',
-                          style: TextStyle(fontFamily: 'Cairo',
+                      Text(context.l10n.eidModeTitle,
+                          style: const TextStyle(fontFamily: 'Cairo',
                               fontSize: 14, fontWeight: FontWeight.w700,
                               color: AppColors.text)),
-                      SizedBox(height: 2),
-                      Text('يُضيف تصنيف "مواشي العيد" في الواجهة',
-                          style: TextStyle(fontFamily: 'Cairo',
+                      const SizedBox(height: 2),
+                      Text(context.l10n.eidModeSubtitle,
+                          style: const TextStyle(fontFamily: 'Cairo',
                               fontSize: 12, color: AppColors.muted)),
                     ]),
                   ),
@@ -225,8 +224,8 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
                           crossAxisAlignment:
                               CrossAxisAlignment.start,
                           children: [
-                        const Text('تاريخ العيد',
-                            style: TextStyle(fontFamily: 'Cairo',
+                        Text(context.l10n.eidDate,
+                            style: const TextStyle(fontFamily: 'Cairo',
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.text)),
@@ -261,8 +260,8 @@ class _AdminEidScreenState extends ConsumerState<AdminEidScreen> {
                         width: 22, height: 22,
                         child: CircularProgressIndicator(
                             color: AppColors.white, strokeWidth: 2.5))
-                    : const Text('حفظ الإعدادات',
-                        style: TextStyle(fontFamily: 'Cairo',
+                    : Text(context.l10n.saveSettings,
+                        style: const TextStyle(fontFamily: 'Cairo',
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             color: AppColors.white)),

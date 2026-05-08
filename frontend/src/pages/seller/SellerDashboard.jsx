@@ -1,57 +1,40 @@
 import { useEffect, useId, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useFarm } from '../../context/FarmContext';
+import { useLang } from '../../context/LangContext';
 import { getSummary, getIncome, getExpenses } from '../../services/financeService';
 import { getMyListings } from '../../services/listingService';
 import { getMyOrders } from '../../services/orderService';
 import { getAnimals, getWeighingDue, getFollowUpsDue } from '../../services/animalService';
+import { getSellerReviews, replyToReview } from '../../services/reviewService';
 import { fmt } from '../../utils/format';
+import { C as _C } from '../../tokens';
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg:        '#F8F4EE',
-  hero:      'linear-gradient(135deg, #1C3A24 0%, #2D6235 55%, #3A7D44 100%)',
-  card:      '#FFFFFF',
-  green:     '#3A7D44',
-  greenDk:   '#2D6235',
-  greenBg:   '#DCFCE7',
-  greenText: '#166534',
-  amber:     '#D97706',
-  amberBg:   '#FEF3C7',
-  amberText: '#92400E',
-  red:       '#DC2626',
-  redBg:     '#FEF2F2',
-  redText:   '#B91C1C',
-  blue:      '#2563EB',
-  blueBg:    '#DBEAFE',
-  blueText:  '#1E3A5F',
-  border:    '#E8D5C0',
-  text:      '#2C1810',
-  muted:     '#8B6B5A',
-  shadow:    '0 1px 3px rgba(44,24,16,0.07), 0 4px 14px rgba(44,24,16,0.06)',
-};
+const C = { ..._C, hero: 'linear-gradient(135deg, #1C3A24 0%, #2D6235 55%, #3A7D44 100%)' };
 
 const TYPE_META = {
-  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', ar: 'أبقار' },
-  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', ar: 'أغنام' },
-  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', ar: 'ماعز'  },
-  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', ar: 'إبل'   },
-  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', ar: 'خيول'  },
-  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', ar: 'أخرى'  },
+  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', typeKey: 'herd.type.cattle' },
+  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', typeKey: 'herd.type.sheep'  },
+  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', typeKey: 'herd.type.goat'   },
+  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', typeKey: 'herd.type.camel'  },
+  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', typeKey: 'herd.type.horse'  },
+  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', typeKey: 'herd.type.other'  },
 };
 
 const CAT = {
-  feed:      { bg: '#FEF9C3', color: '#713F12', label: '🌾 علف'         },
-  doctor:    { bg: '#DBEAFE', color: '#1E3A5F', label: '🏥 بيطري'       },
-  transport: { bg: '#F3E8FF', color: '#581C87', label: '🚛 نقل'          },
-  other:     { bg: '#F3F4F6', color: '#374151', label: '📦 أخرى'         },
+  feed:      { bg: '#FEF9C3', color: '#713F12', labelKey: 'expenses.cat.feed',        emoji: '🌾' },
+  doctor:    { bg: '#DBEAFE', color: '#1E3A5F', labelKey: 'expenses.cat.doctor',      emoji: '🏥' },
+  transport: { bg: '#F3E8FF', color: '#581C87', labelKey: 'expenses.cat.transport',   emoji: '🚛' },
+  other:     { bg: '#F3F4F6', color: '#374151', labelKey: 'expenses.cat.other',       emoji: '📦' },
 };
 
 const PERIODS = [
-  { key: 'month',   ar: 'هذا الشهر'   },
-  { key: 'quarter', ar: 'آخر 3 أشهر'  },
-  { key: 'year',    ar: 'هذا العام'    },
-  { key: 'all',     ar: 'كل الوقت'    },
+  { key: 'month',   labelKey: 'dashboard.period.month'   },
+  { key: 'quarter', labelKey: 'dashboard.period.quarter' },
+  { key: 'year',    labelKey: 'dashboard.period.year'    },
+  { key: 'all',     labelKey: 'common.all'               },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -256,8 +239,22 @@ const QuickBtn = ({ to, emoji, label, primary }) => (
 );
 
 // ─── Main component ────────────────────────────────────────────────────────────
+// Farm-type display config
+const FARM_META = {
+  poultry:   { listingsEmoji: '🐔', herdEmoji: '🐔', herdLabel: 'dashboard.kpi.poultry'   },
+  horses:    { listingsEmoji: '🐎', herdEmoji: '🐎', herdLabel: 'dashboard.kpi.horses'    },
+  dairy:     { listingsEmoji: '🐄', herdEmoji: '🥛', herdLabel: 'dashboard.kpi.herdDairy' },
+  livestock: { listingsEmoji: '🐄', herdEmoji: '🐄', herdLabel: 'dashboard.kpi.herd'      },
+  exotic:    { listingsEmoji: '🦌', herdEmoji: '🦌', herdLabel: 'dashboard.kpi.herd'      },
+  mixed:     { listingsEmoji: '🐄', herdEmoji: '🐄', herdLabel: 'dashboard.kpi.herd'      },
+};
+
 const SellerDashboard = () => {
   const { user } = useAuth();
+  const { activeFarm } = useFarm();
+  const { t } = useLang();
+
+  const farmMeta = FARM_META[activeFarm?.type] || FARM_META.livestock;
 
   const [period,   setPeriod]   = useState('month');
   const [summary,  setSummary]  = useState(null);
@@ -271,6 +268,9 @@ const SellerDashboard = () => {
   const [dueVaccinations, setDueVaccinations] = useState([]);
   const [dueWeighings,    setDueWeighings]    = useState([]);
   const [dueFollowUps,    setDueFollowUps]    = useState([]);
+  const [myReviews,       setMyReviews]       = useState([]);
+  const [replyDrafts,     setReplyDrafts]     = useState({});
+  const [replySaving,     setReplySaving]     = useState({});
 
   useEffect(() => {
     getAnimals().then(r => {
@@ -289,6 +289,11 @@ const SellerDashboard = () => {
     getWeighingDue().then(r => setDueWeighings(r.data)).catch(() => {});
     getFollowUpsDue().then(r => setDueFollowUps(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user?._id) return;
+    getSellerReviews(user._id).then(r => setMyReviews(r.data)).catch(() => {});
+  }, [user?._id]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 900);
@@ -314,7 +319,7 @@ const SellerDashboard = () => {
         setIncome30(incRes.data);
         setExp30(expRes.data);
       })
-      .catch(() => setError('تعذّر تحميل البيانات. حاول مرة أخرى.'))
+      .catch(() => setError(t('dashboard.loadErr')))
       .finally(() => setLoading(false));
   }, [period]);
 
@@ -334,7 +339,7 @@ const SellerDashboard = () => {
 
   const barData = Object.entries(byType).map(([type, value]) => {
     const m = TYPE_META[type] || TYPE_META.other;
-    return { label: type, value, color: m.color, emoji: m.emoji, ar: m.ar };
+    return { label: type, value, color: m.color, emoji: m.emoji, ar: t(m.typeKey) };
   });
 
   const profit       = summary?.netProfit     ?? 0;
@@ -354,8 +359,8 @@ const SellerDashboard = () => {
           type: 'order',
           icon:   isDone ? '✅' : isCancelled ? '❌' : '🛒',
           iconBg: isDone ? C.greenBg : isCancelled ? C.redBg : C.amberBg,
-          title:  `طلب جديد — ${o.listing?.breed || o.listing?.type || 'مواشي'}`,
-          sub:    `${isNew ? '⏳ في الانتظار' : isDone ? '✅ مكتمل' : isCancelled ? '❌ ملغي' : '🔄 مؤكد'} · ${fmtDate(o.createdAt)}`,
+          title:  `${t('dashboard.activity.newOrder')} — ${o.listing?.breed || o.listing?.type || t('dashboard.activity.livestock')}`,
+          sub:    `${isNew ? `⏳ ${t('dashboard.activity.waiting')}` : isDone ? `✅ ${t('dashboard.activity.completed')}` : isCancelled ? `❌ ${t('dashboard.activity.cancelled')}` : `🔄 ${t('dashboard.activity.confirmed')}`} · ${fmtDate(o.createdAt)}`,
           amount: o.totalAmount ? `+${fmtSAR(o.totalAmount)}` : null,
           amtColor: C.greenText,
         };
@@ -364,7 +369,7 @@ const SellerDashboard = () => {
         ts: e.date || e.createdAt,
         type: 'income',
         icon: '💰', iconBg: C.greenBg,
-        title: e.note || (e.type === 'sale' ? 'دخل من بيع' : 'دفعة مقدمة'),
+        title: e.note || (e.type === 'sale' ? t('dashboard.activity.saleIncome') : t('dashboard.activity.deposit')),
         sub:   fmtDate(e.date || e.createdAt),
         amount: `+${fmtSAR(e.amount)}`, amtColor: C.greenText,
       })),
@@ -372,7 +377,7 @@ const SellerDashboard = () => {
         ts: e.date || e.createdAt,
         type: 'expense',
         icon: '📉', iconBg: C.redBg,
-        title: e.note || `${(CAT[e.category] || { label: e.category }).label} — مصروف`,
+        title: e.note || `${t(CAT[e.category]?.labelKey || 'expenses.cat.other')} — ${t('dashboard.activity.expense')}`,
         sub:   fmtDate(e.date || e.createdAt),
         amount: `-${fmtSAR(e.amount)}`, amtColor: C.redText,
       })),
@@ -384,10 +389,10 @@ const SellerDashboard = () => {
 
   const greeting = (() => {
     const h = new Date().getHours();
-    return h < 12 ? 'صباح الخير' : h < 17 ? 'مساء الخير' : 'مساء النور';
+    return h < 12 ? t('dashboard.greetMorning') : h < 17 ? t('dashboard.greetEvening') : t('dashboard.greetNight');
   })();
 
-  const periodLabel = PERIODS.find(p => p.key === period)?.ar ?? '';
+  const periodLabel = t(PERIODS.find(p => p.key === period)?.labelKey ?? '');
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -396,15 +401,20 @@ const SellerDashboard = () => {
 
       {/* ════ Hero ════ */}
       <div style={{ background: C.hero, padding: '32px 32px 36px', position: 'relative', overflow: 'hidden' }}>
-        <div aria-hidden style={{ position: 'absolute', right: -20, top: -20, fontSize: '180px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>🌾</div>
+        <div aria-hidden style={{ position: 'absolute', right: -20, top: -20, fontSize: '180px', opacity: 0.06, lineHeight: 1, pointerEvents: 'none', userSelect: 'none' }}>{farmMeta.herdEmoji}</div>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <p style={{ margin: '0 0 3px', fontSize: '13px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.3px' }}>{greeting} 👋</p>
             <h1 style={{ margin: '0 0 5px', fontSize: '24px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
               {user?.name ?? 'المزارع'}
             </h1>
+            {activeFarm && (
+              <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
+                {farmMeta.herdEmoji} {activeFarm.name}
+              </p>
+            )}
             <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255,255,255,0.55)' }}>
-              {loading ? 'جارٍ تحميل لوحة التحكم…' : `${listings.length} إعلان · ${orders.filter(o => o.status === 'pending').length} طلب معلق`}
+              {loading ? t('dashboard.loading') : `${listings.length} ${t('dashboard.listingCount')} · ${orders.filter(o => o.status === 'pending').length} ${t('dashboard.pendingCount')}`}
             </p>
           </div>
 
@@ -416,7 +426,7 @@ const SellerDashboard = () => {
                   background: period === p.key ? '#fff' : 'rgba(255,255,255,0.12)',
                   color:      period === p.key ? C.greenDk : 'rgba(255,255,255,0.8)',
                   transition: 'all 0.15s' }}>
-                {p.ar}
+                {t(p.labelKey)}
               </button>
             ))}
           </div>
@@ -434,61 +444,60 @@ const SellerDashboard = () => {
 
         {/* ════ Quick actions ════ */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
-          <QuickBtn to="/seller/add-listing" emoji="➕" label="إضافة قائمة جديدة" primary />
-          <QuickBtn to="/seller/expenses"    emoji="📉" label="عرض المصروفات" />
-          <QuickBtn to="/seller/income"      emoji="💰" label="عرض الدخل" />
-          <QuickBtn to="/seller/listings"    emoji="📋" label="قوائمي" />
+          <QuickBtn to="/seller/add-listing" emoji="➕" label={t('dashboard.qa.addListing')} primary />
+          <QuickBtn to="/seller/finance"     emoji="💰" label={t('nav.finance')} />
+          <QuickBtn to="/seller/listings"    emoji={farmMeta.listingsEmoji} label={t('nav.listings')} />
         </div>
 
         {/* ════ KPI Cards ════ */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '14px', marginBottom: '22px' }}>
 
-          {/* 1 — إجمالي المواشي */}
+          {/* 1 — Total Livestock / Herd */}
           <KpiCard
-            icon="🐄" iconBg={C.amberBg}
-            label="إجمالي المواشي"
+            icon={farmMeta.herdEmoji} iconBg={C.amberBg}
+            label={t(farmMeta.herdLabel) || t('dashboard.kpi.herd')}
             value={{ text: listings.length, color: C.text }}
             trend={newThisMonth > 0 ? {
               dir:  listingTrend >= 0 ? 'up' : 'down',
-              text: `${newThisMonth}+ هذا الشهر`,
+              text: `${newThisMonth}+ ${t('dashboard.kpi.thisMonth')}`,
             } : null}
             extra={Object.entries(byStatus).map(([st, n]) => (
               <span key={st} style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '20px', background: st === 'approved' ? C.greenBg : st === 'pending' ? C.amberBg : '#F3F4F6', color: st === 'approved' ? C.greenText : st === 'pending' ? C.amberText : '#374151' }}>
-                {n} {st === 'approved' ? 'معتمد' : st === 'pending' ? 'معلق' : st}
+                {n} {st === 'approved' ? t('listings.status.active') : st === 'pending' ? t('listings.status.pending') : st}
               </span>
             ))}
             loading={loading}
           />
 
-          {/* 2 — الدخل */}
+          {/* 2 — Income */}
           <KpiCard
             icon="💰" iconBg={C.greenBg}
-            label={`الدخل · ${periodLabel}`}
+            label={`${t('dashboard.kpi.income')} · ${periodLabel}`}
             value={{ text: fmtSAR(income), color: C.greenText }}
             trend={summary?.incomeByType ? null : null}
-            sub={summary?.incomeByType ? Object.entries(summary.incomeByType).map(([t, v]) => `${t}: ${fmtSAR(v)}`).join(' · ') : null}
+            sub={summary?.incomeByType ? Object.entries(summary.incomeByType).map(([k, v]) => `${k}: ${fmtSAR(v)}`).join(' · ') : null}
             loading={loading}
           />
 
-          {/* 3 — النفقات */}
+          {/* 3 — Expenses */}
           <KpiCard
             icon="📉" iconBg={C.redBg}
-            label={`النفقات · ${periodLabel}`}
+            label={`${t('dashboard.kpi.expenses')} · ${periodLabel}`}
             value={{ text: fmtSAR(expenses), color: C.redText }}
             extra={summary?.expenseByCategory
               ? Object.entries(summary.expenseByCategory).filter(([, v]) => v > 0).map(([cat, amt]) => {
                   const m = CAT[cat] || { bg: '#F3F4F6', color: '#374151', label: cat };
-                  return <span key={cat} style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', background: m.bg, color: m.color }}>{m.label} {fmtSAR(amt)}</span>;
+                  return <span key={cat} style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', background: m.bg, color: m.color }}>{t(m.labelKey || 'expenses.cat.other')} {fmtSAR(amt)}</span>;
                 })
               : null}
             loading={loading}
           />
 
-          {/* 4 — صافي الربح */}
+          {/* 4 — Net Profit */}
           <KpiCard
             icon={profit > 0 ? '📈' : profit < 0 ? '⚠️' : '➖'}
             iconBg={profit > 0 ? C.greenBg : profit < 0 ? C.redBg : '#F3F4F6'}
-            label="صافي الربح"
+            label={t('dashboard.kpi.profit')}
             value={{ text: fmtSAR(profit), color: profitColor }}
             border={profitBorder}
             loading={loading}
@@ -497,10 +506,10 @@ const SellerDashboard = () => {
               <div style={{ padding: '10px 12px', borderRadius: '10px', background: profit > 0 ? C.greenBg : profit < 0 ? C.redBg : '#F3F4F6' }}>
                 <p style={{ margin: 0, fontSize: '12px', color: profitColor, fontWeight: '600', lineHeight: 1.5 }}>
                   {profit > 0 && margin
-                    ? `هامش الربح ${margin}٪ — أداء ممتاز! 🎉`
+                    ? t('dashboard.profitMarginMsg').replace('{margin}', margin)
                     : profit < 0
-                    ? '⚠️ النفقات تتجاوز الدخل في هذه الفترة'
-                    : 'الدخل يساوي النفقات هذه الفترة'}
+                    ? t('dashboard.expensesExceedMsg')
+                    : t('dashboard.breakEvenMsg')}
                 </p>
               </div>
             )}
@@ -514,15 +523,15 @@ const SellerDashboard = () => {
           <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>الاتجاه خلال آخر 30 يومًا</div>
-                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>الدخل مقابل النفقات</div>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>{t('dashboard.trend30days')}</div>
+                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{t('dashboard.incomeVsExpenses')}</div>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: C.greenText }}>
-                  <span style={{ width: '20px', height: '2px', background: C.green, borderRadius: '2px', display: 'inline-block' }} /> دخل
+                  <span style={{ width: '20px', height: '2px', background: C.green, borderRadius: '2px', display: 'inline-block' }} /> {t('dashboard.kpi.income')}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '700', color: C.redText }}>
-                  <span style={{ width: '20px', height: '2px', background: C.red, borderRadius: '2px', display: 'inline-block' }} /> نفقات
+                  <span style={{ width: '20px', height: '2px', background: C.red, borderRadius: '2px', display: 'inline-block' }} /> {t('dashboard.kpi.expenses')}
                 </span>
               </div>
             </div>
@@ -535,14 +544,14 @@ const SellerDashboard = () => {
           {/* Bar chart */}
           <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
             <div style={{ marginBottom: '14px' }}>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>المواشي حسب الفئة</div>
-              <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>توزيع قوائمك الحالية</div>
+              <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>{t('dashboard.livestockByCategory')}</div>
+              <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{t('dashboard.listingDistribution')}</div>
             </div>
             {loading
               ? <Skeleton h={110} r={8} />
               : barData.length > 0
                 ? <BarChart data={barData} />
-                : <div style={{ textAlign: 'center', padding: '28px', color: C.muted, fontSize: '13px' }}>لا توجد قوائم بعد</div>
+                : <div style={{ textAlign: 'center', padding: '28px', color: C.muted, fontSize: '13px' }}>{t('dashboard.noListingsYet')}</div>
             }
           </div>
         </div>
@@ -554,11 +563,11 @@ const SellerDashboard = () => {
           <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
-                <div style={{ fontSize: '15px', fontWeight: '700', color: C.text }}>الأنشطة الأخيرة</div>
-                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>طلبات · دخل · مصروفات</div>
+                <div style={{ fontSize: '15px', fontWeight: '700', color: C.text }}>{t('dashboard.recentActivities')}</div>
+                <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{t('dashboard.activitySubtitle')}</div>
               </div>
               <Link to="/seller/orders" style={{ fontSize: '12px', color: C.green, fontWeight: '700', textDecoration: 'none', padding: '5px 12px', background: C.greenBg, borderRadius: '20px', border: `1px solid ${C.green}30` }}>
-                كل الطلبات ›
+                {t('dashboard.allOrders')} ›
               </Link>
             </div>
 
@@ -569,9 +578,9 @@ const SellerDashboard = () => {
             ) : activity.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 16px' }}>
                 <div style={{ fontSize: '44px', marginBottom: '10px' }}>🌱</div>
-                <p style={{ margin: '0 0 16px', fontSize: '14px', color: C.muted }}>لا توجد أنشطة بعد. ابدأ بإضافة قائمة.</p>
+                <p style={{ margin: '0 0 16px', fontSize: '14px', color: C.muted }}>{t('dashboard.noActivities')}</p>
                 <Link to="/seller/add-listing" style={{ display: 'inline-block', padding: '9px 18px', background: C.green, color: '#fff', borderRadius: '10px', fontSize: '13px', fontWeight: '700', textDecoration: 'none' }}>
-                  ➕ إضافة أول قائمة
+                  ➕ {t('dashboard.addFirstListing')}
                 </Link>
               </div>
             ) : (
@@ -580,7 +589,7 @@ const SellerDashboard = () => {
                 {['order', 'income', 'expense'].map(type => {
                   const items = activity.filter(a => a.type === type);
                   if (!items.length) return null;
-                  const sectionLabel = type === 'order' ? '🛒 طلبات' : type === 'income' ? '💰 دخل' : '📉 مصروفات';
+                  const sectionLabel = type === 'order' ? `🛒 ${t('dashboard.section.orders')}` : type === 'income' ? `💰 ${t('dashboard.section.income')}` : `📉 ${t('dashboard.section.expenses')}`;
                   return (
                     <div key={type} style={{ marginBottom: '8px' }}>
                       <div style={{ fontSize: '10px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 10px 2px' }}>
@@ -594,7 +603,7 @@ const SellerDashboard = () => {
                 })}
                 <div style={{ marginTop: '10px', paddingTop: '12px', borderTop: `1px solid ${C.border}`, textAlign: 'center' }}>
                   <Link to="/seller/income" style={{ fontSize: '12px', color: C.green, fontWeight: '700', textDecoration: 'none' }}>
-                    عرض التحليلات التفصيلية ›
+                    {t('dashboard.viewDetailedAnalytics')} ›
                   </Link>
                 </div>
               </>
@@ -610,15 +619,15 @@ const SellerDashboard = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                   <span style={{ fontSize: '22px' }}>⏳</span>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: '800', color: C.amberText }}>طلبات معلقة</div>
-                    <div style={{ fontSize: '11px', color: C.amberText, opacity: 0.8 }}>تحتاج موافقتك</div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: C.amberText }}>{t('dashboard.pendingOrders')}</div>
+                    <div style={{ fontSize: '11px', color: C.amberText, opacity: 0.8 }}>{t('dashboard.needsApproval')}</div>
                   </div>
                   <div style={{ marginLeft: 'auto', fontSize: '24px', fontWeight: '800', color: C.amberText }}>
                     {orders.filter(o => o.status === 'pending').length}
                   </div>
                 </div>
                 <Link to="/seller/orders" style={{ display: 'block', padding: '9px', background: C.amber, color: '#fff', textDecoration: 'none', borderRadius: '10px', textAlign: 'center', fontSize: '13px', fontWeight: '700' }}>
-                  مراجعة الطلبات
+                  {t('dashboard.reviewOrders')}
                 </Link>
               </div>
             )}
@@ -626,21 +635,21 @@ const SellerDashboard = () => {
             {/* Mini stats */}
             <div style={{ background: C.card, borderRadius: '14px', padding: '16px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                ملخص سريع
+                {t('dashboard.quickSummary')}
               </div>
               {[
-                { label: 'إجمالي الطلبات',  val: orders.length,                                    color: C.text     },
-                { label: 'مكتملة',          val: orders.filter(o => o.status === 'completed').length, color: C.greenText },
-                { label: 'قوائم نشطة',      val: byStatus['approved'] || 0,                        color: C.blue     },
-                { label: 'قوائم معلقة',     val: byStatus['pending']  || 0,                        color: C.amberText },
-              ].map(({ label, val, color }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ fontSize: '12px', color: C.muted }}>{label}</span>
+                { labelKey: 'dashboard.stats.totalOrders',   val: orders.length,                                    color: C.text     },
+                { labelKey: 'dashboard.stats.completed',     val: orders.filter(o => o.status === 'completed').length, color: C.greenText },
+                { labelKey: 'dashboard.stats.activeListings',val: byStatus['approved'] || 0,                        color: C.blue     },
+                { labelKey: 'dashboard.stats.pendingListings',val: byStatus['pending']  || 0,                       color: C.amberText },
+              ].map(({ labelKey, val, color }) => (
+                <div key={labelKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: '12px', color: C.muted }}>{t(labelKey)}</span>
                   <span style={{ fontSize: '14px', fontWeight: '800', color }}>{val}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0' }}>
-                <span style={{ fontSize: '12px', color: C.muted }}>إجمالي الإيرادات</span>
+                <span style={{ fontSize: '12px', color: C.muted }}>{t('dashboard.stats.totalRevenue')}</span>
                 <span style={{ fontSize: '14px', fontWeight: '800', color: C.greenText }}>{fmtSAR(income)}</span>
               </div>
             </div>
@@ -649,7 +658,7 @@ const SellerDashboard = () => {
             {!loading && barData.length > 0 && (
               <div style={{ background: C.card, borderRadius: '14px', padding: '16px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                  المواشي حسب النوع
+                  {t('dashboard.livestockByType')}
                 </div>
                 {barData.map(({ label, value, emoji, ar, color }) => (
                   <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
@@ -669,16 +678,15 @@ const SellerDashboard = () => {
         <div style={{ marginTop: '24px', background: '#FEF9C3', border: '1px solid #FDE68A', borderRadius: '16px', padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontWeight: '800', fontSize: '14px', color: '#92400E' }}>
-              💉 تطعيمات قادمة ({dueVaccinations.length})
+              💉 {t('dashboard.upcomingVaccinations')} ({dueVaccinations.length})
             </div>
             <Link to="/seller/herd" style={{ fontSize: '12px', color: '#D97706', fontWeight: '700', textDecoration: 'none' }}>
-              عرض كل القطيع ←
+              {t('dashboard.viewAllHerd')} ←
             </Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {dueVaccinations.slice(0, 5).map((v, i) => {
               const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
-              const TYPE_AR    = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#fff', borderRadius: '10px', border: '1px solid #FDE68A' }}>
                   <span style={{ fontSize: 18 }}>{TYPE_EMOJI[v.animalType] || '🐾'}</span>
@@ -687,12 +695,12 @@ const SellerDashboard = () => {
                       {v.vaccine}
                     </div>
                     <div style={{ fontSize: '11px', color: '#D97706' }}>
-                      {TYPE_AR[v.animalType]}{v.breed ? ` — ${v.breed}` : ''}{v.tagId ? ` · ${v.tagId}` : ''}
+                      {t(`herd.type.${v.animalType}`) || v.animalType}{v.breed ? ` — ${v.breed}` : ''}{v.tagId ? ` · ${v.tagId}` : ''}
                     </div>
                   </div>
                   <div style={{ textAlign: 'left', flexShrink: 0 }}>
                     <div style={{ fontSize: '12px', fontWeight: '800', color: v.days <= 0 ? C.red : v.days <= 3 ? '#D97706' : '#92400E' }}>
-                      {v.days <= 0 ? 'متأخر!' : `${v.days} يوم`}
+                      {v.days <= 0 ? t('dashboard.reminder.overdue') : `${v.days} ${t('dashboard.reminder.days')}`}
                     </div>
                     <div style={{ fontSize: '10px', color: '#D97706' }}>
                       {new Date(v.nextDueDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
@@ -710,16 +718,15 @@ const SellerDashboard = () => {
         <div style={{ marginTop: '16px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: '16px', padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontWeight: '800', fontSize: '14px', color: '#9F1239' }}>
-              🏥 متابعات طبية قادمة ({dueFollowUps.length})
+              🏥 {t('dashboard.upcomingFollowUps')} ({dueFollowUps.length})
             </div>
             <Link to="/seller/herd" style={{ fontSize: '12px', color: '#E11D48', fontWeight: '700', textDecoration: 'none' }}>
-              عرض القطيع ←
+              {t('dashboard.viewHerd')} ←
             </Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {dueFollowUps.slice(0, 4).map((rec, i) => {
               const TE = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
-              const TA = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
               const days = rec.followUpDate
                 ? Math.ceil((new Date(rec.followUpDate) - Date.now()) / (24 * 3600 * 1000))
                 : null;
@@ -729,16 +736,16 @@ const SellerDashboard = () => {
                   <span style={{ fontSize: 18 }}>{TE[a.type] || '🐾'}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '13px', fontWeight: '700', color: '#9F1239' }}>
-                      {rec.diagnosis || 'متابعة طبية'}
+                      {rec.diagnosis || t('dashboard.medicalFollowUp')}
                     </div>
                     <div style={{ fontSize: '11px', color: '#E11D48' }}>
-                      {TA[a.type] || ''}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
+                      {a.type ? t(`herd.type.${a.type}`) : ''}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
                     </div>
                   </div>
                   {days !== null && (
                     <div style={{ textAlign: 'left', flexShrink: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: '800', color: days <= 0 ? C.red : days <= 3 ? C.amber : '#E11D48' }}>
-                        {days <= 0 ? 'متأخر!' : `${days} يوم`}
+                        {days <= 0 ? t('dashboard.reminder.overdue') : `${days} ${t('dashboard.reminder.days')}`}
                       </div>
                       <div style={{ fontSize: '10px', color: '#9F1239' }}>
                         {new Date(rec.followUpDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
@@ -757,16 +764,15 @@ const SellerDashboard = () => {
         <div style={{ marginTop: '16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '16px', padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontWeight: '800', fontSize: '14px', color: '#1E3A5F' }}>
-              ⚖️ مواعيد وزن قادمة ({dueWeighings.length})
+              ⚖️ {t('dashboard.upcomingWeighings')} ({dueWeighings.length})
             </div>
             <Link to="/seller/herd" style={{ fontSize: '12px', color: '#2563EB', fontWeight: '700', textDecoration: 'none' }}>
-              عرض القطيع ←
+              {t('dashboard.viewHerd')} ←
             </Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {dueWeighings.slice(0, 4).map((a, i) => {
               const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
-              const TYPE_AR    = { cattle:'بقر', buffalo:'جاموس', sheep:'أغنام', goat:'ماعز', camel:'إبل', horse:'خيول', poultry:'دواجن', rabbit:'أرانب', other:'أخرى' };
               const days = a.nextWeighingDate
                 ? Math.ceil((new Date(a.nextWeighingDate) - Date.now()) / (24 * 3600 * 1000))
                 : null;
@@ -776,21 +782,21 @@ const SellerDashboard = () => {
                   <span style={{ fontSize: 18 }}>{TYPE_EMOJI[a.type] || '🐾'}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '13px', fontWeight: '700', color: '#1E3A5F' }}>
-                      {TYPE_AR[a.type]}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
+                      {t(`herd.type.${a.type}`) || a.type}{a.breed ? ` — ${a.breed}` : ''}{a.tagId ? ` · ${a.tagId}` : ''}
                     </div>
                     {pct !== null && (
                       <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ flex: 1, height: 4, background: '#DBEAFE', borderRadius: 2, overflow: 'hidden' }}>
                           <div style={{ height: '100%', background: '#2563EB', borderRadius: 2, width: `${pct}%` }} />
                         </div>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#2563EB', whiteSpace: 'nowrap' }}>{a.currentWeight} / {a.targetWeight} كجم</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#2563EB', whiteSpace: 'nowrap' }}>{a.currentWeight} / {a.targetWeight} {t('common.kg')}</span>
                       </div>
                     )}
                   </div>
                   {days !== null && (
                     <div style={{ textAlign: 'left', flexShrink: 0 }}>
                       <div style={{ fontSize: '12px', fontWeight: '800', color: days <= 0 ? C.red : days <= 2 ? C.amber : '#2563EB' }}>
-                        {days <= 0 ? 'متأخر!' : `${days} يوم`}
+                        {days <= 0 ? t('dashboard.reminder.overdue') : `${days} ${t('dashboard.reminder.days')}`}
                       </div>
                       <div style={{ fontSize: '10px', color: '#6B7280' }}>
                         {new Date(a.nextWeighingDate).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
@@ -800,6 +806,77 @@ const SellerDashboard = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ════ Reviews ════ */}
+      {myReviews.length > 0 && (
+        <div style={{ marginTop: '28px', background: C.card, borderRadius: '18px', padding: '22px', boxShadow: C.shadow, border: `1.5px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: C.text }}>⭐ تقييمات المزرعة</h2>
+            <span style={{ fontSize: '12px', color: C.muted }}>{myReviews.length} تقييم</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {myReviews.map(r => (
+              <div key={r._id} style={{ background: C.bg, borderRadius: '12px', padding: '14px 16px', border: `1px solid ${C.border}` }}>
+                {/* Reviewer + stars */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(58,125,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700', color: C.greenText }}>
+                      {(r.buyer?.name?.[0] || '?').toUpperCase()}
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>{r.buyer?.name || 'مشتري'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#F59E0B', fontSize: '13px', letterSpacing: 1 }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                    <span style={{ fontSize: '11px', color: C.muted }}>{new Date(r.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                </div>
+                {r.comment && <p style={{ margin: '0 0 10px', fontSize: '13px', color: C.muted, lineHeight: 1.5 }}>{r.comment}</p>}
+
+                {/* Existing reply */}
+                {r.reply?.body && (
+                  <div style={{ background: 'rgba(58,125,68,0.06)', borderRadius: '8px', padding: '9px 12px', marginBottom: '8px', borderRight: '3px solid rgba(58,125,68,0.3)' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: C.greenText }}>ردّك: </span>
+                    <span style={{ fontSize: '13px', color: C.text }}>{r.reply.body}</span>
+                  </div>
+                )}
+
+                {/* Reply input */}
+                {!r.reply?.body && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      type="text"
+                      placeholder="رد على التقييم..."
+                      maxLength={500}
+                      value={replyDrafts[r._id] ?? ''}
+                      onChange={e => setReplyDrafts(d => ({ ...d, [r._id]: e.target.value }))}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, fontSize: '13px', color: C.text, fontFamily: 'inherit', outline: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={!replyDrafts[r._id]?.trim() || replySaving[r._id]}
+                      onClick={() => {
+                        const body = replyDrafts[r._id]?.trim();
+                        if (!body) return;
+                        setReplySaving(s => ({ ...s, [r._id]: true }));
+                        replyToReview(r._id, body)
+                          .then(res => {
+                            setMyReviews(prev => prev.map(x => x._id === r._id ? res.data : x));
+                            setReplyDrafts(d => { const nd = { ...d }; delete nd[r._id]; return nd; });
+                          })
+                          .catch(() => {})
+                          .finally(() => setReplySaving(s => { const ns = { ...s }; delete ns[r._id]; return ns; }));
+                      }}
+                      style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: C.green, color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: !replyDrafts[r._id]?.trim() || replySaving[r._id] ? 0.5 : 1 }}
+                    >
+                      {replySaving[r._id] ? '...' : 'رد'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

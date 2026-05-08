@@ -16,6 +16,10 @@ class AnimalModel {
     this.pregnancyStatus,
     this.medicalBadge = false,
     this.images = const [],
+    this.status = 'active',
+    this.nextVaccinationDate,
+    this.vaccinationDue = false,
+    this.targetWeight,
   });
 
   final String id;
@@ -28,6 +32,10 @@ class AnimalModel {
   final String? pregnancyStatus; // none | pregnant | recently_gave_birth
   final bool medicalBadge;
   final List<String> images;
+  final String status; // active | sold | deceased
+  final DateTime? nextVaccinationDate;
+  final bool vaccinationDue;
+  final double? targetWeight;
 
   static const _typeAr = {
     'cattle':  'أبقار',
@@ -84,6 +92,12 @@ class AnimalModel {
       pregnancyStatus: json['pregnancyStatus'] as String?,
       medicalBadge:    json['medicalBadge'] as bool? ?? false,
       images:   toStrings(json['images']),
+      status:   json['status'] as String? ?? 'active',
+      nextVaccinationDate: json['nextVaccinationDate'] != null
+          ? DateTime.tryParse(json['nextVaccinationDate'] as String)
+          : null,
+      vaccinationDue: json['vaccinationDue'] as bool? ?? false,
+      targetWeight:   (json['targetWeight'] as num?)?.toDouble(),
     );
   }
 }
@@ -190,19 +204,29 @@ class AnimalSummary {
   final int male;
   final int female;
   final int pregnant;
+  final double avgAge;    // months
+  final double avgWeight; // kg
+  final Map<String, int> byType;
 
   const AnimalSummary({
     required this.total,
     required this.male,
     required this.female,
     required this.pregnant,
+    this.avgAge = 0,
+    this.avgWeight = 0,
+    this.byType = const {},
   });
 
   factory AnimalSummary.fromJson(Map<String, dynamic> json) => AnimalSummary(
-    total:    (json['total']    as num?)?.toInt() ?? 0,
-    male:     (json['male']     as num?)?.toInt() ?? 0,
-    female:   (json['female']   as num?)?.toInt() ?? 0,
-    pregnant: (json['pregnant'] as num?)?.toInt() ?? 0,
+    total:     (json['total']     as num?)?.toInt() ?? 0,
+    male:      (json['male']      as num?)?.toInt() ?? 0,
+    female:    (json['female']    as num?)?.toInt() ?? 0,
+    pregnant:  (json['pregnant']  as num?)?.toInt() ?? 0,
+    avgAge:    (json['avgAge']    as num?)?.toDouble() ?? 0,
+    avgWeight: (json['avgWeight'] as num?)?.toDouble() ?? 0,
+    byType:    (json['byType'] as Map<String, dynamic>? ?? {})
+        .map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0)),
   );
 }
 
