@@ -8,6 +8,10 @@ const swaggerSpec = require('./swagger');
 
 const app = express();
 
+// Trust the first proxy (Nginx) so express-rate-limit reads the real client IP
+// from X-Forwarded-For instead of the loopback address.
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet());
 
