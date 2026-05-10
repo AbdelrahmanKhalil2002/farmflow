@@ -516,7 +516,7 @@ Backend: `fcmToken: { type: String, default: null }` on User model + `PATCH /aut
 **Not yet done:** M16.4/M16.8 — server-side push sending via `firebase-admin` (requires separate setup).
 
 **Sprint 16 — Backend Deployment ✅**
-Backend deployed to Render (free tier) at `https://farmflow-backend-g07p.onrender.com`. MongoDB Atlas M0 cluster provisioned (Ireland, free forever) at `cluster0.mr7xjcy.mongodb.net/farmflow`. Mobile `.env` updated to Render URL; APK rebuilt (32 MB) and redistributed via Firebase App Distribution. Note: `/uploads` directory is ephemeral on Render — images are lost on redeploy until Cloudinary is integrated.
+Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/mo) at `https://xn--pgbnc3a9c8a.com` (مزرعتي.com). Node.js backend on port 5001 managed by PM2; React frontend built and served as static files by Nginx. HTTPS via Let's Encrypt (auto-renews). DNS A record on GoDaddy → `104.248.83.72`. Auto-deploy via GitHub Actions (`deploy.yml`) on push to main: SSH → `git pull` → `npm ci` → `npm run build` → `pm2 reload`. MongoDB Atlas M0 cluster (Ireland, free forever) at `cluster0.mr7xjcy.mongodb.net/farmflow`. `/uploads` directory is persistent on the Droplet (unlike Render). Mobile `.env` updated to DigitalOcean URL; APK rebuilt and redistributed via Firebase App Distribution.
 
 **Sprint 17 — Full App i18n (M3.8) ✅**
 `l10n.yaml` + `lib/core/l10n/l10n_ext.dart` (`context.l10n` shorthand). `app_en.arb` + `app_ar.arb` expanded to ~200 keys. All 35 feature screens updated — 759 hardcoded strings replaced. `AppLocalizations.delegate` added to `main.dart`. `flutter analyze` 0 errors, 0 warnings. Language toggle (AR↔EN) now switches all screen chrome instantly across buyer/seller/admin.

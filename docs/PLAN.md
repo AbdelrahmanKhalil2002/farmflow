@@ -646,7 +646,7 @@
 |---|------|--------|
 | 32.1 | `main.js` — BrowserWindow (1400×900, min 1200×700), window state persistence (electron-store: bounds + maximized) | [x] |
 | 32.2 | Dev mode: loads `http://localhost:5173` (Vite) + DevTools; prod mode: `app://localhost/` custom protocol | [x] |
-| 32.3 | `app://` protocol handler — serves React SPA from bundled `frontend/dist`; proxies `/api/` + `/uploads/` to Render cloud backend; override with `FARMFLOW_API_URL` env var | [x] |
+| 32.3 | `app://` protocol handler — serves React SPA from bundled `frontend/dist`; proxies `/api/` + `/uploads/` to DigitalOcean backend (`https://xn--pgbnc3a9c8a.com`); override with `FARMFLOW_API_URL` env var | [x] |
 | 32.4 | External links open in system browser; in-app navigation guarded against accidental redirect | [x] |
 | 32.5 | Dev script — `concurrently` starts BACKEND (nodemon) + VITE + ELECTRON; Electron waits on `tcp:localhost:5001` + `http://localhost:5173` | [x] |
 | 32.6 | electron-builder config: macOS DMG (arm64 + x64), Windows NSIS (x64), `frontend/dist` bundled as extraResources, GitHub Releases publish target | [x] |
@@ -748,7 +748,7 @@
 | 36.10 | `createNotification` respects `notifPrefs` — skips in-app creation when preference is `false`; sends HTML email for order events (new_order, order_confirmed, order_completed, order_cancelled) when user has an email address | [x] |
 | 36.11 | `TYPE_TO_PREF` map in `notify.js` links each notification type to its controlling pref key | [x] |
 
-> **SMTP activation (Render):** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in Render environment variables. Gmail: use an App Password. Email is non-blocking — all features work normally without it; emails are silently skipped.
+> **SMTP activation:** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `/var/www/farmflow/backend/.env` on the Droplet, then `pm2 restart farmflow-backend`. Gmail: use an App Password. Email is non-blocking — all features work normally without it; emails are silently skipped.
 
 ---
 
@@ -808,7 +808,7 @@
 ## Current Status Summary (as of 2026-05-08)
 
 > **Web app:** Sections 1–30, 33, 34, 35, 36, 37 complete except items requiring external credentials or pending web UI work. Full Arabic/English language switching is live across all seller pages, buyer pages, both layouts, and Settings.
-> **Backend:** Live on Render at `https://farmflow-backend-g07p.onrender.com` (free tier — spins down after 15 min inactivity). MongoDB Atlas M0 cluster at `cluster0.mr7xjcy.mongodb.net` (Ireland, free forever). Security hardened with helmet + rate limiting. Email service ready — activate by setting SMTP env vars in Render.
+> **Backend:** Live on DigitalOcean Droplet at `https://xn--pgbnc3a9c8a.com` (مزرعتي.com, IP 104.248.83.72, AMS3, Ubuntu 24.04, $12/mo). PM2 manages the Node.js process; Nginx serves the React frontend and proxies `/api/`. HTTPS via Let's Encrypt. Auto-deploy on push to main via GitHub Actions. MongoDB Atlas M0 cluster at `cluster0.mr7xjcy.mongodb.net` (Ireland, free forever). Security hardened with helmet + rate limiting. Email service ready — activate by setting SMTP env vars in the server `.env`.
 > **Flutter app:** Sprints 1–18 complete. Full buyer/seller/admin flows, PDF/CSV export, NID validation, infinite scroll, 68 passing tests, FCM push notifications, signed APK/AAB + iOS archive, full app-wide i18n. Sprint 18 adds VetRecordsScreen, BreedSettingsScreen, buyer order tabs, price-range filter. Remaining: store listings (Play/App Store accounts), Apple provisioning profile for signed IPA, Cloudinary for image storage.
 > **Desktop app (Electron):** Section 32 complete (phases 1–6). All preload IPC bridges now active (saveFile, openFile, savePdf, notify, setBadge, onMenuAction, onDeepLink). macOS DMG + Windows NSIS installer; native app menu with Arabic labels; Cmd+Shift+E/P export shortcuts wired to all seller screens; OS notifications + dock/tray badge; minimize-to-tray; auto-updater via GitHub Releases. Remaining: code signing certificates, CI/CD release pipeline.
 
@@ -841,11 +841,11 @@
 - 30.4 — Live auctions
 - 30.6 — AI price recommendations
 - 30.8 — Public API/webhooks
-- 36.1–36.11 — Email features require SMTP credentials (SMTP_HOST/USER/PASS in Render env vars); all features degrade gracefully without them
+- 36.1–36.11 — Email features require SMTP credentials (SMTP_HOST/USER/PASS in `/var/www/farmflow/backend/.env` on Droplet); all features degrade gracefully without them
 - 37.6 — Web multi-farm UI (farm switcher, per-farm creation)
 
 **Remaining Flutter items:**
 - M23.8–M23.9 — Google Play + App Store store listings (needs developer accounts + screenshots)
 - M23.3 / M23.7 — iOS signed IPA export (needs Apple Developer team + provisioning profile in Xcode Organizer)
-- Cloud image storage — `/uploads` is ephemeral on Render; migrate to Cloudinary (images lost on redeploy)
+- Cloud image storage — `/uploads` is persistent on the Droplet (no longer ephemeral); Cloudinary migration still recommended for CDN performance and scalability
 - `flutter analyze`: 0 errors, 0 warnings (6 pre-existing style infos in auth/test files only)

@@ -1,6 +1,6 @@
 # FarmFlow — Desktop App Plan
 
-> **Backend:** Deployed on Render at `https://farmflow-backend-g07p.onrender.com` · MongoDB Atlas M0 (Ireland) · CORS updated to allow `app://localhost`
+> **Backend:** Deployed on DigitalOcean Droplet at `https://xn--pgbnc3a9c8a.com` (مزرعتي.com, IP 104.248.83.72) · MongoDB Atlas M0 (Ireland) · CORS updated to allow `app://localhost`
 > **Desktop stack:** Electron · existing React/Vite frontend (reused as-is) · electron-builder · electron-store
 > **Languages:** Arabic (default, RTL) · English (switchable)
 > **Platforms:** macOS (primary) · Windows (secondary) · Linux (optional)
@@ -47,7 +47,7 @@ The React web app is 100% feature-complete across all 30 sections. Wrapping it i
 | D1.2 | `main.js` — main process: `BrowserWindow` (1400×900, min 1200×700); loads Vite dev server in dev, `app://localhost/` in prod | [x] |
 | D1.3 | `preload.js` — `contextBridge.exposeInMainWorld('electron', {platform, isDesktop})` for safe IPC; `nodeIntegration: false`, `contextIsolation: true` | [x] |
 | D1.4 | Dev workflow: `concurrently` starts **backend + Vite + Electron** via `npm run dev`; Electron waits for `tcp:localhost:5001` and `http://localhost:5173` via `wait-on` | [x] |
-| D1.5 | Prod build: `npm run build` → `vite build` then `electron-builder`; React build bundled via `extraResources`; `app://localhost` protocol handler serves static files + proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`; overridable via `FARMFLOW_API_URL` env var) | [x] |
+| D1.5 | Prod build: `npm run build` → `vite build` then `electron-builder`; React build bundled via `extraResources`; `app://localhost` protocol handler serves static files + proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://xn--pgbnc3a9c8a.com`; overridable via `FARMFLOW_API_URL` env var) | [x] |
 | D1.6 | App icon: `assets/icon.png` copied from mobile (1024×1024); `electron-builder` auto-generates `.icns` (macOS) + `.ico` (Windows) | [x] |
 | D1.7 | Window state persistence: `electron-store` saves `x/y/width/height/maximized`; restores on next launch | [x] |
 | D1.8 | Security: `nodeIntegration: false`, `contextIsolation: true`; `webSecurity` relaxed only in dev; external links open in system browser via `setWindowOpenHandler` + `will-navigate` guard | [x] |
@@ -179,7 +179,7 @@ All changes in the React app are additive and non-breaking — the web version c
 All `preload.js` IPC bridges that were previously commented out as placeholders are now active: `saveFile`, `openFile`, `savePdf` (Phase 2); `notify`, `setBadge` (Phase 3); `onMenuAction` (Phase 4). New `onDeepLink` bridge added — exposes `window.electron.onDeepLink(cb)` for `farmflow://` deep-link handling from `D6.4`.
 
 **Phase 1 — D1 Scaffold ✅ DONE**
-`farmflow_desktop/` created with Electron 32.3.3 + electron-builder + electron-store. `main.js`: BrowserWindow 1400×900 (min 1200×700), window state persisted via electron-store, `show: false` + `ready-to-show` to avoid white flash, external links open in system browser. Dev: loads `http://localhost:5173`. Prod: `app://localhost` privileged protocol — `protocol.handle` serves React static build AND proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`) via `net.fetch`. Backend CORS allows `app://localhost`. Dev script (concurrently) starts backend + Vite + Electron with wait-on gate.
+`farmflow_desktop/` created with Electron 32.3.3 + electron-builder + electron-store. `main.js`: BrowserWindow 1400×900 (min 1200×700), window state persisted via electron-store, `show: false` + `ready-to-show` to avoid white flash, external links open in system browser. Dev: loads `http://localhost:5173`. Prod: `app://localhost` privileged protocol — `protocol.handle` serves React static build AND proxies `/api/` + `/uploads/` to `BACKEND_ORIGIN` (`https://xn--pgbnc3a9c8a.com`) via `net.fetch`. Backend CORS allows `app://localhost`. Dev script (concurrently) starts backend + Vite + Electron with wait-on gate.
 
 **Phase 2 — D2 File Export ✅ DONE**
 `src/ipc/file.js`: `save-file` (dialog.showSaveDialog → fs.writeFile) + `open-file` (shell.openPath). `preload.js` exposes `saveFile` + `openFile`. `isDesktop` flag in `frontend/src/utils/platform.js`. Native save wired into `SellerStatements` (CSV + PDF), `SellerExpenses` (CSV), `SellerIncome` (CSV), and `SellerHerd` (CSV — new export button added to header). Success toast shows file path with "فتح الملف" button.

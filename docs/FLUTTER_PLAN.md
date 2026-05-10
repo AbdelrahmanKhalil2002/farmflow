@@ -534,7 +534,7 @@ lib/
 - **Post-release fixes:**
   - Icon timing: original APK was built 4 min before icons were generated (timestamp mismatch); APK rebuilt with correct icon and redistributed.
   - `android:usesCleartextTraffic="true"` added to `AndroidManifest.xml` `<application>` tag — Android 9+ blocks plain HTTP without this flag.
-  - `.env` API URL changed from `http://10.0.2.2:5001/api` (Android emulator alias — unreachable on real devices) to `http://192.168.1.10:5001/api` (Mac local WiFi IP); both devices must be on the same network. Option B: deploy backend to Railway/Render for a public HTTPS URL that removes the same-network constraint.
+  - `.env` API URL updated to `https://xn--pgbnc3a9c8a.com/api` (DigitalOcean Droplet, مزرعتي.com) — removes the same-network constraint; works on any device over the internet.
   - APK redistributed via Firebase App Distribution to `khalilbido03@gmail.com`.
 - **Remaining:** Google Play + App Store developer accounts, store listing copy/screenshots, Apple provisioning profile for signed IPA export.
 
