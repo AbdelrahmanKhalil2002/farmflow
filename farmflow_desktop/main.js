@@ -11,7 +11,7 @@ const { createTray, handleWindowClose, updateBadge } = require('./src/tray');
 
 const isDev = !app.isPackaged;
 
-const BACKEND_ORIGIN = process.env.FARMFLOW_API_URL || 'https://api.مزرعتي.com';
+const BACKEND_ORIGIN = process.env.FARMFLOW_API_URL || 'https://xn--pgbnc3a9c8a.com';
 
 // Path to the React build used in production
 const distPath = isDev
