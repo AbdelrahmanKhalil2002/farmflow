@@ -11,9 +11,7 @@ const { createTray, handleWindowClose, updateBadge } = require('./src/tray');
 
 const isDev = !app.isPackaged;
 
-// Production backend — Render cloud deployment.
-// Override with FARMFLOW_API_URL env var if self-hosting.
-const BACKEND_ORIGIN = process.env.FARMFLOW_API_URL || 'https://farmflow-backend-g07p.onrender.com';
+const BACKEND_ORIGIN = process.env.FARMFLOW_API_URL || 'https://api.مزرعتي.com';
 
 // Path to the React build used in production
 const distPath = isDev

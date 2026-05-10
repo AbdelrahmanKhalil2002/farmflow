@@ -9,7 +9,7 @@ const swaggerSpec = {
     contact: { name: 'FarmFlow', email: 'a.khalil@soar.inc' },
   },
   servers: [
-    { url: 'https://farmflow-backend-g07p.onrender.com', description: 'Production (Render)' },
+    { url: 'https://api.مزرعتي.com', description: 'Production' },
     { url: 'http://localhost:5001', description: 'Local development' },
   ],
   components: {

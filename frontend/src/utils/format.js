@@ -24,9 +24,9 @@ export const fmtEGP = (n) => `${fmt(n)} ${CURRENCY}`;
  * Dev:  VITE_API_URL is unset → backendBase = '' → path is relative (e.g. "/uploads/file.jpg")
  *       Vite proxy forwards /uploads/* to localhost:5001 — no change needed.
  *
- * Prod: VITE_API_URL = "https://api.onrender.com/api" → strips "/api" suffix
- *       → "https://api.onrender.com" + "/uploads/file.jpg"
- *       → "https://api.onrender.com/uploads/file.jpg"
+ * Prod: VITE_API_URL = "https://api.مزرعتي.com/api" → strips "/api" suffix
+ *       → "https://api.مزرعتي.com" + "/uploads/file.jpg"
+ *       → "https://api.مزرعتي.com/uploads/file.jpg"
  *
  * Returns empty string for falsy input so callers can use: path && <img src={getImageUrl(path)} />
  */
