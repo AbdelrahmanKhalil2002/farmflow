@@ -153,6 +153,7 @@ const SellerAddAnimal = () => {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null) fd.append(k, v); });
       photoFiles.forEach(f => fd.append('images', f));
+      if (activeFarm?._id) fd.append('farmId', activeFarm._id);
       await createAnimal(fd);
       navigate('/seller/herd');
     } catch (err) {

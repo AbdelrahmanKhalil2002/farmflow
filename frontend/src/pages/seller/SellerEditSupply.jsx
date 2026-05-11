@@ -49,6 +49,7 @@ const SellerEditSupply = () => {
     quantity: '', unit: 'كجم',
     pricePerUnit: '', minOrderQty: '1',
     location: '', deliveryAvailable: false, deliveryCost: '',
+    wholesaleEnabled: false, wholesalePrice: '', minWholesaleQty: '',
   });
   // Existing server images still kept (paths)
   const [keptImages,   setKeptImages]   = useState([]);
@@ -75,6 +76,9 @@ const SellerEditSupply = () => {
           location:          s.location || '',
           deliveryAvailable: s.deliveryAvailable || false,
           deliveryCost:      String(s.deliveryCost ?? ''),
+          wholesaleEnabled:  !!(s.wholesalePrice),
+          wholesalePrice:    String(s.wholesalePrice ?? ''),
+          minWholesaleQty:   String(s.minWholesaleQty ?? ''),
         });
         setKeptImages(s.images || []);
       })
@@ -126,6 +130,9 @@ const SellerEditSupply = () => {
       if (form.location) fd.append('location', form.location);
       fd.append('deliveryAvailable', form.deliveryAvailable);
       if (form.deliveryAvailable && form.deliveryCost) fd.append('deliveryCost', form.deliveryCost);
+      if (form.wholesaleEnabled && form.wholesalePrice) fd.append('wholesalePrice', form.wholesalePrice);
+      if (form.wholesaleEnabled && form.minWholesaleQty) fd.append('minWholesaleQty', form.minWholesaleQty);
+      if (!form.wholesaleEnabled) { fd.append('wholesalePrice', ''); fd.append('minWholesaleQty', ''); }
       // Tell backend which existing images to keep
       fd.append('keepImages', JSON.stringify(keptImages));
       newFiles.forEach(f => fd.append('images', f));
@@ -266,6 +273,35 @@ const SellerEditSupply = () => {
               <div style={{ position: 'relative' }}>
                 <FocusInput type="number" min="0" step="1" value={form.deliveryCost} onChange={e => set('deliveryCost', e.target.value)} placeholder="مثال: 50" style={{ paddingLeft: 60 }} />
                 <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Wholesale pricing */}
+        <div style={{ background: '#FFF8EC', border: `1px solid #FDE68A`, borderRadius: 12, padding: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: form.wholesaleEnabled ? 14 : 0 }}>
+            <input type="checkbox" checked={form.wholesaleEnabled} onChange={e => set('wholesaleEnabled', e.target.checked)}
+              style={{ marginTop: 2, accentColor: '#D97706', width: 16, height: 16, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>🏭 أسعار الجملة للتجار</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>سعر خاص للتجار الذين يطلبون كميات كبيرة</div>
+            </div>
+          </label>
+          {form.wholesaleEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, animation: 'slideDown 0.2s ease' }}>
+              <div>
+                <Lbl>سعر الجملة / وحدة</Lbl>
+                <div style={{ position: 'relative' }}>
+                  <FocusInput type="number" min="0" step="0.01" value={form.wholesalePrice}
+                    onChange={e => set('wholesalePrice', e.target.value)} placeholder="مثال: 80" style={{ paddingLeft: 60 }} />
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: C.textMuted, pointerEvents: 'none' }}>ج.م</span>
+                </div>
+              </div>
+              <div>
+                <Lbl>الحد الأدنى للجملة</Lbl>
+                <FocusInput type="number" min="1" step="1" value={form.minWholesaleQty}
+                  onChange={e => set('minWholesaleQty', e.target.value)} placeholder="مثال: 50" />
               </div>
             </div>
           )}

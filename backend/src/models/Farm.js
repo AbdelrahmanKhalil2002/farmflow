@@ -90,6 +90,17 @@ const farmSchema = new mongoose.Schema(
       default: 0,
     },
 
+    sellsSupplies: {
+      type:    Boolean,
+      default: false,
+    },
+
+    wholesaleCode: {
+      type:   String,
+      trim:   true,
+      index:  { sparse: true },
+    },
+
     isActive: {
       type:    Boolean,
       default: true,

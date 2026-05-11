@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createDairy } from '../../services/dairyService';
 import { useToast } from '../../components/Toast';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 import { C } from '../../tokens';
 
 const TYPES = [
@@ -42,9 +43,10 @@ const labelStyle = {
 };
 
 const SellerAddDairy = () => {
-  const navigate = useNavigate();
-  const toast    = useToast();
-  const { t, isRTL } = useLang();
+  const navigate       = useNavigate();
+  const toast          = useToast();
+  const { t, isRTL }   = useLang();
+  const { activeFarm } = useFarm();
 
   const [form,     setForm]     = useState(EMPTY);
   const [images,   setImages]   = useState([]);
@@ -94,6 +96,7 @@ const SellerAddDairy = () => {
       fd.append('deliveryAvailable', form.deliveryAvailable);
       if (form.deliveryAvailable && form.deliveryCost)
         fd.append('deliveryCost', form.deliveryCost);
+      if (activeFarm?._id) fd.append('farmId', activeFarm._id);
       images.forEach(img => fd.append('images', img));
 
       await createDairy(fd);

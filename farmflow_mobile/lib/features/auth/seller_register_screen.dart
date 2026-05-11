@@ -71,7 +71,7 @@ class _SellerRegisterScreenState extends ConsumerState<SellerRegisterScreen> {
     } on DioException catch (e) {
       setState(() => _error = dioErrorMessage(e));
     } catch (e) {
-      setState(() => _error = context.l10n.unexpectedError);
+      setState(() => _error = '[${e.runtimeType}] $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

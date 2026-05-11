@@ -17,9 +17,9 @@ const S = {
 };
 
 // Returns 3 grouped nav sections tailored to the active farm type.
-const getFarmLinks = (farmType) => {
-  const listingsIcon = farmType === 'poultry' ? '🐔' : farmType === 'horses' ? '🐎' : '🐄';
-  const herdIcon     = farmType === 'poultry' ? '🐔' : farmType === 'horses' ? '🐎' : '🐾';
+const getFarmLinks = (farmType, sellsSupplies) => {
+  const listingsIcon = farmType === 'poultry' ? '🐔' : farmType === 'horses' ? '🐎' : farmType === 'exotic' ? '🦢' : '🐄';
+  const herdIcon     = farmType === 'poultry' ? '🐔' : farmType === 'horses' ? '🐎' : farmType === 'exotic' ? '🦢' : '🐃';
   const herdLabelKey = farmType === 'poultry' ? 'nav.poultryHerd' : farmType === 'horses' ? 'nav.horsesHerd' : 'nav.herd';
   return [
     // ── البيع ──
@@ -27,13 +27,17 @@ const getFarmLinks = (farmType) => {
       { to: '/seller',             labelKey: 'nav.dashboard', icon: '🏠', end: true },
       { to: '/seller/listings',    labelKey: 'nav.listings',  icon: listingsIcon },
       { to: '/seller/add-listing', labelKey: 'nav.addListing',icon: '➕' },
+      { to: '/seller/drafts',      labelKey: 'nav.drafts',    icon: '💾' },
       { to: '/seller/orders',      labelKey: 'nav.orders',    icon: '📦' },
     ],
     // ── المزرعة ──
     [
       { to: '/seller/herd',    labelKey: herdLabelKey, icon: herdIcon },
       { to: '/seller/finance', labelKey: 'nav.finance', icon: '💰' },
-      { to: '/seller/supplies',labelKey: 'nav.supplies',icon: '🛒' },
+      ...(sellsSupplies
+        ? [{ to: '/seller/supplies', labelKey: 'nav.supplies', icon: '🛒' }]
+        : []
+      ),
       ...(!farmType || farmType === 'dairy' || farmType === 'mixed'
         ? [{ to: '/seller/dairy', labelKey: 'nav.dairy', icon: '🥛' }]
         : []
@@ -41,9 +45,10 @@ const getFarmLinks = (farmType) => {
     ],
     // ── عام ──
     [
-      { to: '/seller/messages', labelKey: 'nav.messages', icon: '💬', msgBadge: true },
-      { to: '/seller/farms',    labelKey: 'nav.farms',    icon: '🏡' },
-      { to: '/seller/settings', labelKey: 'nav.settings', icon: '⚙️' },
+      { to: '/seller/marketplace', labelKey: 'nav.marketplace', icon: '🛍️' },
+      { to: '/seller/messages',    labelKey: 'nav.messages',    icon: '💬', msgBadge: true },
+      { to: '/seller/farms',       labelKey: 'nav.farms',       icon: '🏡' },
+      { to: '/seller/settings',    labelKey: 'nav.settings',    icon: '⚙️' },
     ],
   ];
 };
@@ -144,7 +149,7 @@ const SellerLayout = () => {
   const [mobileOpen,  setMobileOpen]  = useState(false);
   const { msgUnread } = useMsgUnread();
   const { activeFarm } = useFarm();
-  const LINK_GROUPS = getFarmLinks(activeFarm?.type);
+  const LINK_GROUPS = getFarmLinks(activeFarm?.type, activeFarm?.sellsSupplies);
 
   // Extra top padding to clear macOS traffic-light buttons (hiddenInset title bar)
   const isMacDesktop = window.electron?.platform === 'darwin';
@@ -390,7 +395,7 @@ const SellerLayout = () => {
       {/* ── Main content ── */}
       <main style={{ flex: 1, background: S.mainBg, overflowY: 'auto', minHeight: '100vh', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div className="sl-spacer" />
-        <div style={{ flex: 1 }}>
+        <div className="sl-page" style={{ flex: 1, padding: '28px 32px' }}>
           <Outlet />
         </div>
 

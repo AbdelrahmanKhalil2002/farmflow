@@ -14,6 +14,9 @@ const supplySchema = new Schema({
   pricePerUnit:{ type: Number, required: true, min: 0 },
   minOrderQty: { type: Number, default: 1, min: 1 },
 
+  wholesalePrice:   { type: Number, min: 0 },
+  minWholesaleQty:  { type: Number, min: 1 },
+
   location:         { type: String, trim: true, maxlength: 120 },
   deliveryAvailable:{ type: Boolean, default: false },
   deliveryCost:     { type: Number, min: 0 },

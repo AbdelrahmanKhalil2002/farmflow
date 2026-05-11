@@ -1,7 +1,7 @@
 import api from './api';
 
-export const getAnimals        = ()          => api.get('/animals');
-export const getAnimalSummary  = ()          => api.get('/animals/summary');
+export const getAnimals        = (params = {}) => api.get('/animals', { params });
+export const getAnimalSummary  = (params = {}) => api.get('/animals/summary', { params });
 export const getWeighingDue    = ()          => api.get('/animals/weighing-due');
 export const getFollowUpsDue   = ()          => api.get('/animals/follow-ups-due');
 export const getAnimalById    = (id)         => api.get(`/animals/${id}`);

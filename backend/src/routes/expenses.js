@@ -16,7 +16,7 @@ const {
 } = require('../controllers/financeController');
 
 const EXPENSE_CATEGORIES = ['feed', 'doctor', 'transport', 'electricity', 'salary', 'rent', 'water', 'maintenance', 'other'];
-const INCOME_TYPES = ['sale', 'deposit'];
+const INCOME_TYPES = ['sale', 'dairy', 'feed', 'other'];
 
 const dateQueryValidation = [
   query('from').optional().isISO8601().withMessage('from must be a valid date (ISO 8601)'),
@@ -36,6 +36,7 @@ router.post(
     body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
     body('date').optional().isISO8601().withMessage('Date must be a valid ISO 8601 date'),
     body('listing').optional().isMongoId().withMessage('Invalid listing ID'),
+    body('animalId').optional().isMongoId().withMessage('Invalid animal ID'),
     body('note').optional().trim(),
   ],
   addExpense
@@ -59,6 +60,7 @@ const expenseBodyValidation = [
   body('amount').optional().isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
   body('date').optional().isISO8601().withMessage('Date must be a valid ISO 8601 date'),
   body('listing').optional().isMongoId().withMessage('Invalid listing ID'),
+  body('animalId').optional().isMongoId().withMessage('Invalid animal ID'),
   body('note').optional().trim(),
 ];
 

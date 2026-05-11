@@ -533,7 +533,7 @@ Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/m
 **Post-release fixes:**
 - Icon timing bug: original APK predated icon generation by 4 min; APK rebuilt and redistributed via Firebase App Distribution.
 - `android:usesCleartextTraffic="true"` added to `AndroidManifest.xml` — Android 9+ blocks plain HTTP by default.
-- `.env` API URL: `http://10.0.2.2:5001/api` (emulator alias, unreachable on real device) → `http://192.168.1.10:5001/api` (Mac local WiFi IP); requires same-network device. Next step: deploy backend publicly (Railway/Render) for HTTPS URL.
+- `.env` API URL: `http://10.0.2.2:5001/api` (emulator alias) → `http://192.168.1.10:5001/api` (Mac local WiFi IP) → `https://xn--pgbnc3a9c8a.com/api` (DigitalOcean Droplet, Sprint 16); APK rebuilt to 34.3 MB and redistributed via Firebase App Distribution.
 
 ### Remaining Work
 
@@ -541,9 +541,9 @@ Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/m
 |------|-------|
 | iOS signed IPA (M23.3/M23.7) | Xcode archive ready; needs Apple Developer account + provisioning profile in Xcode Organizer |
 | Store listings (M23.8–M23.9) | Google Play Console + App Store Connect accounts, screenshots, descriptions |
-| Backend deployment | ✅ Live at `https://farmflow-backend-g07p.onrender.com` (Render free tier, MongoDB Atlas M0) |
-| Cloud image storage | `/uploads` ephemeral on Render — migrate to Cloudinary before production use |
-| Push activation (M16.4/M16.8) | ✅ `FIREBASE_SERVICE_ACCOUNT_JSON` set in Render env vars — Firebase initialized, server-side push live |
+| Backend deployment | ✅ Live at `https://xn--pgbnc3a9c8a.com` (DigitalOcean Droplet, Ubuntu 24.04, AMS3, $12/mo, MongoDB Atlas M0) |
+| Cloud image storage | `/uploads` is persistent on the Droplet (no longer ephemeral); Cloudinary migration still recommended for CDN performance and scalability |
+| Push activation (M16.4/M16.8) | ✅ `FIREBASE_SERVICE_ACCOUNT_JSON` set in `backend/.env` on Droplet — Firebase initialized, server-side push live |
 | Offline degradation (M6.4) | Deferred to v2; online-first acceptable for v1 |
 | Full i18n (M3.8) | ✅ Complete — Sprint 17; all 35 screens updated; `context.l10n` extension; AR/EN toggle fully functional |
 | Sprint 18 features | ✅ VetRecordsScreen, BreedSettingsScreen, buyer order tabs, price-range filter in buyer home |
@@ -563,7 +563,7 @@ Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/m
 
 ### Phase 2 — Production Protocol Handler ✅
 - `protocol.handle('app', …)` serves React SPA from `extraResources/frontend/dist`.
-- `/api/*` and `/uploads/*` proxied to `BACKEND_ORIGIN` (`https://farmflow-backend-g07p.onrender.com`; overridable via `FARMFLOW_API_URL` env var).
+- `/api/*` and `/uploads/*` proxied to `BACKEND_ORIGIN` (`https://xn--pgbnc3a9c8a.com`; overridable via `FARMFLOW_API_URL` env var).
 - SPA fallback: paths with no file extension → `index.html`.
 
 ### Phase 3 — IPC & File Export ✅
@@ -663,7 +663,7 @@ Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/m
 * **Notification preferences**: `notifPrefs: { orders, reminders, dairy, messages }` on User model (all default true); `GET/PUT /auth/notif-prefs`; `createNotification` skips in-app creation when pref is false
 * **Email triggers for order events**: `new_order` → seller; `order_confirmed/completed/cancelled` → buyer; sent via `EMAIL_TEMPLATES` in `notify.js` when user has an email address; fire-and-forget
 
-> **Activation:** Set `SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM` in Render env vars. Gmail requires an App Password. All email features degrade gracefully — nothing breaks if SMTP is not configured.
+> **Activation:** Set `SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM` in `/var/www/farmflow/backend/.env` on the Droplet. Gmail requires an App Password. All email features degrade gracefully — nothing breaks if SMTP is not configured.
 
 ---
 

@@ -72,6 +72,7 @@ exports.updateFarm = async (req, res) => {
     const {
       name, type, governorate, farmPhone, personalPhone, experience,
       animalTypes, bio, farmDescription, farmLocation, farmCertificates, workingHours,
+      sellsSupplies,
     } = req.body;
 
     if (name             != null) farm.name             = name.trim();
@@ -86,6 +87,7 @@ exports.updateFarm = async (req, res) => {
     if (farmCertificates != null) farm.farmCertificates = parseArray(farmCertificates);
     if (farmLocation     != null) farm.farmLocation     = parseJson(farmLocation, farm.farmLocation);
     if (workingHours     != null) farm.workingHours     = parseJson(workingHours, farm.workingHours);
+    if (sellsSupplies    != null) farm.sellsSupplies    = sellsSupplies === 'true' || sellsSupplies === true;
 
     if (req.file) {
       // Remove old banner if exists

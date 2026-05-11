@@ -7,11 +7,14 @@ import {
   getMedicalRecords, addMedicalRecord, deleteMedicalRecord,
 } from '../../services/animalService';
 import { useLang } from '../../context/LangContext';
+import { addIncome } from '../../services/financeService';
+import { getListedAnimalIds } from '../../services/listingService';
+import { getImageUrl } from '../../utils/format';
 
 import { C } from '../../tokens';
 
 const TYPE_KEY   = { cattle:'herd.type.cattle', buffalo:'herd.type.buffalo', sheep:'herd.type.sheep', goat:'herd.type.goat', camel:'herd.type.camel', horse:'herd.type.horse', poultry:'herd.type.poultry', rabbit:'herd.type.rabbit', other:'herd.type.other' };
-const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🪘', horse:'🎠', poultry:'🐔', rabbit:'🐇', other:'🐾' };
+const TYPE_EMOJI = { cattle:'🐄', buffalo:'🐃', sheep:'🐑', goat:'🐐', camel:'🐪', horse:'🐎', poultry:'🐔', rabbit:'🐇', other:'🐾' };
 const HEALTH_KEY = { healthy:'animalDetail.health.healthy', sick:'animalDetail.health.sick', quarantine:'animalDetail.health.quarantine', deceased:'animalDetail.health.deceased' };
 const HEALTH_COLOR = { healthy: C.green, sick: C.red, quarantine: C.amber, deceased: '#94A3B8' };
 const GENDER_KEY   = { male:'herd.gender.male', female:'herd.gender.female', unknown:'—' };
@@ -215,9 +218,45 @@ const SellerAnimalDetail = () => {
   const [vacErr,  setVacErr]  = useState('');
   const [savingVac, setSavingVac] = useState(false);
 
+  // Listing state
+  const [isListed, setIsListed] = useState(false);
+
+  // Photo upload
+  const photoInputRef = useRef(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [avatarHover, setAvatarHover] = useState(false);
+  const [avatarImgErr, setAvatarImgErr] = useState(false);
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('images', file);
+      const r = await updateAnimal(id, fd);
+      setAvatarImgErr(false);
+      setAnimal(r.data);
+    } catch {}
+    finally { setUploadingPhoto(false); e.target.value = ''; }
+  };
+
+  const handleRemoveImage = async (idx) => {
+    const kept = animal.images.filter((_, i) => i !== idx);
+    const fd = new FormData();
+    fd.append('keepImages', JSON.stringify(kept));
+    try {
+      const r = await updateAnimal(id, fd);
+      setAnimal(r.data);
+    } catch {}
+  };
+
   // Status edit
   const [statusEdit, setStatusEdit] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [soldModal, setSoldModal] = useState(false);
+  const [soldForm, setSoldForm] = useState({ price: '', paymentMethod: 'cash', note: '' });
+  const [soldError, setSoldError] = useState('');
 
   // Pregnancy edit
   const [pregnancyEdit, setPregnancyEdit] = useState(false);
@@ -230,6 +269,9 @@ const SellerAnimalDetail = () => {
       .then(r => setAnimal(r.data))
       .catch(() => setLoadErr(t('animalDetail.loadErr')))
       .finally(() => setLoading(false));
+    getListedAnimalIds()
+      .then(r => setIsListed((r.data || []).includes(id)))
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -316,12 +358,47 @@ const SellerAnimalDetail = () => {
     } catch {}
   };
 
-  const handleStatusChange = async (newStatus) => {
+  const handleStatusChange = (newStatus) => {
+    if (newStatus === 'sold') {
+      setSoldForm({ price: '', paymentMethod: 'cash', note: '' });
+      setSoldError('');
+      setSoldModal(true);
+      return;
+    }
+    doStatusChange(newStatus);
+  };
+
+  const doStatusChange = async (newStatus) => {
     setSavingStatus(true);
     try {
       const fd = new FormData(); fd.append('status', newStatus);
       await updateAnimal(id, fd);
       setAnimal(p => ({ ...p, status: newStatus }));
+      setStatusEdit(false);
+    } catch {}
+    finally { setSavingStatus(false); }
+  };
+
+  const handleConfirmSold = async () => {
+    const price = parseFloat(soldForm.price);
+    if (!soldForm.price || isNaN(price) || price <= 0) {
+      setSoldError('يرجى إدخال سعر البيع');
+      return;
+    }
+    setSavingStatus(true);
+    setSoldError('');
+    try {
+      const fd = new FormData(); fd.append('status', 'sold');
+      await updateAnimal(id, fd);
+      await addIncome({
+        type: 'sale',
+        amount: price,
+        paymentMethod: soldForm.paymentMethod,
+        date: new Date().toISOString(),
+        note: soldForm.note || `بيع ${animal.breed || animal.type}${animal.tagId ? ` — ${animal.tagId}` : ''}`,
+      });
+      setAnimal(p => ({ ...p, status: 'sold' }));
+      setSoldModal(false);
       setStatusEdit(false);
     } catch {}
     finally { setSavingStatus(false); }
@@ -353,15 +430,21 @@ const SellerAnimalDetail = () => {
     try { await deleteAnimal(id); navigate('/seller/herd'); } catch {}
   };
 
-  // Navigate to SellerAddListing with pre-filled query params
+  // Navigate to SellerAddListing with all animal data pre-filled
   const handleListForSale = () => {
     if (!animal) return;
-    const params = new URLSearchParams({
-      type:   animal.type  || '',
-      breed:  animal.breed || '',
-      weight: animal.currentWeight || '',
-      fromAnimal: animal._id,
-    });
+    const ageMonths = animal.dob
+      ? Math.floor((Date.now() - new Date(animal.dob).getTime()) / (30.44 * 24 * 3600 * 1000))
+      : '';
+    const params = new URLSearchParams();
+    if (animal.type)                              params.set('type',       animal.type);
+    if (animal.breed)                             params.set('breed',      animal.breed);
+    if (animal.currentWeight)                     params.set('weight',     animal.currentWeight);
+    if (ageMonths)                                params.set('ageMonths',  ageMonths);
+    if (animal.gender && animal.gender !== 'unknown') params.set('gender', animal.gender);
+    if (animal.color)                             params.set('color',      animal.color);
+    if ((animal.vaccinationLog || []).length > 0) params.set('vaccinated', 'true');
+    params.set('fromAnimal', animal._id);
     navigate(`/seller/add-listing?${params.toString()}`);
   };
 
@@ -387,9 +470,33 @@ const SellerAnimalDetail = () => {
         <div style={{ height: 6, background: animal.status === 'active' ? C.green : animal.status === 'sold' ? C.amber : '#94A3B8' }} />
         <div style={{ padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-            {/* Avatar */}
-            <div style={{ width: 64, height: 64, borderRadius: 16, background: C.greenLt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, flexShrink: 0 }}>
-              {TYPE_EMOJI[animal.type] || '🐾'}
+            {/* Avatar — click to upload/change photo */}
+            <div
+              onClick={() => photoInputRef.current?.click()}
+              onMouseEnter={() => setAvatarHover(true)}
+              onMouseLeave={() => setAvatarHover(false)}
+              title="اضغط لتغيير الصورة"
+              style={{ position: 'relative', width: 72, height: 72, borderRadius: 16, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: `2px solid ${C.border}` }}
+            >
+              {animal.images?.[0] && !avatarImgErr ? (
+                <img
+                  src={getImageUrl(animal.images[0])}
+                  alt=""
+                  onError={() => setAvatarImgErr(true)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <div style={{ width: '100%', height: '100%', background: C.greenLt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>
+                  {TYPE_EMOJI[animal.type] || '🐾'}
+                </div>
+              )}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: avatarHover || uploadingPhoto ? 1 : 0, transition: 'opacity 0.15s' }}>
+                {uploadingPhoto
+                  ? <div style={{ width: 20, height: 20, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'ff-spin 0.7s linear infinite' }} />
+                  : <span style={{ fontSize: 20 }}>📷</span>
+                }
+              </div>
+              <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
             </div>
 
             {/* Info */}
@@ -417,10 +524,14 @@ const SellerAnimalDetail = () => {
             {/* Actions */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
               {animal.status === 'active' && (
-                <button type="button" onClick={handleListForSale}
-                  style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  {t('animalDetail.listForSale')} ←
-                </button>
+                isListed
+                  ? <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 14px', borderRadius:9, background:'#FFFBEB', border:'1.5px solid #FDE68A', color:'#92400E', fontSize:13, fontWeight:700 }}>
+                      🏷 معروض للبيع
+                    </span>
+                  : <button type="button" onClick={handleListForSale}
+                      style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: C.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      {t('animalDetail.listForSale')} ←
+                    </button>
               )}
               <button type="button" onClick={() => setStatusEdit(p => !p)}
                 style={{ padding: '9px 14px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.card, color: C.muted, fontSize: 13, cursor: 'pointer' }}>
@@ -885,16 +996,31 @@ const SellerAnimalDetail = () => {
             </div>
           )}
           {/* Images */}
-          {animal.images?.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>{t('animalDetail.photos')}</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {animal.images.map((src, i) => (
-                  <img key={i} src={`http://localhost:5000${src}`} alt="" style={{ width: 80, height: 80, borderRadius: 10, objectFit: 'cover', border: `2px solid ${C.border}` }} />
-                ))}
-              </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: 'uppercase' }}>{t('animalDetail.photos')}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              {(animal.images || []).map((src, i) => (
+                <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 10, overflow: 'hidden', border: `2px solid ${C.border}`, flexShrink: 0 }}>
+                  <img src={getImageUrl(src)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(i)}
+                    title="حذف الصورة"
+                    style={{ position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%', background: 'rgba(220,38,38,0.85)', border: 'none', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {/* Add more photos button */}
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                style={{ width: 80, height: 80, borderRadius: 10, border: `2px dashed ${C.border}`, background: C.greenLt, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: C.muted, fontSize: 11, fontWeight: 700 }}>
+                <span style={{ fontSize: 20 }}>📷</span>
+                {t('animalDetail.addPhoto') || 'إضافة'}
+              </button>
             </div>
-          )}
+          </div>
 
           {/* QR Code */}
           {(() => {
@@ -923,6 +1049,57 @@ const SellerAnimalDetail = () => {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── Sold price modal ──────────────────────────────────────────────── */}
+      {soldModal && (
+        <div style={{ position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}
+          onClick={e => { if (e.target === e.currentTarget) setSoldModal(false); }}>
+          <div style={{ background:C.card,borderRadius:18,padding:'28px 24px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',direction:'rtl' }}>
+            <div style={{ fontSize:18,fontWeight:800,color:C.text,marginBottom:4 }}>💰 تسجيل البيع</div>
+            <div style={{ fontSize:13,color:C.muted,marginBottom:20 }}>
+              {animal?.breed || animal?.type}{animal?.tagId ? ` — ${animal.tagId}` : ''}
+            </div>
+
+            {/* Price */}
+            <label style={{ display:'block',fontSize:12,fontWeight:700,color:C.text,marginBottom:6 }}>سعر البيع (جنيه) <span style={{ color:'#DC2626' }}>*</span></label>
+            <input
+              type="number" min="0" step="any" placeholder="مثال: 15000"
+              value={soldForm.price}
+              onChange={e => { setSoldForm(f => ({ ...f, price: e.target.value })); setSoldError(''); }}
+              style={{ width:'100%',boxSizing:'border-box',padding:'11px 13px',borderRadius:10,border:`1.5px solid ${soldError?'#DC2626':C.border}`,fontSize:15,fontFamily:'inherit',outline:'none',marginBottom: soldError?4:16 }}
+              autoFocus
+            />
+            {soldError && <div style={{ fontSize:12,color:'#DC2626',marginBottom:12 }}>{soldError}</div>}
+
+            {/* Payment method */}
+            <label style={{ display:'block',fontSize:12,fontWeight:700,color:C.text,marginBottom:6 }}>طريقة الدفع</label>
+            <select value={soldForm.paymentMethod} onChange={e => setSoldForm(f => ({ ...f, paymentMethod: e.target.value }))}
+              style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:'inherit',marginBottom:16,outline:'none',background:C.card,color:C.text }}>
+              <option value="cash">نقدي</option>
+              <option value="transfer">تحويل بنكي</option>
+              <option value="instapay">إنستاباي</option>
+            </select>
+
+            {/* Note */}
+            <label style={{ display:'block',fontSize:12,fontWeight:700,color:C.text,marginBottom:6 }}>ملاحظة (اختياري)</label>
+            <input type="text" placeholder="مثال: بيع في سوق المواشي" value={soldForm.note}
+              onChange={e => setSoldForm(f => ({ ...f, note: e.target.value }))}
+              style={{ width:'100%',boxSizing:'border-box',padding:'10px 13px',borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,fontFamily:'inherit',outline:'none',marginBottom:22 }}
+            />
+
+            <div style={{ display:'flex',gap:10 }}>
+              <button type="button" onClick={handleConfirmSold} disabled={savingStatus}
+                style={{ flex:1,padding:'12px',borderRadius:11,border:'none',background:C.green,color:'#fff',fontSize:14,fontWeight:800,cursor:savingStatus?'wait':'pointer',opacity:savingStatus?0.7:1 }}>
+                {savingStatus ? 'جارٍ الحفظ…' : 'تأكيد البيع ✓'}
+              </button>
+              <button type="button" onClick={() => setSoldModal(false)} disabled={savingStatus}
+                style={{ padding:'12px 18px',borderRadius:11,border:`1.5px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer' }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

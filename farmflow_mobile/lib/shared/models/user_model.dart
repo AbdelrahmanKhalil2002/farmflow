@@ -80,7 +80,7 @@ class UserModel {
       farmCertificates: toStrings(json['farmCertificates']),
       averageRating:    (json['averageRating'] as num?)?.toDouble() ?? 0.0,
       reviewCount:      json['reviewCount'] as int? ?? 0,
-      workingHours:     json['workingHours'] as String?,
+      workingHours:     json['workingHours'] is String ? json['workingHours'] as String : null,
       phone:            json['phone'] as String?,
       savedFarms:       toStrings(json['savedFarms']),
     );

@@ -5,6 +5,7 @@ import { fmt } from '../../utils/format';
 import { useToast } from '../../components/Toast';
 import { isDesktop } from '../../utils/platform';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 
 import { C as _C } from '../../tokens';
 
@@ -225,8 +226,9 @@ const FieldLabel = ({ children }) => (
 const EMPTY_FORM = { type: 'sale', amount: '', date: today(), buyer: '', status: 'received', listing: '', note: '' };
 
 const SellerIncome = () => {
-  const toast    = useToast();
-  const { t }    = useLang();
+  const toast          = useToast();
+  const { t }          = useLang();
+  const { activeFarm } = useFarm();
   const [incomes,   setIncomes]   = useState([]);
   const [listings,  setListings]  = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -258,14 +260,16 @@ const SellerIncome = () => {
   // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
-    Promise.all([getIncome(), getMyListings()])
+    const farmId = activeFarm?._id;
+    const p = farmId ? { farmId } : {};
+    Promise.all([getIncome(p), getMyListings(farmId)])
       .then(([incRes, listRes]) => {
         setIncomes(incRes.data);
         setListings(listRes.data);
       })
       .catch(() => setFetchErr(t('income.loadErr')))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeFarm?._id]);
 
   // ── Summary calculations ───────────────────────────────────────────────────
   const now = new Date();
@@ -367,6 +371,7 @@ const SellerIncome = () => {
       date:    form.date || today(),
       note:    buildNote(form.buyer, form.status, form.note),
       ...(form.listing ? { listing: form.listing } : {}),
+      ...(activeFarm?._id ? { farmId: activeFarm._id } : {}),
     };
 
     try {

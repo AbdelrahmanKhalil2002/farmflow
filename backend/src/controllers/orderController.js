@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const Order = require('../models/Order');
 const Listing = require('../models/Listing');
 const Supply = require('../models/Supply');
+const Income = require('../models/Income');
 const { createNotification } = require('../utils/notify');
 
 const POPULATE_ORDER = [
@@ -196,9 +197,22 @@ const updateOrderStatus = async (req, res) => {
     order.timeline.push({ status, at: new Date() });
     await order.save();
 
-    // Mark listing as sold when order is completed
+    // Mark listing as sold and auto-create income when order is completed
     if (status === 'completed') {
       await Listing.findByIdAndUpdate(order.listing, { status: 'sold' });
+
+      const paymentMethodMap = { deposit: 'transfer', cod: 'cash', instapay: 'instapay' };
+      await Income.create({
+        seller:        order.seller,
+        listing:       order.listing || null,
+        order:         order._id,
+        type:          'sale',
+        amount:        order.totalAmount,
+        date:          new Date(),
+        paymentMethod: paymentMethodMap[order.paymentType] || 'cash',
+        fromOrder:     true,
+        note:          `أوردر تلقائي #${order._id.toString().slice(-6)}`,
+      });
     }
 
     await order.populate([

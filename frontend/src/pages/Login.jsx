@@ -389,6 +389,7 @@ const FieldRow = ({ label, name, type, placeholder, value, onChange, autoFocus, 
 // ─── Password input with show/hide ────────────────────────────────────────────
 const PwdInput = ({ id, name, value, onChange, show, onToggle, toggleLabel }) => {
   const [focused, setFocused] = useState(false);
+  const { isRTL } = useLang();
   return (
     <div style={{ position: 'relative' }}>
       <input
@@ -397,7 +398,10 @@ const PwdInput = ({ id, name, value, onChange, show, onToggle, toggleLabel }) =>
         placeholder="••••••••" required
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{
-          width: '100%', padding: '12px 48px 12px 14px', boxSizing: 'border-box',
+          width: '100%',
+          paddingTop: '12px', paddingBottom: '12px',
+          paddingInlineStart: '14px', paddingInlineEnd: '48px',
+          boxSizing: 'border-box',
           border: `1.5px solid ${focused ? C.green : C.border}`,
           borderRadius: '10px', background: '#fff', fontSize: '15px',
           color: C.text, transition: 'border-color 0.15s', fontFamily: 'inherit', outline: 'none',

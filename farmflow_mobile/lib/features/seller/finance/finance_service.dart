@@ -76,9 +76,9 @@ class ExpenseEntry {
   final double  amount;
   final DateTime date;
   final String? note;
-  // Extended fields (web parity)
-  final int?    recurringDay;  // day-of-month (1-31) for recurring expenses
-  final String? animalNote;   // optional linked animal description
+  final int?    recurringDay;
+  final String? animalId;    // linked animal _id
+  final String? animalLabel; // "رقم الوسم / النوع" for display
 
   const ExpenseEntry({
     required this.id,
@@ -87,7 +87,8 @@ class ExpenseEntry {
     required this.date,
     this.note,
     this.recurringDay,
-    this.animalNote,
+    this.animalId,
+    this.animalLabel,
   });
 
   static const _catAr = {
@@ -104,15 +105,32 @@ class ExpenseEntry {
 
   String get categoryAr => _catAr[category] ?? category;
 
-  factory ExpenseEntry.fromJson(Map<String, dynamic> json) => ExpenseEntry(
-    id:           json['_id'] as String? ?? json['id'] as String? ?? '',
-    category:     json['category'] as String? ?? 'other',
-    amount:       (json['amount'] as num?)?.toDouble() ?? 0,
-    date:         DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
-    note:         json['note'] as String?,
-    recurringDay: (json['recurringDay'] as num?)?.toInt(),
-    animalNote:   json['animalNote'] as String?,
-  );
+  factory ExpenseEntry.fromJson(Map<String, dynamic> json) {
+    // animal field comes populated from backend as object or just an id string
+    final animalObj = json['animal'];
+    String? aId;
+    String? aLabel;
+    if (animalObj is Map<String, dynamic>) {
+      aId    = animalObj['_id'] as String?;
+      final tag   = animalObj['tagNumber'] as String? ?? '';
+      final breed = animalObj['breed']     as String? ?? '';
+      final type  = animalObj['type']      as String? ?? '';
+      aLabel = [if (tag.isNotEmpty) tag, if (breed.isNotEmpty) breed, if (type.isNotEmpty) type]
+                 .take(2).join(' — ');
+    } else if (animalObj is String) {
+      aId = animalObj;
+    }
+    return ExpenseEntry(
+      id:           json['_id'] as String? ?? json['id'] as String? ?? '',
+      category:     json['category'] as String? ?? 'other',
+      amount:       (json['amount'] as num?)?.toDouble() ?? 0,
+      date:         DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
+      note:         json['note'] as String?,
+      recurringDay: (json['recurringDay'] as num?)?.toInt(),
+      animalId:     aId,
+      animalLabel:  aLabel,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'category':    category,
@@ -120,9 +138,37 @@ class ExpenseEntry {
     'date':        date.toIso8601String(),
     if (note != null && note!.isNotEmpty) 'note': note,
     if (recurringDay != null) 'recurringDay': recurringDay,
-    if (animalNote != null && animalNote!.isNotEmpty) 'animalNote': animalNote,
+    if (animalId != null) 'animalId': animalId,
   };
 }
+
+// ── Seller animals (for expense picker) ──────────────────────────────────────
+
+class AnimalPickerItem {
+  final String id;
+  final String label; // "رقم الوسم — النوع"
+
+  const AnimalPickerItem({required this.id, required this.label});
+
+  factory AnimalPickerItem.fromJson(Map<String, dynamic> json) {
+    final tag   = json['tagNumber'] as String? ?? '';
+    final breed = json['breed']     as String? ?? '';
+    final type  = json['type']      as String? ?? '';
+    final label = [if (tag.isNotEmpty) tag, if (breed.isNotEmpty) breed, if (type.isNotEmpty) type]
+                    .take(2).join(' — ');
+    return AnimalPickerItem(
+      id:    json['_id'] as String? ?? '',
+      label: label.isEmpty ? 'حيوان' : label,
+    );
+  }
+}
+
+final sellerAnimalsProvider = FutureProvider<List<AnimalPickerItem>>((ref) async {
+  final dio = ref.watch(dioProvider);
+  final res = await dio.get(ApiEndpoints.animals, queryParameters: {'limit': 200});
+  final data = (res.data is Map ? res.data['items'] : res.data) as List? ?? [];
+  return data.map((e) => AnimalPickerItem.fromJson(e as Map<String, dynamic>)).toList();
+});
 
 final recentExpensesProvider = FutureProvider<List<ExpenseEntry>>((ref) async {
   final dio = ref.watch(dioProvider);
@@ -135,13 +181,14 @@ final recentExpensesProvider = FutureProvider<List<ExpenseEntry>>((ref) async {
 
 class IncomeEntry {
   final String  id;
-  final String  type;          // 'sale' | 'deposit'
+  final String  type;          // 'sale' | 'dairy' | 'feed' | 'other'
   final double  amount;
   final DateTime date;
   final String? note;
-  // Extended fields (web parity)
-  final String? buyerName;     // optional buyer name
+  final String? buyerName;
   final String  paymentStatus; // 'received' | 'pending'
+  final String  paymentMethod; // 'cash' | 'transfer' | 'instapay' | 'auto'
+  final bool    fromOrder;     // true = auto-generated from a completed order
 
   const IncomeEntry({
     required this.id,
@@ -151,9 +198,23 @@ class IncomeEntry {
     this.note,
     this.buyerName,
     this.paymentStatus = 'received',
+    this.paymentMethod = 'cash',
+    this.fromOrder = false,
   });
 
-  String get sourceAr => type == 'deposit' ? 'إيداع / تحويل' : 'بيع ماشية';
+  String get sourceAr => const {
+    'sale':  'بيع ماشية',
+    'dairy': 'منتجات ألبان',
+    'feed':  'منتجات علف',
+    'other': 'دخل آخر',
+  }[type] ?? type;
+
+  String get paymentMethodAr => const {
+    'cash':     'كاش',
+    'transfer': 'تحويل بنكي',
+    'instapay': 'انستاباي',
+    'auto':     'تلقائي',
+  }[paymentMethod] ?? paymentMethod;
 
   bool get isPending => paymentStatus == 'pending';
 
@@ -165,6 +226,8 @@ class IncomeEntry {
     note:          json['note'] as String?,
     buyerName:     json['buyerName'] as String?,
     paymentStatus: json['paymentStatus'] as String? ?? 'received',
+    paymentMethod: json['paymentMethod'] as String? ?? 'cash',
+    fromOrder:     json['fromOrder'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -172,6 +235,7 @@ class IncomeEntry {
     'amount':        amount,
     'date':          date.toIso8601String(),
     'paymentStatus': paymentStatus,
+    'paymentMethod': paymentMethod,
     if (note != null && note!.isNotEmpty) 'note': note,
     if (buyerName != null && buyerName!.isNotEmpty) 'buyerName': buyerName,
   };

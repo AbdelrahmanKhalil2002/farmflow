@@ -15,12 +15,15 @@ import { C as _C } from '../../tokens';
 const C = { ..._C, hero: 'linear-gradient(135deg, #1C3A24 0%, #2D6235 55%, #3A7D44 100%)' };
 
 const TYPE_META = {
-  cattle: { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', typeKey: 'herd.type.cattle' },
-  sheep:  { emoji: '🐑', color: '#0369A1', bg: '#DBEAFE', typeKey: 'herd.type.sheep'  },
-  goat:   { emoji: '🐐', color: '#166534', bg: '#DCFCE7', typeKey: 'herd.type.goat'   },
-  camel:  { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', typeKey: 'herd.type.camel'  },
-  horse:  { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', typeKey: 'herd.type.horse'  },
-  other:  { emoji: '🐾', color: '#374151', bg: '#F3F4F6', typeKey: 'herd.type.other'  },
+  cattle:  { emoji: '🐄', color: '#92400E', bg: '#FEF3C7', typeKey: 'herd.type.cattle'   },
+  buffalo: { emoji: '🐃', color: '#1E40AF', bg: '#DBEAFE', typeKey: 'herd.type.buffalo'  },
+  sheep:   { emoji: '🐑', color: '#0369A1', bg: '#E0F2FE', typeKey: 'herd.type.sheep'    },
+  goat:    { emoji: '🐐', color: '#166534', bg: '#DCFCE7', typeKey: 'herd.type.goat'     },
+  camel:   { emoji: '🐪', color: '#9A3412', bg: '#FFEDD5', typeKey: 'herd.type.camel'    },
+  horse:   { emoji: '🐎', color: '#5B21B6', bg: '#EDE9FE', typeKey: 'herd.type.horse'    },
+  poultry: { emoji: '🐔', color: '#B45309', bg: '#FEF9C3', typeKey: 'herd.type.poultry'  },
+  rabbit:  { emoji: '🐇', color: '#BE185D', bg: '#FCE7F3', typeKey: 'herd.type.rabbit'   },
+  other:   { emoji: '🐾', color: '#374151', bg: '#F3F4F6', typeKey: 'herd.type.other'    },
 };
 
 const CAT = {
@@ -66,10 +69,12 @@ const Skeleton = ({ h = 20, r = 8, w = '100%' }) => (
 );
 
 // ─── Dual-line chart (income vs expenses, last 30 days) ───────────────────────
+const fmtK = (v) => v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(Math.round(v));
+
 const LineChart = ({ incomeData, expenseData }) => {
   const id1 = useId().replace(/[^a-z0-9]/gi, '');
   const id2 = useId().replace(/[^a-z0-9]/gi, '');
-  const W = 520, H = 120, PAD_L = 8, PAD_R = 8, PAD_T = 8, PAD_B = 22;
+  const W = 560, H = 130, PAD_L = 44, PAD_R = 12, PAD_T = 10, PAD_B = 22;
   const IW = W - PAD_L - PAD_R, IH = H - PAD_T - PAD_B;
 
   const max = Math.max(...incomeData, ...expenseData, 1);
@@ -81,32 +86,45 @@ const LineChart = ({ incomeData, expenseData }) => {
 
   const incPts = mkPts(incomeData);
   const expPts = mkPts(expenseData);
-  const lastX  = PAD_L + IW, incLast = incomeData[29], expLast = expenseData[29];
+  const lastX  = PAD_L + IW;
+
+  // Y-axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
   // x-axis labels: every 7 days
-  const labels = [0, 6, 13, 20, 29].map(i => {
+  const xLabels = [0, 6, 13, 20, 29].map(i => {
     const d = new Date(); d.setDate(d.getDate() - (29 - i));
     return { x: PAD_L + (i / 29) * IW, label: `${d.getDate()}/${d.getMonth() + 1}` };
   });
 
+  // End-point dot positions
+  const incEndY = PAD_T + IH - (incomeData[29] / max) * IH;
+  const expEndY = PAD_T + IH - (expenseData[29] / max) * IH;
+
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'hidden' }}>
       <defs>
         <linearGradient id={`ig${id1}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={C.green}   stopOpacity="0.25" />
+          <stop offset="0%" stopColor={C.green}   stopOpacity="0.22" />
           <stop offset="100%" stopColor={C.green} stopOpacity="0"    />
         </linearGradient>
         <linearGradient id={`eg${id2}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={C.red}   stopOpacity="0.15" />
+          <stop offset="0%" stopColor={C.red}   stopOpacity="0.12" />
           <stop offset="100%" stopColor={C.red} stopOpacity="0"    />
         </linearGradient>
       </defs>
 
-      {/* Grid lines */}
-      {[0.25, 0.5, 0.75, 1].map(r => (
-        <line key={r} x1={PAD_L} x2={PAD_L + IW} y1={PAD_T + IH * (1 - r)} y2={PAD_T + IH * (1 - r)}
-          stroke="#E8D5C0" strokeWidth="0.5" strokeDasharray="3 3" />
-      ))}
+      {/* Y-axis labels + grid lines */}
+      {yTicks.map(r => {
+        const y = PAD_T + IH * (1 - r);
+        const v = Math.round(max * r);
+        return (
+          <g key={r}>
+            <line x1={PAD_L} x2={PAD_L + IW} y1={y} y2={y} stroke="#E8D5C0" strokeWidth="0.5" strokeDasharray="3 3" />
+            {v > 0 && <text x={PAD_L - 4} y={y} fontSize="8" fill={C.muted} textAnchor="end" dominantBaseline="middle">{fmtK(v)}</text>}
+          </g>
+        );
+      })}
 
       {/* Fill areas */}
       <polygon points={`${incPts} ${lastX},${PAD_T + IH} ${PAD_L},${PAD_T + IH}`} fill={`url(#ig${id1})`} />
@@ -116,12 +134,30 @@ const LineChart = ({ incomeData, expenseData }) => {
       <polyline points={incPts} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       <polyline points={expPts} fill="none" stroke={C.red}   strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
-      {/* End-of-line labels */}
-      {incLast > 0 && <text x={lastX + 4} y={PAD_T + IH - (incLast / max) * IH} fontSize="9" fill={C.greenText} fontWeight="700" dominantBaseline="middle">{fmt(incLast)}</text>}
-      {expLast > 0 && <text x={lastX + 4} y={PAD_T + IH - (expLast / max) * IH} fontSize="9" fill={C.redText}   fontWeight="700" dominantBaseline="middle">{fmt(expLast)}</text>}
+      {/* End dots with clamped callout labels */}
+      {incomeData[29] > 0 && (
+        <>
+          <circle cx={lastX} cy={incEndY} r="3.5" fill={C.green} stroke="#fff" strokeWidth="1.5" />
+          <text
+            x={lastX - 6}
+            y={Math.max(PAD_T + 9, Math.min(PAD_T + IH - 2, incEndY - 6))}
+            fontSize="8.5" fill={C.greenText} fontWeight="700" textAnchor="end"
+          >{fmtK(incomeData[29])}</text>
+        </>
+      )}
+      {expenseData[29] > 0 && (
+        <>
+          <circle cx={lastX} cy={expEndY} r="3.5" fill={C.red} stroke="#fff" strokeWidth="1.5" />
+          <text
+            x={lastX - 24}
+            y={expEndY - 4}
+            fontSize="8.5" fill={C.redText} fontWeight="700" textAnchor="end"
+          >{fmtK(expenseData[29])}</text>
+        </>
+      )}
 
       {/* X-axis labels */}
-      {labels.map(({ x, label }) => (
+      {xLabels.map(({ x, label }) => (
         <text key={label} x={x} y={H - 4} fontSize="8" fill={C.muted} textAnchor="middle">{label}</text>
       ))}
     </svg>
@@ -131,12 +167,12 @@ const LineChart = ({ incomeData, expenseData }) => {
 // ─── Bar chart (livestock by type) ───────────────────────────────────────────
 const BarChart = ({ data }) => {
   if (!data.length) return null;
-  const W = 340, H = 110, PAD_L = 10, PAD_B = 22, BAR_GAP = 8;
+  const W = 340, H = 140, PAD_T = 20, PAD_L = 10, PAD_B = 36, BAR_GAP = 8;
   const max  = Math.max(...data.map(d => d.value), 1);
   const bw   = Math.max(10, Math.floor((W - PAD_L * 2 - BAR_GAP * (data.length - 1)) / data.length));
   const totalW = data.length * bw + (data.length - 1) * BAR_GAP;
   const startX = (W - totalW) / 2;
-  const innerH = H - PAD_B - 8;
+  const innerH = H - PAD_B - PAD_T;
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
@@ -150,11 +186,11 @@ const BarChart = ({ data }) => {
         return (
           <g key={d.label}>
             <rect x={x} y={y} width={bw} height={bh} rx="4" fill={d.color} opacity="0.85" />
-            {/* Value */}
-            <text x={x + bw / 2} y={y - 3} fontSize="10" fill={d.color} fontWeight="800" textAnchor="middle">{d.value}</text>
-            {/* Label */}
-            <text x={x + bw / 2} y={H - 6} fontSize="9" fill={C.muted} textAnchor="middle">{d.emoji}</text>
-            <text x={x + bw / 2} y={H - 0} fontSize="8" fill={C.muted} textAnchor="middle">{d.ar}</text>
+            {/* Value above bar */}
+            <text x={x + bw / 2} y={y - 4} fontSize="10" fill={d.color} fontWeight="800" textAnchor="middle">{d.value}</text>
+            {/* Emoji + text label below baseline */}
+            <text x={x + bw / 2} y={H - PAD_B + 13} fontSize="12" fill={C.muted} textAnchor="middle">{d.emoji}</text>
+            <text x={x + bw / 2} y={H - PAD_B + 26} fontSize="8" fill={C.muted} textAnchor="middle">{d.ar}</text>
           </g>
         );
       })}
@@ -273,7 +309,8 @@ const SellerDashboard = () => {
   const [replySaving,     setReplySaving]     = useState({});
 
   useEffect(() => {
-    getAnimals().then(r => {
+    const farmParams = activeFarm?._id ? { farmId: activeFarm._id } : {};
+    getAnimals(farmParams).then(r => {
       const soon = [];
       r.data.forEach(a => {
         (a.vaccinationLog || []).forEach(v => {
@@ -288,7 +325,7 @@ const SellerDashboard = () => {
 
     getWeighingDue().then(r => setDueWeighings(r.data)).catch(() => {});
     getFollowUpsDue().then(r => setDueFollowUps(r.data)).catch(() => {});
-  }, []);
+  }, [activeFarm?._id]);
 
   useEffect(() => {
     if (!user?._id) return;
@@ -305,12 +342,14 @@ const SellerDashboard = () => {
     setLoading(true); setError('');
     const { from, to } = getPeriodDates(period);
     const from30 = thirtyDaysAgo();
+    const farmId = activeFarm?._id;
+    const fp = farmId ? { farmId } : {};
     Promise.all([
-      getSummary({ from, to }),
-      getMyListings(),
+      getSummary({ from, to, ...fp }),
+      getMyListings(farmId),
       getMyOrders(),
-      getIncome({ from: from30 }),
-      getExpenses({ from: from30 }),
+      getIncome({ from: from30, ...fp }),
+      getExpenses({ from: from30, ...fp }),
     ])
       .then(([sumRes, listRes, ordRes, incRes, expRes]) => {
         setSummary(sumRes.data);
@@ -321,7 +360,7 @@ const SellerDashboard = () => {
       })
       .catch(() => setError(t('dashboard.loadErr')))
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [period, activeFarm?._id]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const incSpark = useMemo(() => bucketByDay(income30), [income30]);

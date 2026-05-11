@@ -43,7 +43,12 @@ const expenseSchema = new mongoose.Schema(
     listing: {
       type:    mongoose.Schema.Types.ObjectId,
       ref:     'Listing',
-      default: null,   // optional — monthly expenses are not tied to one animal
+      default: null,
+    },
+    animal: {
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     'Animal',
+      default: null,
     },
     category: {
       type:     String,

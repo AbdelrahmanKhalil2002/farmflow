@@ -7,6 +7,11 @@ const incomeSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    farm: {
+      type:  mongoose.Schema.Types.ObjectId,
+      ref:   'Farm',
+      index: true,
+    },
     listing: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Listing',
@@ -19,8 +24,17 @@ const incomeSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['sale', 'deposit'],
+      enum: ['sale', 'dairy', 'feed', 'other'],
       required: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['cash', 'transfer', 'instapay', 'auto'],
+      default: 'cash',
+    },
+    fromOrder: {
+      type: Boolean,
+      default: false,
     },
     amount: {
       type: Number,

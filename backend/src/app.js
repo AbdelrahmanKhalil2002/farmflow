@@ -83,6 +83,7 @@ app.use('/api/market-prices', require('./routes/marketPrices'));
 app.use('/api/eid',           require('./routes/eid'));
 app.use('/api/animals',       require('./routes/animals'));
 app.use('/api/supplies',      require('./routes/supplies'));
+app.use('/api/wholesale',     require('./routes/wholesale'));
 app.use('/api/budget',        require('./routes/budget'));
 app.use('/api/messages',     require('./routes/messages'));
 app.use('/api/farms',        require('./routes/farms'));

@@ -17,7 +17,7 @@ const VALID_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 router.post(
   '/',
   protect,
-  authorizeRoles('buyer'),
+  authorizeRoles('buyer', 'seller'),
   [
     body('listingId').optional().isMongoId().withMessage('Valid listing ID is required'),
     body('supplyId').optional().isMongoId().withMessage('Valid supply ID is required'),

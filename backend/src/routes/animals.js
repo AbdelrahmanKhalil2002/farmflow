@@ -26,22 +26,73 @@ const validate = (req, res, next) => {
 };
 
 // ── GET /api/animals ─────────────────────────────────────────────────────────
-// Supports optional ?page=1&limit=20 for pagination; returns all if omitted.
+// Always paginated. Supports filters: type, status, healthStatus, search,
+// dobBefore, dobAfter, vaccinationDue, weighingDue, followUpOnly, sortBy.
 router.get('/', async (req, res) => {
   try {
-    const filter = req.user.role === 'admin' ? {} : { seller: req.user.id };
-    const { page, limit } = req.query;
-    if (page && limit) {
-      const p = Math.max(1, parseInt(page, 10));
-      const l = Math.min(100, Math.max(1, parseInt(limit, 10)));
-      const [items, total] = await Promise.all([
-        Animal.find(filter).sort({ createdAt: -1 }).skip((p - 1) * l).limit(l),
-        Animal.countDocuments(filter),
-      ]);
-      return res.json({ items, total, page: p, pages: Math.ceil(total / l), hasMore: p * l < total });
+    const base = req.user.role === 'admin' ? {} : { seller: req.user.id };
+    const {
+      page, limit,
+      type, status, healthStatus,
+      search, dobBefore, dobAfter,
+      vaccinationDue, weighingDue, followUpOnly,
+      sortBy, farmId,
+    } = req.query;
+
+    const filter = { ...base };
+    if (farmId && req.user.role !== 'admin') filter.farm = farmId;
+
+    if (type)         filter.type         = type;
+    if (status)       filter.status       = status;
+    if (healthStatus) filter.healthStatus = healthStatus;
+
+    if (search) {
+      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ tagId: rx }, { breed: rx }];
     }
-    const animals = await Animal.find(filter).sort({ createdAt: -1 });
-    res.json(animals);
+
+    if (dobAfter || dobBefore) {
+      filter.dob = {};
+      if (dobAfter)  filter.dob.$gte = new Date(dobAfter);
+      if (dobBefore) filter.dob.$lte = new Date(dobBefore);
+    }
+
+    if (vaccinationDue === 'true') {
+      const deadline = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+      filter['vaccinationLog'] = { $elemMatch: { nextDueDate: { $gt: new Date(), $lte: deadline } } };
+    }
+
+    if (weighingDue === 'true') {
+      filter.nextWeighingDate = { $lte: new Date(Date.now() + 7 * 24 * 3600 * 1000) };
+    }
+
+    if (followUpOnly === 'true') {
+      const records = await MedicalRecord.find(
+        { ...( req.user.role !== 'admin' ? { seller: req.user.id } : {} ), resolved: { $ne: true }, followUpDate: { $exists: true, $ne: null, $lte: new Date(Date.now() + 7 * 24 * 3600 * 1000) } },
+        'animal'
+      );
+      filter._id = { $in: records.map(r => r.animal) };
+    }
+
+    const SORT_MAP = {
+      newest:    { createdAt: -1 },
+      oldest:    { createdAt:  1 },
+      heaviest:  { currentWeight: -1 },
+      lightest:  { currentWeight:  1 },
+      youngest:  { dob: -1 },
+      oldest_age:{ dob:  1 },
+    };
+    const sort = SORT_MAP[sortBy] || { createdAt: -1 };
+
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const l = Math.min(500, Math.max(1, parseInt(limit, 10) || 200));
+
+    const [items, total] = await Promise.all([
+      Animal.find(filter).sort(sort).skip((p - 1) * l).limit(l),
+      Animal.countDocuments(filter),
+    ]);
+
+    res.json({ items, total, page: p, pages: Math.ceil(total / l), hasMore: p * l < total });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -50,13 +101,18 @@ router.get('/', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const filter = req.user.role === 'admin' ? {} : { seller: req.user.id };
-    const animals = await Animal.find({ ...filter, status: 'active' }, 'type dob currentWeight');
+    if (req.query.farmId && req.user.role !== 'admin') filter.farm = req.query.farmId;
+    const [activeAnimals, soldCount, deceasedCount] = await Promise.all([
+      Animal.find({ ...filter, status: 'active' }, 'type dob currentWeight'),
+      Animal.countDocuments({ ...filter, status: 'sold' }),
+      Animal.countDocuments({ ...filter, status: 'deceased' }),
+    ]);
 
     const now = Date.now();
     const byType = {};
     let totalAgeMonths = 0, ageCount = 0, totalWeight = 0, weightCount = 0;
 
-    animals.forEach(a => {
+    activeAnimals.forEach(a => {
       byType[a.type] = (byType[a.type] || 0) + 1;
       if (a.dob) {
         totalAgeMonths += (now - new Date(a.dob).getTime()) / (30.44 * 24 * 3600 * 1000);
@@ -66,10 +122,12 @@ router.get('/summary', async (req, res) => {
     });
 
     res.json({
-      total: animals.length,
+      total: activeAnimals.length,
       byType,
       avgAgeMonths: ageCount ? Math.round(totalAgeMonths / ageCount) : null,
       avgWeightKg:  weightCount ? Math.round((totalWeight / weightCount) * 10) / 10 : null,
+      soldCount,
+      deceasedCount,
     });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
@@ -163,10 +221,11 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { type, breed, gender, tagId, dob, color, currentWeight, healthStatus, notes } = req.body;
+      const { type, breed, gender, tagId, dob, color, currentWeight, healthStatus, notes, farmId } = req.body;
       const images = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
       const animal = await Animal.create({
-        seller: req.user.id, type, breed, gender, tagId: tagId || undefined,
+        seller: req.user.id, farm: farmId || undefined,
+        type, breed, gender, tagId: tagId || undefined,
         dob: dob || undefined, color, currentWeight: currentWeight || undefined,
         healthStatus: healthStatus || 'healthy', notes, images,
         weightLog: currentWeight ? [{ date: dob || new Date(), weightKg: parseFloat(currentWeight) }] : [],

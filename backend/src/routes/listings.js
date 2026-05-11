@@ -9,6 +9,7 @@ const {
   getListingById,
   updateListing,
   deleteListing,
+  getListedAnimalIds,
 } = require('../controllers/listingController');
 
 const LISTING_TYPES = ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'other'];
@@ -42,6 +43,9 @@ router.get('/', (req, res, next) => {
 
 // Seller's own listings (all statuses) — must be before /:id
 router.get('/my', protect, authorizeRoles('seller', 'admin'), getListings);
+
+// Animal IDs that already have an active listing — must be before /:id
+router.get('/my/listed-animal-ids', protect, authorizeRoles('seller', 'admin'), getListedAnimalIds);
 
 router.get('/:id', idParam, (req, res, next) => {
   const jwt = require('jsonwebtoken');

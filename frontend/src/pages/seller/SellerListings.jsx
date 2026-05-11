@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast';
 import { useLang } from '../../context/LangContext';
 
 import { C } from '../../tokens';
+import { useFarm } from '../../context/FarmContext';
 
 // ─── Status config (with emoji dots as requested) ─────────────────────────────
 const STATUS = {
@@ -17,13 +18,15 @@ const STATUS = {
 };
 
 const TYPE_META = {
-  cattle:  { emoji: '🐄', typeKey: 'herd.type.cattle',  bg: '#FEF3C7' },
-  sheep:   { emoji: '🐑', typeKey: 'herd.type.sheep',   bg: '#DBEAFE' },
-  goat:    { emoji: '🐐', typeKey: 'herd.type.goat',    bg: '#DCFCE7' },
-  camel:   { emoji: '🐪', typeKey: 'herd.type.camel',   bg: '#FFEDD5' },
-  horse:   { emoji: '🐎', typeKey: 'herd.type.horse',   bg: '#EDE9FE' },
-  poultry: { emoji: '🐔', typeKey: 'herd.type.poultry', bg: '#D1FAE5' },
-  other:   { emoji: '🐾', typeKey: 'herd.type.other',   bg: '#F3F4F6' },
+  cattle:  { emoji: '🐄', label: 'أبقار',  typeKey: 'herd.type.cattle',  bg: '#FEF3C7' },
+  buffalo: { emoji: '🐃', label: 'جاموس', typeKey: 'herd.type.buffalo', bg: '#E0F2FE' },
+  sheep:   { emoji: '🐑', label: 'أغنام',  typeKey: 'herd.type.sheep',   bg: '#DBEAFE' },
+  goat:    { emoji: '🐐', label: 'ماعز',   typeKey: 'herd.type.goat',    bg: '#DCFCE7' },
+  camel:   { emoji: '🐪', label: 'إبل',    typeKey: 'herd.type.camel',   bg: '#FFEDD5' },
+  horse:   { emoji: '🐎', label: 'خيل',    typeKey: 'herd.type.horse',   bg: '#EDE9FE' },
+  poultry: { emoji: '🐔', label: 'دواجن',  typeKey: 'herd.type.poultry', bg: '#D1FAE5' },
+  rabbit:  { emoji: '🐇', label: 'أرانب',  typeKey: 'herd.type.rabbit',  bg: '#FCE7F3' },
+  other:   { emoji: '🐾', label: 'أخرى',   typeKey: 'herd.type.other',   bg: '#F3F4F6' },
 };
 
 const FILTER_TABS = [
@@ -52,6 +55,59 @@ const fmtAge  = (m, tFn) => {
 };
 const fmtSAR  = (v) => `${fmt(v)} ج.م`;
 const fmtDate = (d) => new Date(d).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+
+// ─── PDF export ───────────────────────────────────────────────────────────────
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const STATUS_AR = { draft:'مسودة', pending:'معلق', approved:'معتمد', rejected:'مرفوض', sold:'مباع' };
+
+const exportListingsPDF = (listings) => {
+  const date = new Date().toLocaleDateString('ar-EG');
+  const rows = listings.map(l => `
+    <tr>
+      <td>${esc(TYPE_META[l.type]?.emoji || '')} ${esc(TYPE_META[l.type]?.label || l.type)}</td>
+      <td>${esc(l.breed || '—')}</td>
+      <td>${l.age ?? '—'} شهر</td>
+      <td>${l.weight ?? '—'} كجم</td>
+      <td>${l.price != null ? l.price.toLocaleString('ar-EG') + ' ج.م' : '—'}</td>
+      <td>${esc(l.location || '—')}</td>
+      <td>${esc(STATUS_AR[l.status] || l.status)}</td>
+      <td>${l.createdAt?.slice(0,10) || '—'}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>FarmFlow — إعلاناتي</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;padding:20px;direction:rtl;color:#1a2e1c}
+  h1{font-size:20px;font-weight:800;margin-bottom:4px}
+  .meta{font-size:12px;color:#64748b;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{background:#3A7D44;color:#fff;padding:9px 11px;text-align:right;font-weight:700;font-size:12px}
+  td{padding:8px 11px;border-bottom:1px solid #e2e8f0;text-align:right}
+  tr:nth-child(even) td{background:#f0faf1}
+  @media print{body{padding:10mm}@page{margin:12mm;size:A4 landscape}}
+</style>
+</head>
+<body>
+<h1>📋 FarmFlow — إعلاناتي</h1>
+<div class="meta">${date} · ${listings.length} إعلان</div>
+<table>
+  <thead><tr>
+    <th>النوع</th><th>السلالة</th><th>العمر</th><th>الوزن</th>
+    <th>السعر</th><th>الموقع</th><th>الحالة</th><th>تاريخ الإضافة</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<script>window.onload=()=>window.print()<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=700');
+  if (win) { win.document.write(html); win.document.close(); }
+};
 
 // ─── CSV export ───────────────────────────────────────────────────────────────
 const exportCSV = (listings) => {
@@ -126,12 +182,14 @@ const SellerListings = () => {
   const navigate = useNavigate();
   const toast    = useToast();
   const { t }    = useLang();
+  const { activeFarm } = useFarm();
 
   const [listings,    setListings]    = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState('');
   const [search,      setSearch]      = useState('');
   const [filterTab,   setFilterTab]   = useState('all');
+  const [typeFilter,  setTypeFilter]  = useState('');
   const [sortKey,     setSortKey]     = useState('date_desc');
   const [viewMode,    setViewMode]    = useState('table');
   const [isMobile,    setIsMobile]    = useState(window.innerWidth < 860);
@@ -139,6 +197,9 @@ const SellerListings = () => {
   const [deletingId,  setDeletingId]  = useState(null);
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [deleting,    setDeleting]    = useState(false);
+  const [page,        setPage]        = useState(1);
+
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     const onResize = () => { const m = window.innerWidth < 860; setIsMobile(m); if (m) setViewMode('grid'); };
@@ -148,16 +209,17 @@ const SellerListings = () => {
 
   const load = () => {
     setLoading(true); setError('');
-    getMyListings()
+    getMyListings(activeFarm?._id)
       .then(({ data }) => setListings(data))
       .catch(() => setError(t('listings.loadErr')))
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [activeFarm?._id]);
 
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     let arr = listings.filter(l => {
       if (filterTab !== 'all' && l.status !== filterTab) return false;
+      if (typeFilter && l.type !== typeFilter) return false;
       if (search.trim()) { const q = search.toLowerCase(); if (!l.type?.toLowerCase().includes(q) && !l.breed?.toLowerCase().includes(q)) return false; }
       return true;
     });
@@ -169,11 +231,20 @@ const SellerListings = () => {
       if (sortKey === 'status')     return (a.status || '').localeCompare(b.status || '');
       return 0;
     });
-  }, [listings, filterTab, search, sortKey]);
+  }, [listings, filterTab, typeFilter, search, sortKey]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1); }, [filterTab, typeFilter, search, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visible    = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const counts = useMemo(() => {
     const map = { all: listings.length };
-    listings.forEach(l => { map[l.status] = (map[l.status] || 0) + 1; });
+    listings.forEach(l => {
+      map[l.status] = (map[l.status] || 0) + 1;
+      map[`type_${l.type}`] = (map[`type_${l.type}`] || 0) + 1;
+    });
     return map;
   }, [listings]);
 
@@ -182,6 +253,9 @@ const SellerListings = () => {
   const someChecked = visibleIds.some(id => selected.has(id)) && !allChecked;
   const toggleAll   = () => { setSelected(prev => { const n = new Set(prev); allChecked ? visibleIds.forEach(id => n.delete(id)) : visibleIds.forEach(id => n.add(id)); return n; }); setBulkConfirm(false); };
   const toggleOne   = (id) => { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); setBulkConfirm(false); };
+
+  // Pagination helpers
+  const goPage = (p) => { setPage(Math.max(1, Math.min(totalPages, p))); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const clearSel    = () => { setSelected(new Set()); setBulkConfirm(false); };
 
   const confirmDelete = async (id) => {
@@ -277,8 +351,13 @@ const SellerListings = () => {
               </div>
             )}
 
+            {/* PDF */}
+            <button type="button" onClick={() => exportListingsPDF(filtered)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 14px', border: `1px solid ${C.border}`, borderRadius: '10px', background: C.card, color: '#DC2626', fontSize: '12px', fontWeight: '700', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>
+              ↓ PDF
+            </button>
             {/* CSV */}
-            <button type="button" onClick={() => exportCSV(visible)}
+            <button type="button" onClick={() => exportCSV(filtered)}
               style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '9px 14px', border: `1px solid ${C.border}`, borderRadius: '10px', background: C.card, color: C.muted, fontSize: '12px', fontWeight: '700', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>
               ↓ CSV
             </button>
@@ -300,6 +379,34 @@ const SellerListings = () => {
               );
             })}
           </div>
+
+          {/* Animal type chips — only show types present in data */}
+          {(() => {
+            const presentTypes = Object.keys(TYPE_META).filter(k => (counts[`type_${k}`] || 0) > 0);
+            if (presentTypes.length < 2) return null;
+            return (
+              <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingTop: '10px', marginTop: '6px', borderTop: `1px solid ${C.border}`, alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: C.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>النوع:</span>
+                <button type="button" onClick={() => { setTypeFilter(''); clearSel(); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 12px', borderRadius: '20px', border: `1.5px solid ${!typeFilter ? C.green : C.border}`, background: !typeFilter ? C.green : 'transparent', color: !typeFilter ? '#fff' : C.muted, fontSize: '12px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                  الكل
+                  <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '10px', background: !typeFilter ? 'rgba(255,255,255,0.25)' : C.border, color: !typeFilter ? '#fff' : C.muted }}>{listings.length}</span>
+                </button>
+                {presentTypes.map(k => {
+                  const meta   = TYPE_META[k];
+                  const active = typeFilter === k;
+                  const cnt    = counts[`type_${k}`] || 0;
+                  return (
+                    <button key={k} type="button" onClick={() => { setTypeFilter(active ? '' : k); clearSel(); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 12px', borderRadius: '20px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.green : 'transparent', color: active ? '#fff' : C.muted, fontSize: '12px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                      {meta.emoji} {meta.label}
+                      <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '10px', background: active ? 'rgba(255,255,255,0.25)' : C.border, color: active ? '#fff' : C.muted }}>{cnt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ════ Bulk action bar ════ */}
@@ -340,9 +447,9 @@ const SellerListings = () => {
             <p style={{ margin: '0 0 20px', fontSize: '14px', color: C.muted, lineHeight: 1.7 }}>
               {search || filterTab !== 'all' ? t('listings.noResultsHint') : t('listings.emptyHint')}
             </p>
-            {!search && filterTab === 'all'
+            {!search && filterTab === 'all' && !typeFilter
               ? <Link to="/seller/add-listing" style={{ display: 'inline-block', padding: '11px 24px', background: C.green, color: '#fff', borderRadius: '12px', fontSize: '14px', fontWeight: '800', textDecoration: 'none' }}>➕ {t('listings.addNew')}</Link>
-              : <button type="button" onClick={() => { setSearch(''); setFilterTab('all'); }} style={{ padding: '9px 18px', background: C.card, border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: C.text, cursor: 'pointer', fontFamily: 'inherit' }}>{t('listings.clearFilters')}</button>
+              : <button type="button" onClick={() => { setSearch(''); setFilterTab('all'); setTypeFilter(''); }} style={{ padding: '9px 18px', background: C.card, border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '13px', fontWeight: '700', color: C.text, cursor: 'pointer', fontFamily: 'inherit' }}>{t('listings.clearFilters')}</button>
             }
           </div>
         )}
@@ -400,6 +507,7 @@ const SellerListings = () => {
                               {l.breed || t(meta.typeKey)}
                             </div>
                             <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px', textTransform: 'capitalize' }}>{t(meta.typeKey)}{l.location ? ` · 📍 ${l.location}` : ''}</div>
+                            {l.animal?.tagId && <div style={{ fontSize: '10px', color: C.green, marginTop: '2px', fontWeight: '700' }}>🏷 {l.animal.tagId}</div>}
                             <div style={{ fontSize: '10px', color: C.muted, marginTop: '2px' }}>{l.createdAt ? fmtDate(l.createdAt) : ''}</div>
                           </div>
                         </div>
@@ -443,7 +551,7 @@ const SellerListings = () => {
                             )}
                             <ActBtn onClick={() => navigate(`/seller/edit-listing/${l._id}`)} title={t('listings.editBtn')}>✏️ {t('listings.editBtn')}</ActBtn>
                             {l.status !== 'draft' && (
-                              <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)} title={t('listings.viewBtn')}>👁 {t('listings.viewBtn')}</ActBtn>
+                              <ActBtn onClick={() => navigate(`/seller/listings/${l._id}`)} title={t('listings.viewBtn')}>👁 {t('listings.viewBtn')}</ActBtn>
                             )}
                             <ActBtn danger onClick={() => setDeletingId(l._id)} title={t('listings.deleteBtn')}>🗑</ActBtn>
                           </div>
@@ -498,6 +606,7 @@ const SellerListings = () => {
                             {l.breed || t(meta.typeKey)}
                           </div>
                           <div style={{ fontSize: '11px', color: C.muted, marginTop: '1px' }}>{t(meta.typeKey)}{l.location ? ` · ${l.location}` : ''}</div>
+                          {l.animal?.tagId && <div style={{ fontSize: '10px', color: C.green, marginTop: '2px', fontWeight: '700' }}>🏷 {l.animal.tagId}</div>}
                         </div>
                         <StatusBadge status={l.status} reason={l.rejectionReason} t={t} />
                       </div>
@@ -537,7 +646,7 @@ const SellerListings = () => {
                         )}
                         <ActBtn primary={l.status !== 'draft'} onClick={() => navigate(`/seller/edit-listing/${l._id}`)}>✏️ {t('listings.editBtn')}</ActBtn>
                         {l.status !== 'draft' && (
-                          <ActBtn onClick={() => navigate(`/buyer/listings/${l._id}`)}>👁 {t('listings.viewBtn')}</ActBtn>
+                          <ActBtn onClick={() => navigate(`/seller/listings/${l._id}`)}>👁 {t('listings.viewBtn')}</ActBtn>
                         )}
                         <ActBtn danger onClick={() => setDeletingId(l._id)}>🗑 {t('listings.deleteBtn')}</ActBtn>
                       </div>
@@ -549,15 +658,47 @@ const SellerListings = () => {
           </div>
         )}
 
-        {/* Footer count */}
-        {!loading && visible.length > 0 && (
-          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: C.muted }}>
-            <span>{t('listings.showingOf').replace('{visible}', visible.length).replace('{total}', listings.length)}</span>
-            <div style={{ display: 'flex', gap: '14px' }}>
-              {Object.entries(STATUS).map(([key, s]) => (
-                <span key={key}>{s.dot} {t(s.labelKey)}</span>
-              ))}
-            </div>
+        {/* Footer: count + pagination */}
+        {!loading && filtered.length > 0 && (
+          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <span style={{ fontSize: '12px', color: C.muted }}>
+              عرض {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} من {filtered.length} إعلان
+            </span>
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button type="button" onClick={() => goPage(1)} disabled={page === 1}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: page === 1 ? C.border : C.text, fontSize: 12, fontWeight: 700, cursor: page === 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  «
+                </button>
+                <button type="button" onClick={() => goPage(page - 1)} disabled={page === 1}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: page === 1 ? C.border : C.text, fontSize: 12, fontWeight: 700, cursor: page === 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    p === '…'
+                      ? <span key={`e${idx}`} style={{ padding: '5px 8px', fontSize: 12, color: C.muted }}>…</span>
+                      : <button key={p} type="button" onClick={() => goPage(p)}
+                          style={{ padding: '5px 10px', borderRadius: 7, border: `1.5px solid ${p === page ? C.green : C.border}`, background: p === page ? C.green : C.card, color: p === page ? '#fff' : C.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', minWidth: 32 }}>
+                          {p}
+                        </button>
+                  )}
+                <button type="button" onClick={() => goPage(page + 1)} disabled={page === totalPages}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: page === totalPages ? C.border : C.text, fontSize: 12, fontWeight: 700, cursor: page === totalPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  ›
+                </button>
+                <button type="button" onClick={() => goPage(totalPages)} disabled={page === totalPages}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.card, color: page === totalPages ? C.border : C.text, fontSize: 12, fontWeight: 700, cursor: page === totalPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  »
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

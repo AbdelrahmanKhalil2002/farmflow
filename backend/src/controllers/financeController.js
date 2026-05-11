@@ -28,7 +28,7 @@ const addExpense = async (req, res) => {
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   try {
-    const { category, amount, date, note, listing: listingId, recurringDay } = req.body;
+    const { category, amount, date, note, listing: listingId, animalId, recurringDay, farmId } = req.body;
 
     if (listingId) {
       const listing = await Listing.findOne({ _id: listingId, seller: req.user.id });
@@ -38,7 +38,9 @@ const addExpense = async (req, res) => {
     const expense = await Expense.create({
       category, amount, date, note,
       listing: listingId || null,
-      seller: req.user.id,
+      animal:  animalId  || null,
+      farm:    farmId    || null,
+      seller:  req.user.id,
       recurringDay: recurringDay ?? null,
     });
     res.status(201).json(expense);
@@ -55,6 +57,7 @@ const getExpenses = async (req, res) => {
 
     const filter = {};
     if (sellerId) filter.seller = sellerId;
+    if (req.query.farmId) filter.farm = req.query.farmId;
     if (category) filter.category = category;
     if (listingId) filter.listing = listingId;
 
@@ -63,6 +66,7 @@ const getExpenses = async (req, res) => {
 
     const expenses = await Expense.find(filter)
       .populate('listing', 'type breed')
+      .populate('animal', 'tagNumber type breed')
       .sort({ date: -1 });
 
     res.json(expenses);
@@ -87,12 +91,12 @@ const updateExpense = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
-    const { category, amount, date, note, listing: listingId, recurringDay } = req.body;
+    const { category, amount, date, note, listing: listingId, animalId, recurringDay } = req.body;
     const expense = await Expense.findOneAndUpdate(
       { _id: req.params.id, seller: req.user.id },
-      { category, amount, date, note, listing: listingId || null, recurringDay: recurringDay ?? null },
+      { category, amount, date, note, listing: listingId || null, animal: animalId || null, recurringDay: recurringDay ?? null },
       { new: true, runValidators: true }
-    ).populate('listing', 'type breed');
+    ).populate('listing', 'type breed').populate('animal', 'tagNumber type breed');
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
     res.json(expense);
   } catch (err) {
@@ -108,7 +112,7 @@ const addIncome = async (req, res) => {
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   try {
-    const { type, amount, date, note, listing: listingId, order: orderId } = req.body;
+    const { type, amount, date, note, listing: listingId, order: orderId, farmId } = req.body;
 
     if (listingId) {
       const listing = await Listing.findOne({ _id: listingId, seller: req.user.id });
@@ -123,8 +127,9 @@ const addIncome = async (req, res) => {
     const income = await Income.create({
       type, amount, date, note,
       listing: listingId || null,
-      order: orderId || null,
-      seller: req.user.id,
+      order:   orderId   || null,
+      farm:    farmId    || null,
+      seller:  req.user.id,
     });
     res.status(201).json(income);
   } catch (err) {
@@ -140,6 +145,7 @@ const getIncome = async (req, res) => {
 
     const filter = {};
     if (sellerId) filter.seller = sellerId;
+    if (req.query.farmId) filter.farm = req.query.farmId;
     if (type) filter.type = type;
     if (listingId) filter.listing = listingId;
 
@@ -196,7 +202,7 @@ const updateIncome = async (req, res) => {
 const getSummary = async (req, res) => {
   try {
     const sellerId = resolveSeller(req);
-    const { from, to } = req.query;
+    const { from, to, farmId } = req.query;
 
     const dateFilter = buildDateFilter(from, to);
 
@@ -206,6 +212,7 @@ const getSummary = async (req, res) => {
         const mongoose = require('mongoose');
         match.seller = new mongoose.Types.ObjectId(sellerId);
       }
+      if (farmId) match.farm = require('mongoose').Types.ObjectId.isValid(farmId) ? new (require('mongoose').Types.ObjectId)(farmId) : farmId;
       if (dateFilter) match[dateField] = dateFilter;
       return match;
     };
@@ -253,6 +260,7 @@ const getAnalytics = async (req, res) => {
     const mongoose = require('mongoose');
     const sellerId = resolveSeller(req);
     const months = Math.min(24, Math.max(1, parseInt(req.query.months) || 12));
+    const { farmId } = req.query;
 
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
@@ -260,6 +268,7 @@ const getAnalytics = async (req, res) => {
     const buildMatch = (dateField) => {
       const m = { [dateField]: { $gte: from } };
       if (sellerId) m.seller = new mongoose.Types.ObjectId(sellerId);
+      if (farmId && mongoose.Types.ObjectId.isValid(farmId)) m.farm = new mongoose.Types.ObjectId(farmId);
       return m;
     };
 

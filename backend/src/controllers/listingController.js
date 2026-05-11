@@ -14,7 +14,19 @@ const createListing = async (req, res) => {
     const images = req.files ? req.files.map((f) => `/uploads/${f.filename}`) : [];
 
     // Destructure only safe fields — prevents status/seller injection
-    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage } = req.body;
+    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage, animal, purpose, farmId } = req.body;
+
+    // Guard: one active listing per animal
+    if (animal) {
+      const existing = await Listing.findOne({
+        seller: req.user.id,
+        animal,
+        status: { $in: ['pending', 'approved', 'draft'] },
+      });
+      if (existing) {
+        return res.status(409).json({ message: 'هذا الحيوان معروض للبيع بالفعل' });
+      }
+    }
 
     let parsedQurbaniShares = [];
     if (qurbaniShares) {
@@ -25,6 +37,7 @@ const createListing = async (req, res) => {
 
     const listing = await Listing.create({
       type, breed, age, weight, price, pricePerKg, description, location,
+      purpose: purpose || 'general',
       deliveryType: deliveryType || 'none',
       deliveryCost: deliveryCost || undefined,
       eidAvailable:     eidAvailable === 'true' || eidAvailable === true || false,
@@ -34,6 +47,8 @@ const createListing = async (req, res) => {
       depositRequired:  depositRequired === 'true' || depositRequired === true || false,
       depositPercentage: depositPercentage || undefined,
       seller: req.user.id,
+      animal: animal || null,
+      farm:   farmId || undefined,
       images,
       status: saveDraft ? 'draft' : 'pending',
     });
@@ -71,6 +86,7 @@ const getListings = async (req, res) => {
       filter.status = 'approved';
     } else if (req.user.role === 'seller') {
       filter.seller = req.user.id;
+      if (req.query.farmId) filter.farm = req.query.farmId;
     }
     // admin: no filter — sees all
 
@@ -116,7 +132,7 @@ const getListings = async (req, res) => {
       const p = Math.max(1, parseInt(page, 10));
       const l = Math.min(100, Math.max(1, parseInt(limit, 10)));
       const [items, total] = await Promise.all([
-        Listing.find(filter).populate('seller', 'name farmName governorate phone').sort(sort).skip((p - 1) * l).limit(l),
+        Listing.find(filter).populate('seller', 'name farmName governorate phone').populate('animal', 'tagId').sort(sort).skip((p - 1) * l).limit(l),
         Listing.countDocuments(filter),
       ]);
       return res.json({ items, total, page: p, pages: Math.ceil(total / l), hasMore: p * l < total });
@@ -124,6 +140,7 @@ const getListings = async (req, res) => {
 
     const listings = await Listing.find(filter)
       .populate('seller', 'name farmName governorate phone')
+      .populate('animal', 'tagId')
       .sort(sort);
 
     res.json(listings);
@@ -135,7 +152,7 @@ const getListings = async (req, res) => {
 // GET /api/listings/:id
 const getListingById = async (req, res) => {
   try {
-    const listing = await Listing.findById(req.params.id).populate('seller', 'name phone');
+    const listing = await Listing.findById(req.params.id).populate('seller', 'name phone').populate('animal', 'tagId');
 
     if (!listing) {
       return res.status(404).json({ message: 'Listing not found' });
@@ -176,8 +193,8 @@ const updateListing = async (req, res) => {
     }
 
     // Whitelist updatable fields — prevents seller/status injection
-    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage } = req.body;
-    const updates = { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, depositRequired, depositPercentage };
+    const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage, purpose } = req.body;
+    const updates = { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, depositRequired, depositPercentage, purpose };
     if (qurbaniShares !== undefined) {
       try { updates.qurbaniShares = JSON.parse(qurbaniShares); } catch { updates.qurbaniShares = []; }
     }
@@ -260,4 +277,18 @@ const deleteListing = async (req, res) => {
   }
 };
 
-module.exports = { createListing, getListings, getListingById, updateListing, deleteListing };
+// GET /api/listings/my/listed-animal-ids
+// Returns array of animal IDs that have an active (pending/approved/draft) listing for this seller
+const getListedAnimalIds = async (req, res) => {
+  try {
+    const docs = await Listing.find(
+      { seller: req.user.id, animal: { $ne: null }, status: { $in: ['pending', 'approved', 'draft'] } },
+      'animal'
+    ).lean();
+    res.json(docs.map(d => d.animal.toString()));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { createListing, getListings, getListingById, updateListing, deleteListing, getListedAnimalIds };

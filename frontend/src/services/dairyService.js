@@ -1,7 +1,7 @@
 import api from './api';
 
 export const getApprovedDairy = (params) => api.get('/dairy',        { params });
-export const getMyDairy        = ()        => api.get('/dairy/my');
+export const getMyDairy        = (params = {}) => api.get('/dairy/my', { params });
 export const getDairyById      = (id)      => api.get(`/dairy/${id}`);
 export const createDairy       = (data)    => api.post('/dairy',      data);
 export const updateDairy       = (id, data) => api.put(`/dairy/${id}`, data);

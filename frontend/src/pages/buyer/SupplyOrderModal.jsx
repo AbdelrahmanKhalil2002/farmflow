@@ -38,7 +38,7 @@ const ProgressBar = ({ step }) => (
   </div>
 );
 
-const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
+const SupplyOrderModal = ({ supply, wholesaleApproved = false, onClose, onSuccess }) => {
   const [step, setStep] = useState(1);
   const [qty, setQty]   = useState(supply.minOrderQty || 1);
   const [payment, setPayment]   = useState({ type: 'cod', instapayRef: '' });
@@ -47,7 +47,9 @@ const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
   const [submitting, setSubmit]   = useState(false);
   const isMobile = window.innerWidth < 600;
 
-  const totalPrice = parseFloat((supply.pricePerUnit * qty).toFixed(2));
+  const isWholesale  = wholesaleApproved && supply.wholesalePrice > 0 && qty >= (supply.minWholesaleQty || 1);
+  const effectivePrice = isWholesale ? supply.wholesalePrice : supply.pricePerUnit;
+  const totalPrice   = parseFloat((effectivePrice * qty).toFixed(2));
   const image = supply.images?.[0];
   const catEmoji = CAT_EMOJI[supply.category] || '📦';
   const catLabel = CAT_AR[supply.category] || supply.category;
@@ -79,6 +81,7 @@ const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
       const noteParts = [
         notes && `ملاحظة: ${notes}`,
         payment.type === 'instapay' && payment.instapayRef && `مرجع InstaPay: ${payment.instapayRef}`,
+        isWholesale && `سعر الجملة: ${fmt(supply.wholesalePrice)} ج.م/${supply.unit}`,
       ].filter(Boolean);
 
       await createOrder({
@@ -112,9 +115,17 @@ const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
           </span>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supply.name}</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-            {fmt(supply.pricePerUnit)} ج.م / {supply.unit}
+            {isWholesale
+              ? <><span style={{ textDecoration: 'line-through', opacity: 0.6 }}>{fmt(supply.pricePerUnit)}</span> <span style={{ color: '#D97706', fontWeight: 700 }}>{fmt(supply.wholesalePrice)} ج.م / {supply.unit}</span></>
+              : <>{fmt(supply.pricePerUnit)} ج.م / {supply.unit}</>
+            }
             {supply.minOrderQty > 1 && ` · الحد الأدنى: ${supply.minOrderQty} ${supply.unit}`}
           </div>
+          {isWholesale && (
+            <span style={{ display: 'inline-block', marginTop: 4, background: '#FEF3C7', color: '#92400E', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6 }}>
+              🏭 سعر الجملة
+            </span>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{fmt(totalPrice)}</div>
@@ -146,9 +157,19 @@ const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
       </div>
 
       {/* Price summary */}
-      <div style={{ background: C.greenLt, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, color: C.muted }}>{fmt(supply.pricePerUnit)} ج.م × {qty} {supply.unit}</span>
-        <span style={{ fontSize: 18, fontWeight: 800, color: C.green }}>{fmt(totalPrice)} ج.م</span>
+      <div style={{ background: isWholesale ? '#FFF8EC' : C.greenLt, border: `1px solid ${isWholesale ? '#FDE68A' : C.border}`, borderRadius: 12, padding: '12px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: C.muted }}>
+            {fmt(effectivePrice)} ج.م × {qty} {supply.unit}
+            {isWholesale && <span style={{ marginRight: 6, background: '#FEF3C7', color: '#92400E', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5 }}>جملة</span>}
+          </span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: isWholesale ? '#D97706' : C.green }}>{fmt(totalPrice)} ج.م</span>
+        </div>
+        {wholesaleApproved && supply.wholesalePrice > 0 && !isWholesale && (
+          <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>
+            💡 أطلب {supply.minWholesaleQty} {supply.unit} أو أكثر للحصول على سعر الجملة ({fmt(supply.wholesalePrice)} ج.م/{supply.unit})
+          </div>
+        )}
       </div>
 
       {/* Delivery note */}
@@ -221,7 +242,7 @@ const SupplyOrderModal = ({ supply, onClose, onSuccess }) => {
       { label: 'التصنيف',       val: `${catEmoji} ${catLabel}`,               bold: false },
       null,
       { label: 'الكمية',        val: `${qty} ${supply.unit}`,                 bold: false },
-      { label: 'سعر الوحدة',    val: `${fmt(supply.pricePerUnit)} ج.م`,       bold: false },
+      { label: 'سعر الوحدة',    val: isWholesale ? `${fmt(supply.wholesalePrice)} ج.م 🏭` : `${fmt(supply.pricePerUnit)} ج.م`, bold: false },
       { label: 'الإجمالي',      val: `${fmt(totalPrice)} ج.م`,                bold: true  },
       null,
       { label: 'طريقة الدفع',   val: payment.type === 'cod' ? 'الدفع عند الاستلام' : 'InstaPay', bold: false },

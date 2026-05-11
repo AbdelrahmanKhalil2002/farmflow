@@ -26,6 +26,8 @@ const AdminLogin       = lazy(() => import('./pages/AdminLogin'));
 const ForgotPassword   = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword    = lazy(() => import('./pages/ResetPassword'));
 const VerifyEmail      = lazy(() => import('./pages/VerifyEmail'));
+const TermsOfService   = lazy(() => import('./pages/TermsOfService'));
+const PrivacyPolicy    = lazy(() => import('./pages/PrivacyPolicy'));
 
 // Shared
 const Settings = lazy(() => import('./pages/Settings'));
@@ -33,6 +35,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 // Seller
 const SellerDashboard   = lazy(() => import('./pages/seller/SellerDashboard'));
 const SellerListings    = lazy(() => import('./pages/seller/SellerListings'));
+const SellerDrafts      = lazy(() => import('./pages/seller/SellerDrafts'));
 const SellerAddListing  = lazy(() => import('./pages/seller/SellerAddListing'));
 const SellerEditListing = lazy(() => import('./pages/seller/SellerEditListing'));
 const SellerFinance     = lazy(() => import('./pages/seller/SellerFinance'));
@@ -46,6 +49,8 @@ const SellerHerd        = lazy(() => import('./pages/seller/SellerHerd'));
 const SellerAddAnimal   = lazy(() => import('./pages/seller/SellerAddAnimal'));
 const SellerAnimalDetail= lazy(() => import('./pages/seller/SellerAnimalDetail'));
 const SellerSupplies    = lazy(() => import('./pages/seller/SellerSupplies'));
+const SellerMarketplace    = lazy(() => import('./pages/seller/SellerMarketplace'));
+const SellerFarmSupplies   = lazy(() => import('./pages/seller/SellerFarmSupplies'));
 const SellerAddSupply   = lazy(() => import('./pages/seller/SellerAddSupply'));
 const SellerEditSupply  = lazy(() => import('./pages/seller/SellerEditSupply'));
 const SellerBudget      = lazy(() => import('./pages/seller/SellerBudget'));
@@ -113,6 +118,8 @@ const App = () => (
         <Route path="/forgot-password"   element={<ForgotPassword />} />
         <Route path="/reset-password"    element={<ResetPassword />} />
         <Route path="/verify-email"      element={<VerifyEmail />} />
+        <Route path="/terms"             element={<TermsOfService />} />
+        <Route path="/privacy"           element={<PrivacyPolicy />} />
 
         {/* ── Role entry point ─────────────────────────────────────────── */}
         <Route
@@ -135,6 +142,8 @@ const App = () => (
         >
           <Route index                    element={<SellerDashboard />} />
           <Route path="listings"          element={<SellerListings />} />
+          <Route path="listings/:id"      element={<BuyerListingDetail />} />
+          <Route path="drafts"            element={<SellerDrafts />} />
           <Route path="add-listing"       element={<SellerAddListing />} />
           <Route path="edit-listing/:id"  element={<SellerEditListing />} />
           <Route path="finance"           element={<SellerFinance />} />
@@ -147,9 +156,12 @@ const App = () => (
           <Route path="herd"              element={<SellerHerd />} />
           <Route path="herd/add"          element={<SellerAddAnimal />} />
           <Route path="herd/:id"          element={<SellerAnimalDetail />} />
-          <Route path="supplies"          element={<SellerSupplies />} />
-          <Route path="supplies/add"      element={<SellerAddSupply />} />
-          <Route path="supplies/edit/:id" element={<SellerEditSupply />} />
+          <Route path="supplies"             element={<SellerSupplies />} />
+          <Route path="supplies/add"         element={<SellerAddSupply />} />
+          <Route path="supplies/edit/:id"    element={<SellerEditSupply />} />
+          <Route path="marketplace"                    element={<SellerMarketplace />} />
+          <Route path="marketplace/farm/:sellerId"   element={<SellerFarmSupplies />} />
+          <Route path="marketplace/:id"              element={<BuyerSupplyDetail />} />
           <Route path="budget"            element={<SellerBudget />} />
           <Route path="orders"            element={<SellerOrders />} />
           <Route path="analytics"         element={<SellerAnalytics />} />

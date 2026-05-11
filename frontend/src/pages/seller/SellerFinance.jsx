@@ -9,8 +9,27 @@ import { getMyListings } from '../../services/listingService';
 import { fmt } from '../../utils/format';
 import { useToast } from '../../components/Toast';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 import { C as _C } from '../../tokens';
 import SellerAnalytics from './SellerAnalytics';
+
+// ─── Statements data normalizer ────────────────────────────────────────────────
+// Backend returns [{month:0-based, income, expenses:{cat:amt}}]
+// Frontend expects {income:{1:amt,...}, expenses:{cat:{1:amt,...}}}
+const normalizeStmtData = (raw) => {
+  if (!raw || !Array.isArray(raw)) return raw ?? null;
+  const income = {};
+  const expenses = {};
+  raw.forEach(row => {
+    const m = (row.month ?? 0) + 1; // 0-based → 1-based
+    income[m] = row.income || 0;
+    Object.entries(row.expenses || {}).forEach(([cat, amt]) => {
+      if (!expenses[cat]) expenses[cat] = {};
+      expenses[cat][m] = amt;
+    });
+  });
+  return { income, expenses };
+};
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -36,6 +55,12 @@ const CAT_KEYS = Object.keys(EXPENSE_CATS);
 const EXP_CATS_WITH_INCOME = [
   ...CAT_KEYS.map(k => ({ key: k, ...EXPENSE_CATS[k] })),
   { key: 'income', label: 'دخل', emoji: '💰', color: '#16A34A', bg: '#F0FDF4' },
+];
+
+const CUSTOM_EMOJIS = [
+  '📦','🚜','🌱','🔑','💊','🏪','📱','📋','🎯','🌿',
+  '🪣','💡','🛒','👔','🔩','🧰','🏗️','🚁','🔬','🧪',
+  '🌾','💼','🎁','🚗','⚙️','🏋️','🏥','💈','💰','📌',
 ];
 
 // ─── Parse API error ───────────────────────────────────────────────────────────
@@ -271,7 +296,7 @@ const MonthlyBarChart = ({ stmtData, year }) => {
 
 // ─── Transaction Modal ─────────────────────────────────────────────────────────
 
-const TxModal = ({ modal, onClose, onSaved, listings }) => {
+const TxModal = ({ modal, onClose, onSaved, listings, farmId }) => {
   const toast = useToast();
 
   const isEdit = modal.mode === 'edit';
@@ -295,7 +320,7 @@ const TxModal = ({ modal, onClose, onSaved, listings }) => {
     try {
       const recurFields = recurring ? { recurring: true, recurringDay: Number(recurringDay) } : { recurring: false };
       if (txType === 'expense') {
-        const payload = { category, amount: parseFloat(amount), date: date || today(), note, ...recurFields };
+        const payload = { category, amount: parseFloat(amount), date: date || today(), note, ...recurFields, ...(farmId ? { farmId } : {}) };
         if (isEdit) {
           const { data } = await updateExpense(modal.row._id, payload);
           onSaved('expense', 'update', data);
@@ -306,7 +331,7 @@ const TxModal = ({ modal, onClose, onSaved, listings }) => {
           toast.success('تمت إضافة المصروف');
         }
       } else {
-        const payload = { amount: parseFloat(amount), date: date || today(), note, type: incType, ...recurFields };
+        const payload = { amount: parseFloat(amount), date: date || today(), note, type: incType, ...recurFields, ...(farmId ? { farmId } : {}) };
         if (isEdit) {
           const { data } = await updateIncome(modal.row._id, payload);
           onSaved('income', 'update', data);
@@ -526,8 +551,9 @@ const DATE_GROUP_ORDER = ['today', 'yesterday', 'this_week', 'this_month', 'earl
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 const SellerFinance = () => {
-  const toast       = useToast();
-  const { t }       = useLang();
+  const toast          = useToast();
+  const { t }          = useLang();
+  const { activeFarm } = useFarm();
 
   // Tab
   const [tab, setTab] = useState('tx');
@@ -557,6 +583,42 @@ const SellerFinance = () => {
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [budgetLoaded,  setBudgetLoaded]  = useState(false);
 
+  // ── Custom budget rows (stored in localStorage) ──────────────────────────
+  // Shape: [{ id, label, emoji, budgets: { 'year-month': amount } }]
+  const CUSTOM_ROWS_KEY = 'farmflow_custom_budget_rows';
+  const loadCustomRows = () => {
+    try { return JSON.parse(localStorage.getItem(CUSTOM_ROWS_KEY) || '[]'); } catch { return []; }
+  };
+  const [customRows,    setCustomRows]    = useState(loadCustomRows);
+  const [addRowOpen,    setAddRowOpen]    = useState(false);
+  const [addRowLabel,   setAddRowLabel]   = useState('');
+  const [addRowEmoji,   setAddRowEmoji]   = useState('📦');
+  const [emojiPickerFor, setEmojiPickerFor] = useState(null); // row id
+
+  const persistCustomRows = (rows) => {
+    setCustomRows(rows);
+    localStorage.setItem(CUSTOM_ROWS_KEY, JSON.stringify(rows));
+  };
+  const addCustomRow = () => {
+    if (!addRowLabel.trim()) return;
+    const newRow = { id: Date.now().toString(), label: addRowLabel.trim(), emoji: addRowEmoji, budgets: {} };
+    persistCustomRows([...customRows, newRow]);
+    setAddRowLabel(''); setAddRowEmoji('📦'); setAddRowOpen(false);
+  };
+  const deleteCustomRow = (id) => persistCustomRows(customRows.filter(r => r.id !== id));
+  const renameCustomRow = (id, label) =>
+    persistCustomRows(customRows.map(r => r.id === id ? { ...r, label } : r));
+  const setCustomRowEmoji = (id, emoji) => {
+    persistCustomRows(customRows.map(r => r.id === id ? { ...r, emoji } : r));
+    setEmojiPickerFor(null);
+  };
+  const saveCustomCellBudget = (id, year, month, amount) => {
+    const key = `${year}-${month}`;
+    persistCustomRows(customRows.map(r => r.id === id ? { ...r, budgets: { ...r.budgets, [key]: amount } } : r));
+  };
+  const customRowAnnualBudget = (row) =>
+    Array.from({ length: 12 }, (_, i) => row.budgets?.[`${budgetYear}-${i+1}`] || 0).reduce((s,v) => s+v, 0);
+
   // Modal
   const [modal,         setModal]         = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -565,14 +627,16 @@ const SellerFinance = () => {
   // ── Load transactions on mount ───────────────────────────────────────────
   useEffect(() => {
     setTxLoading(true);
-    Promise.all([getExpenses(), getIncome()])
+    const farmId = activeFarm?._id;
+    const p = farmId ? { farmId } : {};
+    Promise.all([getExpenses(p), getIncome(p)])
       .then(([expRes, incRes]) => {
         setExpenses(expRes.data || []);
         setIncome(incRes.data || []);
       })
       .catch(() => toast.error('فشل تحميل المعاملات'))
       .finally(() => setTxLoading(false));
-  }, []);
+  }, [activeFarm?._id]);
 
   // ── Load summary data when tab activated ────────────────────────────────
   useEffect(() => {
@@ -580,7 +644,7 @@ const SellerFinance = () => {
     setStmtLoaded(false);
     setStmtLoading(true);
     getStatements(stmtYear)
-      .then(res => { setStmtData(res.data?.data ?? res.data ?? null); setStmtLoaded(true); })
+      .then(res => { setStmtData(normalizeStmtData(res.data?.data ?? res.data)); setStmtLoaded(true); })
       .catch(() => { toast.error('فشل تحميل الملخص'); setStmtLoaded(true); })
       .finally(() => setStmtLoading(false));
   }, [tab, stmtYear]);
@@ -597,7 +661,7 @@ const SellerFinance = () => {
       (bRes.data || []).forEach(b => { bMap[`${b.category}-${b.month}`] = b.targetAmount; });
       setBudgetsState(bMap);
 
-      const stmt = sRes?.data?.data ?? sRes?.data;
+      const stmt = normalizeStmtData(sRes?.data?.data ?? sRes?.data);
       if (stmt) {
         const aMap = {};
         if (stmt.expenses) {
@@ -1396,11 +1460,8 @@ const SellerFinance = () => {
                                 const aval = actuals[`${cat.key}-${m}`] ?? 0;
                                 return (
                                   <td key={m} style={{ padding: '8px 4px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                    <BudgetCell
-                                      value={bval} actual={aval > 0 ? aval : null}
-                                      catKey={cat.key} year={budgetYear} month={m}
-                                      onSave={handleBudgetSave}
-                                    />
+                                    <BudgetCell value={bval} actual={aval > 0 ? aval : null}
+                                      catKey={cat.key} year={budgetYear} month={m} onSave={handleBudgetSave} />
                                   </td>
                                 );
                               })}
@@ -1408,17 +1469,114 @@ const SellerFinance = () => {
                                 <div style={{ fontSize: '13px', fontWeight: '800', color: annT > 0 ? '#166534' : '#9CA3AF' }}>
                                   {annT > 0 ? `${fmt(annT)} ج.م` : '—'}
                                 </div>
-                                {over && annT > 0 && (
-                                  <div style={{ fontSize: '9px', color: '#DC2626', fontWeight: '600', marginTop: '2px' }}>تجاوز الحد</div>
-                                )}
+                                {over && annT > 0 && <div style={{ fontSize: '9px', color: '#DC2626', fontWeight: '600', marginTop: '2px' }}>تجاوز الحد</div>}
                               </td>
                             </tr>
                           );
                         })}
+
+                        {/* ── Custom rows ── */}
+                        {customRows.map((row, ci) => {
+                          const annT = customRowAnnualBudget(row);
+                          return (
+                            <tr key={row.id} style={{ borderBottom: '1px solid #F3F4F6', background: ci % 2 === 0 ? '#FFFBF5' : '#FFF8EE' }}>
+                              <td style={{ padding: '10px 12px', position: 'sticky', right: 0, background: ci % 2 === 0 ? '#FFFBF5' : '#FFF8EE', borderLeft: '1px solid #F3F4F6', zIndex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {/* Emoji picker trigger */}
+                                  <button type="button" onClick={() => setEmojiPickerFor(emojiPickerFor === row.id ? null : row.id)}
+                                    style={{ background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', padding: '2px 5px', cursor: 'pointer', fontSize: '14px', lineHeight: 1.2 }}>
+                                    {row.emoji}
+                                  </button>
+                                  {/* Inline rename */}
+                                  <input defaultValue={row.label} onBlur={e => renameCustomRow(row.id, e.target.value || row.label)}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                    style={{ border: 'none', background: 'transparent', fontSize: '12px', fontWeight: '700', color: '#111827', outline: 'none', width: '80px', cursor: 'text' }}
+                                  />
+                                  <button type="button" onClick={() => deleteCustomRow(row.id)} title="حذف"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '13px', marginRight: 'auto', padding: '0 2px' }}>
+                                    ×
+                                  </button>
+                                </div>
+                                {/* Emoji picker dropdown */}
+                                {emojiPickerFor === row.id && (
+                                  <div style={{ position: 'absolute', zIndex: 50, background: '#fff', border: '1px solid #E5E7EB', borderRadius: '10px', padding: '8px', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', display: 'flex', flexWrap: 'wrap', gap: '4px', width: '200px', bottom: '34px', right: 0 }}>
+                                    {CUSTOM_EMOJIS.map(em => (
+                                      <button key={em} type="button" onClick={() => setCustomRowEmoji(row.id, em)}
+                                        style={{ background: row.emoji === em ? '#E5E7EB' : 'none', border: 'none', borderRadius: '6px', padding: '4px', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>
+                                        {em}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                              {Array.from({ length: 12 }, (_, mi) => {
+                                const m = mi + 1;
+                                const bval = row.budgets?.[`${budgetYear}-${m}`];
+                                return (
+                                  <td key={m} style={{ padding: '8px 4px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                    <BudgetCell value={bval} actual={null}
+                                      catKey={`custom-${row.id}`} year={budgetYear} month={m}
+                                      onSave={(_, yr, mo, amount) => saveCustomCellBudget(row.id, yr, mo, amount)} />
+                                  </td>
+                                );
+                              })}
+                              <td style={{ padding: '10px 14px', textAlign: 'center', background: '#FFF8EE' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '800', color: annT > 0 ? '#D97706' : '#9CA3AF' }}>
+                                  {annT > 0 ? `${fmt(annT)} ج.م` : '—'}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {/* ── Add custom row button ── */}
+                        <tr style={{ borderBottom: '1px solid #F3F4F6', background: '#FAFAF5' }}>
+                          <td colSpan={14} style={{ padding: '8px 16px' }}>
+                            {addRowOpen ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative' }}>
+                                  <button type="button" onClick={() => setEmojiPickerFor('new')}
+                                    style={{ background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '18px' }}>
+                                    {addRowEmoji}
+                                  </button>
+                                  {emojiPickerFor === 'new' && (
+                                    <div style={{ position: 'absolute', zIndex: 50, background: '#fff', border: '1px solid #E5E7EB', borderRadius: '10px', padding: '8px', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', display: 'flex', flexWrap: 'wrap', gap: '4px', width: '220px', bottom: '38px', right: 0 }}>
+                                      {CUSTOM_EMOJIS.map(em => (
+                                        <button key={em} type="button" onClick={() => { setAddRowEmoji(em); setEmojiPickerFor(null); }}
+                                          style={{ background: addRowEmoji === em ? '#E5E7EB' : 'none', border: 'none', borderRadius: '6px', padding: '4px', cursor: 'pointer', fontSize: '16px' }}>
+                                          {em}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <input autoFocus value={addRowLabel} onChange={e => setAddRowLabel(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') addCustomRow(); if (e.key === 'Escape') setAddRowOpen(false); }}
+                                  placeholder="اسم البند" dir="rtl"
+                                  style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #3A7D44', fontSize: '13px', width: '140px', outline: 'none', fontFamily: 'inherit' }}
+                                />
+                                <button type="button" onClick={addCustomRow}
+                                  style={{ padding: '7px 16px', borderRadius: '8px', background: '#3A7D44', color: '#fff', border: 'none', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+                                  إضافة
+                                </button>
+                                <button type="button" onClick={() => setAddRowOpen(false)}
+                                  style={{ padding: '7px 12px', borderRadius: '8px', background: '#F3F4F6', color: '#6B7280', border: '1px solid #E5E7EB', fontSize: '13px', cursor: 'pointer' }}>
+                                  إلغاء
+                                </button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => setAddRowOpen(true)}
+                                style={{ background: 'none', border: '1.5px dashed #D1D5DB', borderRadius: '8px', padding: '6px 16px', color: '#6B7280', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '16px' }}>＋</span> إضافة بند مخصص
+                              </button>
+                            )}
+                          </td>
+                        </tr>
                         {/* صافي الربح المستهدف row */}
                         {(() => {
                           const annIncBudget = annualBudget('income');
-                          const annExpBudget = EXP_CATS_WITH_INCOME.filter(c => c.key !== 'income').reduce((s,c) => s + annualBudget(c.key), 0);
+                          const annExpBudget = EXP_CATS_WITH_INCOME.filter(c => c.key !== 'income').reduce((s,c) => s + annualBudget(c.key), 0)
+                            + customRows.reduce((s, row) => s + customRowAnnualBudget(row), 0);
                           const annNet = annIncBudget - annExpBudget;
                           return (
                             <tr style={{ borderTop: '2px solid #D1D5DB', background: annNet >= 0 ? '#F0FDF4' : '#FEF2F2' }}>
@@ -1431,7 +1589,8 @@ const SellerFinance = () => {
                               {Array.from({ length: 12 }, (_, mi) => {
                                 const m = mi + 1;
                                 const incB = budgets[`income-${m}`] || 0;
-                                const expB = CAT_KEYS.reduce((s, k) => s + (budgets[`${k}-${m}`] || 0), 0);
+                                const expB = CAT_KEYS.reduce((s, k) => s + (budgets[`${k}-${m}`] || 0), 0)
+                                  + customRows.reduce((s, row) => s + (row.budgets?.[`${budgetYear}-${m}`] || 0), 0);
                                 const net = incB - expB;
                                 const hasData = incB > 0 || expB > 0;
                                 return (
@@ -1483,6 +1642,7 @@ const SellerFinance = () => {
           onClose={() => setModal(null)}
           onSaved={handleSaved}
           listings={[]}
+          farmId={activeFarm?._id}
         />
       )}
 
@@ -1493,6 +1653,11 @@ const SellerFinance = () => {
           onConfirm={handleDelete}
           busy={deleting}
         />
+      )}
+
+      {/* Close emoji picker on outside click */}
+      {emojiPickerFor && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEmojiPickerFor(null)} />
       )}
     </div>
   );

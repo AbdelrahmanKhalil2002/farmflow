@@ -9,9 +9,10 @@ const createDairy = async (req, res) => {
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
     const images = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
-    const { name, type, quantity, unit, pricePerUnit, productionDate, expiryDate, description, deliveryAvailable, deliveryCost } = req.body;
+    const { name, type, quantity, unit, pricePerUnit, productionDate, expiryDate, description, deliveryAvailable, deliveryCost, farmId } = req.body;
     const product = await DairyProduct.create({
       seller: req.user.id,
+      farm:   farmId || undefined,
       name, type, quantity, unit, pricePerUnit,
       productionDate: productionDate || undefined,
       expiryDate:     expiryDate     || undefined,
@@ -39,7 +40,9 @@ const createDairy = async (req, res) => {
 // GET /api/dairy/my  — seller sees their own
 const getMyDairy = async (req, res) => {
   try {
-    const products = await DairyProduct.find({ seller: req.user.id }).sort({ createdAt: -1 });
+    const filter = { seller: req.user.id };
+    if (req.query.farmId) filter.farm = req.query.farmId;
+    const products = await DairyProduct.find(filter).sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -27,35 +27,38 @@ const LIVESTOCK_BREEDS = {
 };
 
 const ANIMAL_TYPES = [
-  { id: 'cattle',     label: 'أبقار'    },
-  { id: 'buffalo',    label: 'جاموس'    },
-  { id: 'sheep',      label: 'أغنام'    },
-  { id: 'goat',       label: 'ماعز'     },
-  { id: 'camel',      label: 'إبل'      },
-  { id: 'horse',      label: 'خيول'     },
-  { id: 'poultry',    label: 'دواجن'    },
-  { id: 'rabbit',     label: 'أرانب'    },
+  { id: 'cattle',          label: 'أبقار',      farmTypes: ['livestock'] },
+  { id: 'buffalo',         label: 'جاموس',      farmTypes: ['livestock'] },
+  { id: 'sheep',           label: 'أغنام',      farmTypes: ['livestock'] },
+  { id: 'goat',            label: 'ماعز',       farmTypes: ['livestock'] },
+  { id: 'camel',           label: 'إبل',        farmTypes: ['livestock'] },
+  { id: 'horse',           label: 'خيول',       farmTypes: ['horses']    },
+  { id: 'rabbit',          label: 'أرانب',      farmTypes: ['poultry']   },
   // poultry sub-types
-  { id: 'chicken_baladi',  label: 'فراخ بلدي'  },
-  { id: 'chicken_broiler', label: 'فراخ تسمين' },
-  { id: 'chicken_layers',  label: 'فراخ بياضة' },
-  { id: 'duck',            label: 'بط'          },
-  { id: 'turkey',          label: 'ديك رومي'   },
-  { id: 'pigeon',          label: 'حمام'        },
-  { id: 'quail',           label: 'سمان'        },
-  { id: 'goose',           label: 'إوز'         },
-  { id: 'guinea',          label: 'دراج'        },
-  { id: 'peacock',         label: 'طاووس'       },
+  { id: 'chicken_baladi',  label: 'فراخ بلدي',  farmTypes: ['poultry']   },
+  { id: 'chicken_broiler', label: 'فراخ تسمين', farmTypes: ['poultry']   },
+  { id: 'chicken_layers',  label: 'فراخ بياضة', farmTypes: ['poultry']   },
+  { id: 'duck',            label: 'بط',          farmTypes: ['poultry']   },
+  { id: 'turkey',          label: 'ديك رومي',   farmTypes: ['poultry']   },
+  { id: 'pigeon',          label: 'حمام',        farmTypes: ['poultry']   },
+  { id: 'quail',           label: 'سمان',        farmTypes: ['poultry']   },
+  { id: 'goose',           label: 'إوز',         farmTypes: ['poultry']   },
+  { id: 'guinea',          label: 'دراج',        farmTypes: ['poultry']   },
+  { id: 'peacock',         label: 'طاووس',       farmTypes: ['poultry']   },
   // exotic
-  { id: 'ostrich',         label: 'نعام'        },
-  { id: 'gazelle',         label: 'غزلان'       },
-  { id: 'oryx',            label: 'مها'         },
-  { id: 'deer',            label: 'أيل'         },
-  { id: 'llama',           label: 'لاما'        },
-  { id: 'alpaca',          label: 'ألبكا'       },
-  { id: 'donkey',          label: 'حمير'        },
-  { id: 'mule',            label: 'بغال'        },
+  { id: 'ostrich',         label: 'نعام',        farmTypes: ['exotic']    },
+  { id: 'gazelle',         label: 'غزلان',       farmTypes: ['exotic']    },
+  { id: 'oryx',            label: 'مها',         farmTypes: ['exotic']    },
+  { id: 'deer',            label: 'أيل',         farmTypes: ['exotic']    },
+  { id: 'llama',           label: 'لاما',        farmTypes: ['exotic']    },
+  { id: 'alpaca',          label: 'ألبكا',       farmTypes: ['exotic']    },
+  { id: 'donkey',          label: 'حمير',        farmTypes: ['livestock','exotic'] },
+  { id: 'mule',            label: 'بغال',        farmTypes: ['livestock','exotic'] },
 ];
+
+// Filter animal types based on selected farm type
+const getAnimalTypesForFarm = (farmType) =>
+  ANIMAL_TYPES.filter(at => !farmType || farmType === 'other' || at.farmTypes.includes(farmType));
 // Returns array of { id, label, breeds } for all configurable subtypes in animalTypes
 const buildBreedSections = (animalTypes = []) => {
   const sections = [];
@@ -73,13 +76,11 @@ const buildBreedSections = (animalTypes = []) => {
 };
 
 const FARM_TYPES   = [
-  { value: 'livestock', label: 'مواشي'      },
-  { value: 'horses',    label: 'خيل'         },
-  { value: 'poultry',   label: 'دواجن'       },
-  { value: 'dairy',     label: 'ألبان'       },
-  { value: 'exotic',    label: 'نعام ونادر' },
-  { value: 'mixed',     label: 'متنوع'       },
-  { value: 'other',     label: 'أخرى'        },
+  { value: 'livestock', label: 'مواشي'       },
+  { value: 'horses',    label: 'خيل'          },
+  { value: 'poultry',   label: 'دواجن'        },
+  { value: 'exotic',    label: 'نعام ونادر'  },
+  { value: 'olive',     label: '🫒 زيت زيتون — قريبًا', disabled: true },
 ];
 const GOVS = [
   'القاهرة','الجيزة','الإسكندرية','المنوفية','الشرقية','الدقهلية','الغربية','كفر الشيخ',
@@ -90,7 +91,7 @@ const GOVS = [
 const emptyForm = () => ({
   name: '', type: 'livestock', governorate: '', farmPhone: '',
   personalPhone: '', experience: '', animalTypes: [], bio: '',
-  farmDescription: '', banner: null,
+  farmDescription: '', banner: null, sellsSupplies: false,
 });
 
 const SellerFarms = () => {
@@ -116,6 +117,7 @@ const SellerFarms = () => {
       bio:           farm.bio           || '',
       farmDescription: farm.farmDescription || '',
       banner: null,
+      sellsSupplies: farm.sellsSupplies || false,
     });
     setLocalBreedPrefs(getFarmBreedPrefs(farm._id));
     setError('');
@@ -285,9 +287,13 @@ const SellerFarms = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '700', color: C.muted, display: 'block', marginBottom: '5px' }}>نوع المزرعة</label>
-                  <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
+                  <select value={form.type} onChange={e => {
+                    const newType = e.target.value;
+                    const allowed = new Set(getAnimalTypesForFarm(newType).map(a => a.id));
+                    setForm(p => ({ ...p, type: newType, animalTypes: p.animalTypes.filter(id => allowed.has(id)) }));
+                  }}
                     style={{ width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '14px', color: C.text, background: C.bg, fontFamily: 'inherit' }}>
-                    {FARM_TYPES.map(ft => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+                    {FARM_TYPES.map(ft => <option key={ft.value} value={ft.value} disabled={ft.disabled}>{ft.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -318,7 +324,7 @@ const SellerFarms = () => {
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: C.muted, display: 'block', marginBottom: '7px' }}>أنواع الحيوانات</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {ANIMAL_TYPES.map(at => {
+                  {getAnimalTypesForFarm(form.type).map(at => {
                     const sel = form.animalTypes.includes(at.id);
                     return (
                       <button key={at.id} type="button" onClick={() => toggleAnimalType(at.id)}
@@ -375,6 +381,19 @@ const SellerFarms = () => {
                 <label style={{ fontSize: '12px', fontWeight: '700', color: C.muted, display: 'block', marginBottom: '5px' }}>نبذة عن المزرعة</label>
                 <textarea value={form.bio} onChange={e => setForm(p => ({ ...p, bio: e.target.value }))} rows={3} placeholder="وصف مختصر..."
                   style={{ width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '14px', color: C.text, background: C.bg, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              </div>
+
+              {/* Sells Supplies toggle */}
+              <div
+                onClick={() => setForm(p => ({ ...p, sellsSupplies: !p.sellsSupplies }))}
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: `1.5px solid ${form.sellsSupplies ? C.green : C.border}`, background: form.sellsSupplies ? `${C.green}0D` : C.bg, cursor: 'pointer', userSelect: 'none' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '5px', border: `2px solid ${form.sellsSupplies ? C.green : C.border}`, background: form.sellsSupplies ? C.green : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+                  {form.sellsSupplies && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1, fontWeight: 800 }}>✓</span>}
+                </div>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: C.text }}>🛒 هذه المزرعة تبيع مستلزمات</div>
+                  <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>تفعّل لو بتبيع أعلاف أو معدات أو منتجات للمشترين</div>
+                </div>
               </div>
 
               {/* Banner upload */}

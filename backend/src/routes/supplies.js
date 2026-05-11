@@ -38,7 +38,17 @@ router.get('/', optionalAuth, async (req, res) => {
     if (!role || role === 'buyer') {
       filter.status = 'approved';
     } else if (role === 'seller') {
-      filter.seller = req.user.id;
+      if (req.query.browse === '1') {
+        filter.status = 'approved';
+        if (req.query.seller) {
+          filter.seller = req.query.seller; // specific seller's supplies
+        } else {
+          filter.seller = { $ne: req.user.id }; // all approved except own
+        }
+      } else {
+        filter.seller = req.user.id;
+        if (req.query.farmId) filter.farm = req.query.farmId;
+      }
     }
     // admin: no filter
 
@@ -68,7 +78,7 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { name, category, description, quantity, unit, pricePerUnit, minOrderQty, location, deliveryAvailable, deliveryCost } = req.body;
+      const { name, category, description, quantity, unit, pricePerUnit, minOrderQty, location, deliveryAvailable, deliveryCost, wholesalePrice, minWholesaleQty, farm } = req.body;
       const images = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
 
       const supply = await Supply.create({
@@ -78,6 +88,9 @@ router.post(
         minOrderQty: minOrderQty ? parseInt(minOrderQty) : 1,
         location, deliveryAvailable: deliveryAvailable === 'true' || deliveryAvailable === true,
         deliveryCost: deliveryCost || undefined,
+        wholesalePrice:  wholesalePrice  ? parseFloat(wholesalePrice)  : undefined,
+        minWholesaleQty: minWholesaleQty ? parseInt(minWholesaleQty)   : undefined,
+        farm: farm || undefined,
         images,
       });
 
@@ -136,6 +149,13 @@ router.put(
 
       const fields = ['name','category','description','quantity','unit','pricePerUnit','minOrderQty','location','deliveryAvailable','deliveryCost'];
       fields.forEach(k => { if (req.body[k] !== undefined) supply[k] = req.body[k]; });
+      // Handle wholesale fields — empty string means "remove"
+      if (req.body.wholesalePrice !== undefined) {
+        supply.wholesalePrice   = req.body.wholesalePrice === '' ? undefined : parseFloat(req.body.wholesalePrice);
+      }
+      if (req.body.minWholesaleQty !== undefined) {
+        supply.minWholesaleQty  = req.body.minWholesaleQty === '' ? undefined : parseInt(req.body.minWholesaleQty);
+      }
 
       // Reset to pending when seller edits (forces re-review)
       if (req.user.role === 'seller') supply.status = 'pending';

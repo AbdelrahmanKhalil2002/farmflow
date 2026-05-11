@@ -75,40 +75,71 @@ class _AppTextFieldState extends State<AppTextField> {
           ),
         ),
         const SizedBox(height: 7),
-        TextFormField(
-          controller:       widget.controller,
-          keyboardType:     widget.keyboardType,
-          textInputAction:  widget.textInputAction,
-          obscureText:      _obscure,
-          validator:        widget.validator,
-          onChanged:        widget.onChanged,
-          onFieldSubmitted: widget.onFieldSubmitted,
-          enabled:          widget.enabled,
-          readOnly:         widget.readOnly,
-          maxLines:         widget.obscureText ? 1 : widget.maxLines,
-          minLines:         widget.minLines,
-          inputFormatters:  widget.inputFormatters,
-          autofillHints:    widget.autofillHints,
-          focusNode:        widget.focusNode,
-          textDirection:    widget.textDirection,
-          initialValue:     widget.initialValue,
-          style: const TextStyle(fontSize: 14, color: AppColors.text),
-          decoration: InputDecoration(
-            hintText:   widget.hint,
-            prefixIcon: widget.prefixIcon,
-            suffixIcon: widget.obscureText
-                ? IconButton(
-                    icon: Icon(
-                      _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      color: AppColors.muted,
-                      size: 20,
-                    ),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  )
-                : widget.suffixIcon,
-            enabled: widget.enabled,
+        if (widget.obscureText)
+          Stack(
+            alignment: Alignment.centerRight,
+            children: [
+              TextFormField(
+                controller:       widget.controller,
+                keyboardType:     widget.keyboardType,
+                textInputAction:  widget.textInputAction,
+                obscureText:      _obscure,
+                validator:        widget.validator,
+                onChanged:        widget.onChanged,
+                onFieldSubmitted: widget.onFieldSubmitted,
+                enabled:          widget.enabled,
+                maxLines:         1,
+                inputFormatters:  widget.inputFormatters,
+                autofillHints:    widget.autofillHints,
+                focusNode:        widget.focusNode,
+                initialValue:     widget.initialValue,
+                style: const TextStyle(fontSize: 14, color: AppColors.text),
+                decoration: InputDecoration(
+                  hintText:   widget.hint,
+                  prefixIcon: widget.prefixIcon,
+                  contentPadding: const EdgeInsets.fromLTRB(16, 14, 48, 14),
+                  enabled: widget.enabled,
+                ),
+              ),
+              Positioned(
+                right: 4,
+                child: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    color: AppColors.muted,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+            ],
+          )
+        else
+          TextFormField(
+            controller:       widget.controller,
+            keyboardType:     widget.keyboardType,
+            textInputAction:  widget.textInputAction,
+            obscureText:      false,
+            validator:        widget.validator,
+            onChanged:        widget.onChanged,
+            onFieldSubmitted: widget.onFieldSubmitted,
+            enabled:          widget.enabled,
+            readOnly:         widget.readOnly,
+            maxLines:         widget.maxLines,
+            minLines:         widget.minLines,
+            inputFormatters:  widget.inputFormatters,
+            autofillHints:    widget.autofillHints,
+            focusNode:        widget.focusNode,
+            textDirection:    widget.textDirection,
+            initialValue:     widget.initialValue,
+            style: const TextStyle(fontSize: 14, color: AppColors.text),
+            decoration: InputDecoration(
+              hintText:   widget.hint,
+              prefixIcon: widget.prefixIcon,
+              suffixIcon: widget.suffixIcon,
+              enabled:    widget.enabled,
+            ),
           ),
-        ),
       ],
     );
   }

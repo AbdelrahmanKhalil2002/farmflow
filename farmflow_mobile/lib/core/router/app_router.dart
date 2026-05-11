@@ -40,19 +40,30 @@ import '../../features/admin/admin_eid_screen.dart';
 import '../../features/admin/admin_supplies_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 
+class _AuthNotifier extends ChangeNotifier {
+  _AuthNotifier(this._ref) {
+    _ref.listen<AsyncValue<dynamic>>(authNotifierProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+  final Ref _ref;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final authNotifier = _AuthNotifier(ref);
 
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: authNotifier,
     redirect: (context, state) {
+      final authState = ref.read(authNotifierProvider);
       final isLoading  = authState.isLoading;
       final user       = authState.valueOrNull;
       final isSplash   = state.matchedLocation == '/splash';
       final isAuth     = state.matchedLocation.startsWith('/login') ||
                          state.matchedLocation.startsWith('/register');
 
-      if (isLoading) return isSplash ? null : '/splash';
+      if (isLoading) return (isSplash || isAuth) ? null : '/splash';
       if (user == null && !isAuth) return '/login';
       if (user != null && (isAuth || isSplash)) {
         return switch (user.role) {

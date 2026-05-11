@@ -43,7 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on DioException catch (e) {
       setState(() => _errorMsg = dioErrorMessage(e));
     } catch (e) {
-      setState(() => _errorMsg = context.l10n.unexpectedError);
+      setState(() => _errorMsg = '[${e.runtimeType}] $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -5,6 +5,7 @@ import { fmt } from '../../utils/format';
 import { useToast } from '../../components/Toast';
 import { isDesktop } from '../../utils/platform';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 
 import { C } from '../../tokens';
 
@@ -246,8 +247,9 @@ const BreakdownBars = ({ totals, grandTotal, t }) => (
 
 // ─── Main component ────────────────────────────────────────────────────────────
 const SellerExpenses = () => {
-  const toast  = useToast();
-  const { t }  = useLang();
+  const toast          = useToast();
+  const { t }          = useLang();
+  const { activeFarm } = useFarm();
   const [expenses,  setExpenses]  = useState([]);
   const [listings,  setListings]  = useState([]);
   const [loading,   setLoading]   = useState(true);
@@ -283,14 +285,16 @@ const SellerExpenses = () => {
   // ── Load data ────────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
-    Promise.all([getExpenses(), getMyListings()])
+    const farmId = activeFarm?._id;
+    const p = farmId ? { farmId } : {};
+    Promise.all([getExpenses(p), getMyListings(farmId)])
       .then(([expRes, listRes]) => {
         setExpenses(expRes.data);
         setListings(listRes.data);
       })
       .catch(() => setFetchErr(t('expenses.loadErr')))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeFarm?._id]);
 
   // ── Summary calculations ─────────────────────────────────────────────────
   const now = new Date();
@@ -389,6 +393,7 @@ const SellerExpenses = () => {
       date:         form.date || today(),
       note,
       ...(form.listing ? { listing: form.listing } : {}),
+      ...(activeFarm?._id ? { farmId: activeFarm._id } : {}),
       recurringDay: rd,
     };
 

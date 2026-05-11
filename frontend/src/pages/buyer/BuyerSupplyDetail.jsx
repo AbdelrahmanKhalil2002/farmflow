@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getSupplyById } from '../../services/supplyService';
+import { checkWholesaleAccess, enterWholesaleCode, requestWholesaleAccess } from '../../services/wholesaleService';
 import { useLang } from '../../context/LangContext';
+import { useAuth } from '../../context/AuthContext';
 import SupplyOrderModal from './SupplyOrderModal';
 
 import { C } from '../../tokens';
@@ -15,6 +17,7 @@ const BASE_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://lo
 
 const BuyerSupplyDetail = () => {
   const { t, isRTL } = useLang();
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [supply,      setSupply]      = useState(null);
@@ -23,12 +26,51 @@ const BuyerSupplyDetail = () => {
   const [showOrder,   setShowOrder]   = useState(false);
   const [ordered,     setOrdered]     = useState(false);
 
+  // Wholesale state
+  const [wholesaleStatus,  setWholesaleStatus]  = useState(null); // null | 'none' | 'pending' | 'approved' | 'rejected'
+  const [wholesaleCode,    setWholesaleCode]    = useState('');
+  const [wholesaleLoading, setWholesaleLoading] = useState(false);
+  const [wholesaleErr,     setWholesaleErr]     = useState('');
+
   useEffect(() => {
     getSupplyById(id)
       .then(r => setSupply(r.data))
-      .catch(() => navigate('/buyer', { replace: true }))
+      .catch(() => navigate(-1))
       .finally(() => setLoading(false));
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (!supply?.wholesalePrice || !user || user.role !== 'buyer') return;
+    checkWholesaleAccess(supply.seller?._id)
+      .then(r => setWholesaleStatus(r.data.status))
+      .catch(() => setWholesaleStatus('none'));
+  }, [supply, user]);
+
+  const handleEnterCode = async () => {
+    setWholesaleErr('');
+    if (!wholesaleCode.trim()) { setWholesaleErr('أدخل الكود'); return; }
+    setWholesaleLoading(true);
+    try {
+      await enterWholesaleCode(wholesaleCode.trim());
+      setWholesaleStatus('approved');
+      setWholesaleCode('');
+    } catch (err) {
+      setWholesaleErr(err?.response?.data?.message || 'الكود غير صحيح');
+    }
+    setWholesaleLoading(false);
+  };
+
+  const handleRequestAccess = async () => {
+    setWholesaleErr('');
+    setWholesaleLoading(true);
+    try {
+      await requestWholesaleAccess(supply.seller?._id);
+      setWholesaleStatus('pending');
+    } catch (err) {
+      setWholesaleErr(err?.response?.data?.message || 'حدث خطأ');
+    }
+    setWholesaleLoading(false);
+  };
 
   if (loading) return (
     <div style={{ fontFamily: "system-ui,-apple-system,'Segoe UI',sans-serif", maxWidth: 720, margin: '0 auto' }} dir={isRTL ? 'rtl' : 'ltr'}>
@@ -182,6 +224,64 @@ const BuyerSupplyDetail = () => {
               📞 {seller.phone}
             </a>
           )}
+
+          {/* Wholesale pricing widget */}
+          {supply.wholesalePrice > 0 && user?.role === 'buyer' && (
+            <div style={{ background: '#FFF8EC', border: '1.5px solid #FDE68A', borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 16 }}>🏭</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#92400E' }}>أسعار الجملة</span>
+              </div>
+              <div style={{ fontSize: 13, color: '#B45309', marginBottom: 10, lineHeight: 1.6 }}>
+                سعر الجملة: <strong>{supply.wholesalePrice?.toLocaleString('ar-EG')} ج.م/{supply.unit}</strong>
+                {supply.minWholesaleQty > 1 && <span> · للطلبات ≥ {supply.minWholesaleQty} {supply.unit}</span>}
+              </div>
+
+              {wholesaleStatus === 'approved' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#DCFCE7', borderRadius: 9, padding: '8px 12px', fontSize: 13, color: '#166534', fontWeight: 700 }}>
+                  ✅ أنت معتمد كتاجر جملة — السعر يطبق تلقائياً عند الطلب
+                </div>
+              )}
+
+              {wholesaleStatus === 'pending' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FEF9C3', borderRadius: 9, padding: '8px 12px', fontSize: 13, color: '#92400E', fontWeight: 700 }}>
+                  🕐 طلبك قيد المراجعة — سينبهك البائع عند الموافقة
+                </div>
+              )}
+
+              {wholesaleStatus === 'rejected' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ background: '#FEE2E2', borderRadius: 9, padding: '8px 12px', fontSize: 13, color: '#DC2626', fontWeight: 700 }}>
+                    ❌ تم رفض طلبك السابق
+                  </div>
+                  <button type="button" onClick={handleRequestAccess} disabled={wholesaleLoading}
+                    style={{ padding: '8px', borderRadius: 9, border: '1px solid #FDE68A', background: '#FFF8EC', color: '#92400E', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    إعادة الطلب
+                  </button>
+                </div>
+              )}
+
+              {(wholesaleStatus === 'none' || wholesaleStatus === null) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input value={wholesaleCode} onChange={e => setWholesaleCode(e.target.value)}
+                      placeholder="أدخل كود الجملة" dir="ltr"
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: 9, border: '1.5px solid #FDE68A', background: '#fff', fontSize: 13, fontFamily: 'monospace', outline: 'none' }}
+                      onKeyDown={e => e.key === 'Enter' && handleEnterCode()} />
+                    <button type="button" onClick={handleEnterCode} disabled={wholesaleLoading}
+                      style={{ padding: '9px 14px', borderRadius: 9, border: 'none', background: '#D97706', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      {wholesaleLoading ? '…' : 'تفعيل'}
+                    </button>
+                  </div>
+                  <button type="button" onClick={handleRequestAccess} disabled={wholesaleLoading}
+                    style={{ padding: '8px', borderRadius: 9, border: '1px solid #FDE68A', background: '#FFF8EC', color: '#92400E', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    أو اطلب وصول من البائع
+                  </button>
+                  {wholesaleErr && <p style={{ margin: 0, fontSize: 12, color: '#DC2626' }}>{wholesaleErr}</p>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -197,6 +297,7 @@ const BuyerSupplyDetail = () => {
       {showOrder && (
         <SupplyOrderModal
           supply={supply}
+          wholesaleApproved={wholesaleStatus === 'approved'}
           onClose={() => setShowOrder(false)}
           onSuccess={() => { setShowOrder(false); setOrdered(true); }}
         />

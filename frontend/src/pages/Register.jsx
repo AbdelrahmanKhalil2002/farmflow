@@ -203,7 +203,7 @@ const PhoneField = ({ label, name, value, onChange, required = true, autoFocus =
         {label}
       </label>
       <div
-        style={{ display: 'flex', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', overflow: 'hidden', background: C.white, transition: 'border-color 0.15s' }}
+        style={{ display: 'flex', direction: 'ltr', border: `1.5px solid ${focused ? C.green : C.border}`, borderRadius: '10px', overflow: 'hidden', background: C.white, transition: 'border-color 0.15s' }}
         onFocusCapture={() => setFocused(true)}
         onBlurCapture={() => setFocused(false)}
       >
@@ -232,14 +232,17 @@ const PwdField = ({ id, name, value, onChange, placeholder = '••••••
         placeholder={placeholder} required={required} minLength={minLength}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{
-          width: '100%', padding: '12px 44px 12px 14px', boxSizing: 'border-box',
+          width: '100%',
+          paddingTop: '12px', paddingBottom: '12px',
+          paddingInlineStart: '14px', paddingInlineEnd: '44px',
+          boxSizing: 'border-box',
           border: `1.5px solid ${focused ? C.green : C.border}`,
           borderRadius: '10px', background: C.white, fontSize: '15px',
           color: C.text, fontFamily: 'inherit', outline: 'none', direction: 'ltr',
         }}
       />
       <button type="button" onClick={() => setShow(p => !p)} aria-label={show ? t('auth.hidePwd') : t('auth.showPwd')}
-        style={{ position: 'absolute', insetInlineEnd: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '17px', padding: '4px', lineHeight: 1 }}>
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '17px', padding: '4px', lineHeight: 1 }}>
         {show ? '🙈' : '👁'}
       </button>
     </div>

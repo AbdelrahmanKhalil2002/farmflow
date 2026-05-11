@@ -7,6 +7,12 @@ const listingSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    animal: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Animal',
+      default: null,
+      index: true,
+    },
     farm: {
       type:  mongoose.Schema.Types.ObjectId,
       ref:   'Farm',
@@ -62,6 +68,13 @@ const listingSchema = new mongoose.Schema(
     deliveryCost: {
       type: Number,
       min:  0,
+    },
+
+    // ── Sale purpose ──────────────────────────────────────────────────────────
+    purpose: {
+      type:    String,
+      enum:    ['general', 'fattening', 'breeding', 'newborn', 'slaughter'],
+      default: 'general',
     },
 
     // ── Eid Al-Adha fields ─────────────────────────────────────────────────────

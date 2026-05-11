@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getMyDairy, deleteDairy, updateDairyStock } from '../../services/dairyService';
 import { useToast } from '../../components/Toast';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 
 import { C } from '../../tokens';
 
@@ -28,9 +29,10 @@ const fmtDate = d => new Date(d).toLocaleDateString('ar-EG', { year: 'numeric', 
 const fmt     = n => Number(n ?? 0).toLocaleString('ar-EG');
 
 const SellerDairy = () => {
-  const toast    = useToast();
-  const navigate = useNavigate();
-  const { t, isRTL } = useLang();
+  const toast          = useToast();
+  const navigate       = useNavigate();
+  const { t, isRTL }   = useLang();
+  const { activeFarm } = useFarm();
   const [products,      setProducts]      = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState('');
@@ -42,11 +44,12 @@ const SellerDairy = () => {
   const [expandedStock, setExpandedStock] = useState({});
 
   useEffect(() => {
-    getMyDairy()
+    const params = activeFarm?._id ? { farmId: activeFarm._id } : {};
+    getMyDairy(params)
       .then(r => setProducts(r.data))
       .catch(() => setError(t('dairy.loadErr')))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeFarm?._id]);
 
   const handleDelete = async (id) => {
     if (!window.confirm(t('common.confirm'))) return;

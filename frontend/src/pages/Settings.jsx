@@ -571,12 +571,12 @@ const Settings = () => {
                     onChange={e => setPasswords(p => ({ ...p, [id]: e.target.value }))}
                     autoComplete={ac}
                     dir="ltr"
-                    style={{ ...inp({ paddingLeft: '40px' }) }}
+                    style={{ ...inp({ paddingInlineStart: '14px', paddingInlineEnd: '40px' }) }}
                     onFocus={e => e.target.style.borderColor = C.green}
                     onBlur={e => e.target.style.borderColor = C.border}
                   />
                   <button type="button" onClick={() => setShowPwd(p => ({ ...p, [id]: !p[id] }))}
-                    style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '15px', lineHeight: 1, padding: '4px' }}>
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '15px', lineHeight: 1, padding: '4px' }}>
                     {showPwd[id] ? '🙈' : '👁'}
                   </button>
                 </div>

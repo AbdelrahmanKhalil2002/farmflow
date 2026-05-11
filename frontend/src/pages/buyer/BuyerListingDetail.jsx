@@ -210,6 +210,9 @@ const BuyerListingDetail = () => {
   const meta          = TYPE_META[listing.type] || TYPE_META.other;
   const seller        = listing.seller || {};
   const s             = seed(listing._id);
+
+  // Strip the auto-generated [Health: ... | Gender: ... | Color: ...] header from description
+  const cleanDesc = (listing.description || '').replace(/^\[.*?\]\s*\n*/s, '').trim();
   const mockHealth    = ['Excellent', 'Good', 'Fair'][s % 3];
   const hMeta         = HEALTH_META[mockHealth];
   const mockVaccineKeys = (VACCINE_SETS[listing.type] || VACCINE_SETS.other).slice(0, 3 + (s % 2));
@@ -308,12 +311,12 @@ const BuyerListingDetail = () => {
             </div>
 
             {/* Description */}
-            {listing.description && (
+            {cleanDesc && (
               <div style={{ background: C.white, borderRadius: '16px', padding: '20px', boxShadow: C.shadow }}>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
                   {t('lst.aboutAnimal')}
                 </div>
-                <p style={{ color: C.muted, fontSize: '15px', lineHeight: 1.8, margin: 0 }}>{listing.description}</p>
+                <p style={{ color: C.muted, fontSize: '15px', lineHeight: 1.8, margin: 0 }}>{cleanDesc}</p>
               </div>
             )}
 

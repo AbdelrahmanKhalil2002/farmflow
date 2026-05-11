@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createListing } from '../../services/listingService';
+import { getAnimals } from '../../services/animalService';
 import { getMarketPrices } from '../../services/marketPricesService';
 import { useLang } from '../../context/LangContext';
 import { useFarm } from '../../context/FarmContext';
@@ -11,7 +12,7 @@ import { animalImg, imgFallback } from '../../utils/animalImg';
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 const STEPS = [
-  { n: 1, labelKey: 'addListing.step.info',   icon: '🐾' },
+  { n: 1, labelKey: 'addListing.step.info',   icon: '🐃' },
   { n: 2, labelKey: 'addListing.step.specs',  icon: '⚖️'  },
   { n: 3, labelKey: 'addListing.step.docs',   icon: '📄' },
   { n: 4, labelKey: 'addListing.step.photos', icon: '📷' },
@@ -178,14 +179,16 @@ const toKg = (val, unit) => {
   return unit === 'lbs' ? parseFloat((n * 0.453592).toFixed(2)) : n;
 };
 
+const HEALTH_LABEL = { healthy: 'صحي', vaccinated: 'ملقح', certified: 'معتمد بيطرياً' };
+
 const buildDescription = (form) => {
   const meta = [];
   if (form.gender)               meta.push(`Gender: ${form.gender === 'male' ? 'Male ♂' : form.gender === 'female' ? 'Female ♀' : 'Other ⚥'}`);
   const colorStr = form.color === 'custom' ? form.colorCustom : form.color;
   if (colorStr)                  meta.push(`Color: ${colorStr}`);
   if (form.health) {
-    const h = HEALTH_OPTS.find(x => x.key === form.health);
-    if (h) meta.push(`Health: ${h.label}`);
+    const label = HEALTH_LABEL[form.health] || form.health;
+    meta.push(`Health: ${label}`);
   }
   if (form.traits.length)        meta.push(`Traits: ${form.traits.join(', ')}`);
   if (form.deliveryType === 'farm')  meta.push(`Delivery: Farm${form.deliveryCost ? ` (${form.deliveryCost} ج.م)` : ''}`);
@@ -276,24 +279,51 @@ const SellerAddListing = () => {
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => {
-    // Pre-fill from ?type=&breed=&weight= when navigating from SellerAnimalDetail
-    const pType   = searchParams.get('type');
-    const pBreed  = searchParams.get('breed');
-    const pWeight = searchParams.get('weight');
+    const pType      = searchParams.get('type');
+    const pBreed     = searchParams.get('breed');
+    const pWeight    = searchParams.get('weight');
+    const pAgeMonths = searchParams.get('ageMonths');
+    const pGender    = searchParams.get('gender');
+    const pColor     = searchParams.get('color');
+    const pVaccinated= searchParams.get('vaccinated') === 'true';
+
     const farmTypes = activeFarm?.animalTypes;
     const farmDefault =
       activeFarm?.type === 'poultry' ? 'poultry' :
       activeFarm?.type === 'horses'  ? 'horse'   :
       activeFarm?.type === 'dairy'   ? 'cattle'  :
       farmTypes?.find(t => TYPES.includes(t)) || 'cattle';
+
+    // Age: convert months → display unit
+    let ageValue = '', ageUnit = 'months';
+    if (pAgeMonths) {
+      const m = parseInt(pAgeMonths, 10);
+      if (!isNaN(m) && m > 0) {
+        if (m >= 24) { ageValue = String(Math.floor(m / 12)); ageUnit = 'years'; }
+        else         { ageValue = String(m); }
+      }
+    }
+
+    // Gender: map 'unknown' → '' (don't pre-select)
+    const genderValue = pGender === 'male' || pGender === 'female' ? pGender : pGender ? 'other' : '';
+
+    // Color: if it matches a chip use it directly, else use custom
+    const allColors = [...new Set([...COLORS_MAP.default, ...COLORS_MAP.poultry, ...COLORS_MAP.horses])];
+    const colorValue  = pColor && allColors.includes(pColor) ? pColor : pColor ? 'custom' : '';
+    const colorCustom = colorValue === 'custom' ? (pColor || '') : '';
+
+    // Health: auto-fill if coming from animal with vaccinations
+    const healthValue = pVaccinated ? 'vaccinated' : '';
+
     return {
       type:        pType   || farmDefault,
-      poultryType: '',   // tracks which poultry sub-type card is active
+      poultryType: '',
       breed:       pBreed  || '',
-      ageValue: '', ageUnit: 'months', gender: '',
+      ageValue, ageUnit,
+      gender:      genderValue,
       weightValue: pWeight || '', weightUnit: 'kg',
-      color: '', colorCustom: '',
-      health: '', traits: [],
+      color: colorValue, colorCustom,
+      health: healthValue, traits: [], purpose: 'general',
       pricePerKg: '', location: '', deliveryType: 'none', deliveryCost: '', description: '',
       eidAvailable: false, slaughterService: false, slaughterCost: '',
       depositRequired: false, depositPercentage: '',
@@ -335,8 +365,67 @@ const SellerAddListing = () => {
   const photoInputRef = useRef(null);
   const breedRef      = useRef(null);
 
+  // ── Herd picker state ──────────────────────────────────────────────────────
+  const [herdQuery,    setHerdQuery]    = useState('');
+  const [herdResults,  setHerdResults]  = useState([]);
+  const [herdLoading,  setHerdLoading]  = useState(false);
+  const [herdOpen,     setHerdOpen]     = useState(false);
+  const [pickedAnimal, setPickedAnimal] = useState(null);
+  const herdPickerRef = useRef(null);
+
+  // Close herd dropdown on outside click
+  useEffect(() => {
+    const h = e => { if (herdPickerRef.current && !herdPickerRef.current.contains(e.target)) setHerdOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  // Fetch matching herd animals (debounced)
+  useEffect(() => {
+    if (!herdOpen) return;
+    const t = setTimeout(() => {
+      setHerdLoading(true);
+      getAnimals({ status: 'active', search: herdQuery || undefined, limit: 15, page: 1 })
+        .then(r => setHerdResults(r.data?.items || []))
+        .catch(() => setHerdResults([]))
+        .finally(() => setHerdLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [herdQuery, herdOpen]);
+
+  // Fill form fields from a herd animal
+  const fillFromAnimal = useCallback((a) => {
+    const ageMonths = a.dob
+      ? Math.floor((Date.now() - new Date(a.dob).getTime()) / (30.44 * 24 * 3600 * 1000))
+      : null;
+    let ageValue = '', ageUnit = 'months';
+    if (ageMonths) {
+      if (ageMonths >= 24) { ageValue = String(Math.floor(ageMonths / 12)); ageUnit = 'years'; }
+      else                 { ageValue = String(ageMonths); }
+    }
+    const genderValue  = a.gender === 'male' || a.gender === 'female' ? a.gender : a.gender ? 'other' : '';
+    const allColors    = [...new Set([...COLORS_MAP.default, ...COLORS_MAP.poultry, ...COLORS_MAP.horses])];
+    const colorValue   = a.color && allColors.includes(a.color) ? a.color : a.color ? 'custom' : '';
+    const colorCustom  = colorValue === 'custom' ? (a.color || '') : '';
+    const healthValue  = (a.vaccinationLog || []).length > 0 ? 'vaccinated' : a.healthStatus === 'healthy' ? 'healthy' : '';
+
+    setFs({
+      type:        a.type  || form.type,
+      breed:       a.breed || '',
+      ageValue, ageUnit,
+      gender:      genderValue,
+      weightValue: a.currentWeight ? String(a.currentWeight) : '',
+      weightUnit:  'kg',
+      color: colorValue, colorCustom,
+      health: healthValue,
+    });
+    setPickedAnimal(a);
+    setHerdOpen(false);
+  }, [form.type]);
+
   // ── Draft restore ──────────────────────────────────────────────────────────
   useEffect(() => {
+    if (searchParams.get('fromAnimal')) return; // URL params take priority over draft
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) { setForm(JSON.parse(raw)); setDraftBanner(true); }
@@ -449,6 +538,7 @@ const SellerAddListing = () => {
       if (form.deliveryType === 'farm' && form.deliveryCost) fd.append('deliveryCost', form.deliveryCost);
       if (form.location)    fd.append('location',    form.location);
       fd.append('description', buildDescription(form));
+      fd.append('purpose', form.purpose || 'general');
       fd.append('eidAvailable',     form.eidAvailable);
       fd.append('slaughterService', form.slaughterService);
       if (form.slaughterService && form.slaughterCost) fd.append('slaughterCost', form.slaughterCost);
@@ -456,12 +546,18 @@ const SellerAddListing = () => {
       if (form.depositRequired && form.depositPercentage) fd.append('depositPercentage', form.depositPercentage);
       if (asDraft) fd.append('status', 'draft');
 
+      // Link to herd animal if navigated from animal detail or picked from herd
+      const linkedAnimalId = searchParams.get('fromAnimal') || pickedAnimal?._id;
+      if (linkedAnimalId) fd.append('animal', linkedAnimalId);
+
       if (form.qurbaniEnabled) {
         const shares = ['seventh', 'quarter', 'half']
           .filter(k => form.qurbaniShares[k].enabled && form.qurbaniShares[k].pricePerShare && form.qurbaniShares[k].totalShares)
           .map(k => ({ shareType: k, pricePerShare: Number(form.qurbaniShares[k].pricePerShare), totalShares: Number(form.qurbaniShares[k].totalShares) }));
         if (shares.length) fd.append('qurbaniShares', JSON.stringify(shares));
       }
+
+      if (activeFarm?._id) fd.append('farmId', activeFarm._id);
 
       // Photos first (primary at index 0), then docs
       photoFiles.forEach(f => fd.append('images', f));
@@ -486,7 +582,7 @@ const SellerAddListing = () => {
       activeFarm?.type === 'horses'  ? 'horse'   :
       activeFarm?.type === 'dairy'   ? 'cattle'  :
       activeFarm?.animalTypes?.[0]   || 'cattle';
-    setForm({ type: resetType, breed: '', poultryType: '', ageValue: '', ageUnit: 'months', gender: '', weightValue: '', weightUnit: 'kg', color: '', colorCustom: '', health: '', traits: [], pricePerKg: '', location: '', deliveryType: 'none', deliveryCost: '', description: '', eidAvailable: false, slaughterService: false, slaughterCost: '', qurbaniEnabled: false, qurbaniShares: { seventh: { enabled: false, pricePerShare: '', totalShares: '' }, quarter: { enabled: false, pricePerShare: '', totalShares: '' }, half: { enabled: false, pricePerShare: '', totalShares: '' } } });
+    setForm({ type: resetType, breed: '', poultryType: '', ageValue: '', ageUnit: 'months', gender: '', weightValue: '', weightUnit: 'kg', color: '', colorCustom: '', health: '', traits: [], purpose: 'general', pricePerKg: '', location: '', deliveryType: 'none', deliveryCost: '', description: '', eidAvailable: false, slaughterService: false, slaughterCost: '', qurbaniEnabled: false, qurbaniShares: { seventh: { enabled: false, pricePerShare: '', totalShares: '' }, quarter: { enabled: false, pricePerShare: '', totalShares: '' }, half: { enabled: false, pricePerShare: '', totalShares: '' } } });
     setDocFiles({ vaccine: null, health: null, vet: null, extra: [] });
     setPhotoFiles([]);
     setErrors({});
@@ -508,9 +604,9 @@ const SellerAddListing = () => {
             تم حفظ الإعلان كمسودة. يمكنك مراجعته ونشره لاحقاً من صفحة إعلاناتي.
           </p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => navigate('/seller/listings')}
+            <button type="button" onClick={() => navigate('/seller/drafts')}
               style={{ padding: '11px 22px', borderRadius: '10px', background: C.green, color: '#fff', border: 'none', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
-              عرض إعلاناتي ←
+              عرض المسودات ←
             </button>
             <button type="button" onClick={resetAll}
               style={{ padding: '11px 22px', borderRadius: '10px', background: C.card, color: C.text, border: `1.5px solid ${C.border}`, fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
@@ -563,6 +659,63 @@ const SellerAddListing = () => {
   const renderStep1 = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
       <SectionTitle>{step1Title}</SectionTitle>
+
+      {/* ── اختر من قطيعك ── */}
+      <div ref={herdPickerRef} style={{ position: 'relative' }}>
+        {pickedAnimal ? (
+          /* Picked animal banner */
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: `${C.green}12`, border: `1.5px solid ${C.green}`, borderRadius: 12 }}>
+            <span style={{ fontSize: 24 }}>{TYPE_EMOJI[pickedAnimal.type] || '🐾'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: C.greenText }}>
+                {pickedAnimal.breed || pickedAnimal.type} {pickedAnimal.tagId ? `— 🏷 ${pickedAnimal.tagId}` : ''}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted }}>تم ملء البيانات تلقائيًا من القطيع ✓</div>
+            </div>
+            <button type="button" onClick={() => setPickedAnimal(null)}
+              style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+          </div>
+        ) : (
+          /* Search trigger */
+          <button type="button" onClick={() => setHerdOpen(p => !p)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, border: `1.5px dashed ${C.green}`, background: `${C.green}08`, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'right' }}>
+            <span style={{ fontSize: 20 }}>🐃</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.greenText }}>اختر حيوانًا من قطيعك لملء البيانات تلقائيًا</span>
+            <span style={{ fontSize: 12, color: C.muted }}>{herdOpen ? '▲' : '▼'}</span>
+          </button>
+        )}
+
+        {/* Dropdown */}
+        {herdOpen && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, marginTop: 4, background: C.card, border: `1.5px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
+              <input
+                autoFocus
+                value={herdQuery}
+                onChange={e => setHerdQuery(e.target.value)}
+                placeholder="ابحث بالسلالة أو رقم الأذن…"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+              />
+            </div>
+            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+              {herdLoading && <div style={{ padding: '14px 16px', color: C.muted, fontSize: 13 }}>جارٍ التحميل…</div>}
+              {!herdLoading && herdResults.length === 0 && <div style={{ padding: '14px 16px', color: C.muted, fontSize: 13 }}>لا نتائج</div>}
+              {!herdLoading && herdResults.map(a => (
+                <button key={a._id} type="button" onClick={() => fillFromAnimal(a)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'right', fontFamily: 'inherit' }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>{TYPE_EMOJI[a.type] || '🐾'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{a.breed || a.type}{a.tagId ? ` — 🏷 ${a.tagId}` : ''}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>
+                      {a.currentWeight ? `⚖️ ${a.currentWeight} كجم` : ''}{a.dob ? ` · 📅 ${Math.floor((Date.now() - new Date(a.dob).getTime()) / (30.44*24*3600*1000))} شهر` : ''}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Animal type — context-aware based on farm category */}
       <div>
@@ -734,7 +887,7 @@ const SellerAddListing = () => {
       {/* Breed — chip selector (hidden for poultry since breed = sub-type above) */}
       {form.type !== 'poultry' && (
         <div>
-          <Lbl>{t('addListing.step1.breed')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>({t('common.optional')})</span></Lbl>
+          <Lbl>{t('addListing.step1.breed')} <span style={{ fontWeight: 400, color: C.textMuted, fontSize: '12px' }}>{t('common.optional')}</span></Lbl>
 
           {/* Quick-select chips — filtered by farm breed preferences */}
           {TYPE_BREEDS_CHIPS[form.type]?.length > 0 && (
@@ -879,6 +1032,28 @@ const SellerAddListing = () => {
               <button key={tr.key} type="button" onClick={() => toggleTrait(tr.key)}
                 style={{ padding: '8px 14px', borderRadius: '20px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, color: active ? C.greenText : C.text, fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
                 {active && <span style={{ marginLeft: '4px' }}>✓</span>}{t(tr.labelKey)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Purpose */}
+      <div>
+        <Lbl>الغرض من البيع</Lbl>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {[
+            { val: 'general',   label: '🐄 عام' },
+            { val: 'fattening', label: '📈 للتسمين' },
+            { val: 'breeding',  label: '🌱 للتربية' },
+            { val: 'newborn',   label: '🐣 مواليد' },
+            { val: 'slaughter', label: '🔪 للذبح' },
+          ].map(({ val, label }) => {
+            const active = form.purpose === val;
+            return (
+              <button key={val} type="button" onClick={() => set('purpose', val)}
+                style={{ padding: '8px 14px', borderRadius: '20px', border: `1.5px solid ${active ? C.green : C.border}`, background: active ? C.greenBg : C.card, color: active ? C.greenText : C.text, fontSize: '13px', fontWeight: active ? '700' : '500', cursor: 'pointer', transition: 'all 0.15s' }}>
+                {label}
               </button>
             );
           })}

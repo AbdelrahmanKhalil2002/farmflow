@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, useMemo } from 'react';
 import { useLang } from '../../context/LangContext';
+import { useFarm } from '../../context/FarmContext';
 import { getAnalytics } from '../../services/financeService';
 import { fmt } from '../../utils/format';
 import { C as _C } from '../../tokens';
@@ -20,12 +21,15 @@ const CAT_META = {
 };
 
 const TYPE_META = {
-  cattle: { emoji: '🐄', color: '#92400E', labelKey: 'herd.type.cattle' },
-  sheep:  { emoji: '🐑', color: '#0369A1', labelKey: 'herd.type.sheep'  },
-  goat:   { emoji: '🐐', color: '#166534', labelKey: 'herd.type.goat'   },
-  camel:  { emoji: '🐪', color: '#9A3412', labelKey: 'herd.type.camel'  },
-  horse:  { emoji: '🐎', color: '#5B21B6', labelKey: 'herd.type.horse'  },
-  other:  { emoji: '🐾', color: '#374151', labelKey: 'herd.type.other'  },
+  cattle:  { emoji: '🐄', color: '#92400E', labelKey: 'herd.type.cattle'   },
+  buffalo: { emoji: '🐃', color: '#1E40AF', labelKey: 'herd.type.buffalo'  },
+  sheep:   { emoji: '🐑', color: '#0369A1', labelKey: 'herd.type.sheep'    },
+  goat:    { emoji: '🐐', color: '#166534', labelKey: 'herd.type.goat'     },
+  camel:   { emoji: '🐪', color: '#9A3412', labelKey: 'herd.type.camel'    },
+  horse:   { emoji: '🐎', color: '#5B21B6', labelKey: 'herd.type.horse'    },
+  poultry: { emoji: '🐔', color: '#B45309', labelKey: 'herd.type.poultry'  },
+  rabbit:  { emoji: '🐇', color: '#BE185D', labelKey: 'herd.type.rabbit'   },
+  other:   { emoji: '🐾', color: '#374151', labelKey: 'herd.type.other'    },
 };
 
 const ORDER_META = {
@@ -214,7 +218,8 @@ const Card = ({ title, subtitle, children, style = {} }) => (
 
 // ─── Main component ────────────────────────────────────────────────────────────
 const SellerAnalytics = ({ embedded = false }) => {
-  const { t, lang } = useLang();
+  const { t, lang }    = useLang();
+  const { activeFarm } = useFarm();
   const [months,   setMonths]   = useState(12);
   const [data,     setData]     = useState(null);
   const [loading,  setLoading]  = useState(true);
@@ -229,11 +234,13 @@ const SellerAnalytics = ({ embedded = false }) => {
 
   useEffect(() => {
     setLoading(true); setError('');
-    getAnalytics({ months })
+    const params = { months };
+    if (activeFarm?._id) params.farmId = activeFarm._id;
+    getAnalytics(params)
       .then(r => setData(r.data))
       .catch(() => setError(lang === 'ar' ? 'تعذّر تحميل بيانات التحليلات. حاول مرة أخرى.' : 'Failed to load analytics. Please try again.'))
       .finally(() => setLoading(false));
-  }, [months, lang]);
+  }, [months, lang, activeFarm?._id]);
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const totals = useMemo(() => {
