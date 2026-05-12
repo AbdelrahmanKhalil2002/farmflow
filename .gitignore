@@ -26,6 +26,12 @@ farmflow_pentest_prompts.md
 
 # Generated doc previews
 docs/pdf_preview/
+docs/FarmFlow_Business_Documentation_AR.pdf
+docs/FarmFlow_Business_Documentation_AR.md
+docs/generate_pdfs.js
+
+# Pitch deck
+pitch-deck.html
 
 # Logs
 *.log
