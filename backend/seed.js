@@ -391,7 +391,7 @@ function buildIncomes(orders, sellers) {
         seller:  order.seller,
         listing: order.listing,
         order:   order._id,
-        type:    'deposit',
+        type:    'sale',
         amount:  order.depositAmount,
         date:    order.createdAt,
         note:    'عربون مقدم على الصفقة',
