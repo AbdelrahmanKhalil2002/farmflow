@@ -559,6 +559,26 @@ lib/
 
 ---
 
+---
+
+## Sprint 19 — Roadmap Features (v2)
+
+> Not started. All items depend on external credentials or backend work from PLAN.md §38.
+
+| # | Task | Status |
+|---|------|--------|
+| M19.1 | **Paymob mobile SDK** — replace placeholder payment sheet with Paymob Accept SDK for card / Fawry / wallet; wire to backend `/api/payments/paymob/initiate`; handle success/failure callbacks and update order status (depends on PLAN.md 38.2) | [ ] |
+| M19.2 | **SMS OTP verification** — `SmsOtpScreen` on registration and password reset; `flutter_otp_text_field` for 6-digit input; wire to `POST /auth/send-sms-otp` + `POST /auth/verify-sms-otp` (depends on PLAN.md 38.3) | [ ] |
+| M19.3 | **Referral system** — show personal referral code + shareable link in Profile screen; deep-link `farmflow://join?ref=CODE` auto-fills ref on registration; referral rewards banner in dashboard (depends on PLAN.md 38.4) | [ ] |
+| M19.4 | **Socket.io real-time chat** — replace 30-second polling `Timer.periodic` in `MessagesProvider` with `socket_io_client` persistent connection; `message:new` / `message:read` / `typing` events update Riverpod state instantly; unread badge updates in real time (depends on PLAN.md 38.5) | [ ] |
+| M19.5 | **Auction screen** — `AuctionScreen` (`/buyer/auction/:id`) with live countdown timer (`Timer` + `AnimatedBuilder`), current bid display, bid input bottom sheet; `auction:bid` Socket.io listener; `SellerAuctionScreen` shows own active auctions with current highest bid (depends on PLAN.md 38.6) | [ ] |
+| M19.6 | **Video listings** — `VideoPickerWidget` in `AddListingScreen` / `EditListingScreen` (max 60s via `image_picker` video option + `video_compress`); `video_player` widget on `ListingDetailScreen` auto-plays muted (depends on PLAN.md 38.11) | [ ] |
+| M19.7 | **Vet consultation** — `VetDirectoryScreen` (browse available vets, filter by specialisation); `BookConsultationScreen` (calendar slot picker, payment); `ConsultationChatScreen` (text chat via Socket.io, or WebRTC video via `flutter_webrtc`); consultation history tab in Profile (depends on PLAN.md 38.12) | [ ] |
+| M19.8 | **Delivery tracking** — order detail screen shows shipment timeline (courier status steps) fetched from `GET /api/orders/:id/tracking`; push notification on status change via FCM (depends on PLAN.md 38.7) | [ ] |
+| M19.9 | **Digital health certificate QR** — `HealthCertificateScreen` on animal detail: generates QR code via `qr_flutter` pointing to public animal certificate URL; share via `Share.shareUri`; buyer listing detail shows QR icon if certificate available (depends on PLAN.md 38.10) | [ ] |
+
+---
+
 ## Key Mobile-First Decisions
 
 | Decision | Rationale |

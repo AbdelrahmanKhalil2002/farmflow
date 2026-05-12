@@ -82,40 +82,100 @@ const parseDelivType = (notes = '', tFn) => {
 const shortId = (id = '') => id.slice(-8).toUpperCase();
 
 const downloadReceipt = (order) => {
-  const l  = order.listing || {};
-  const sl = order.seller  || {};
-  const pad = (s, n = 12) => String(s).padEnd(n);
-  const hr  = '─'.repeat(40);
-  const lines = [
-    '╔════════════════════════════════════════╗',
-    '║        FARMFLOW — إيصال الطلب          ║',
-    '╚════════════════════════════════════════╝',
-    '',
-    `${pad('رقم الطلب:')}  ${shortId(order._id)}`,
-    `${pad('التاريخ:')}    ${fmtDate(order.createdAt)}`,
-    `${pad('الحالة:')}     ${STATUS_META[order.status]?.labelKey ?? order.status}`,
-    '', hr, '  الحيوان', hr,
-    `${pad('النوع:')}     ${[l.breed, l.type].filter(Boolean).join(' — ') || 'غير محدد'}`,
-    `${pad('السعر:')}     ${fmt(l.price ?? order.totalAmount)} ج.م`,
-    '', hr, '  البائع', hr,
-    `${pad('الاسم:')}     ${sl.name  || 'غير محدد'}`,
-    `${pad('الهاتف:')}    ${sl.phone || 'غير محدد'}`,
-    '', hr, '  الدفع', hr,
-    `${pad('الطريقة:')}   ${order.paymentType === 'instapay' ? 'InstaPay' : order.paymentType === 'cod' ? 'الدفع عند الاستلام' : 'دفعة مقدمة'}`,
-    ...(order.paymentType === 'deposit' ? [
-      `${pad('المقدم:')}    ${fmt(order.depositAmount)} ج.م`,
-      `${pad('الباقي:')}    ${fmt(order.totalAmount - order.depositAmount)} ج.م`,
-    ] : []),
-    ...(order.deliveryCost > 0 ? [`${pad('التوصيل:')}   ${fmt(order.deliveryCost)} ج.م`] : []),
-    `${pad('الإجمالي:')}  ${fmt(order.totalAmount)} ج.م`,
-    '', hr, '  شكرًا لاستخدامك فارم فلو! 🌾', hr,
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `farmflow-${shortId(order._id)}.txt`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  const l      = order.listing || {};
+  const sl     = order.seller  || {};
+  const id     = shortId(order._id);
+  const date   = fmtDate(order.createdAt);
+  const status = order.status === 'cancelled' ? 'ملغي' : order.status === 'completed' ? 'مكتمل' : order.status === 'confirmed' ? 'مؤكد' : 'معلق';
+  const animal = [l.breed, l.type].filter(Boolean).join(' — ') || 'غير محدد';
+  const payMethod = order.paymentType === 'instapay' ? 'InstaPay' : order.paymentType === 'cod' ? 'الدفع عند الاستلام' : 'دفعة مقدمة';
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<title>إيصال الطلب — ${id}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Cairo', Arial, sans-serif; background: #f5f0eb; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 32px 16px; }
+  .receipt { background: #fff; width: 420px; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.13); }
+  .header { background: linear-gradient(135deg, #1C3A24 0%, #2D6235 60%, #3A7D44 100%); color: #fff; padding: 28px 28px 22px; text-align: center; }
+  .logo { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px; }
+  .logo span { color: #A8D5A2; }
+  .header-sub { font-size: 13px; opacity: 0.8; }
+  .badge { display: inline-block; margin-top: 12px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 4px 16px; font-size: 12px; font-weight: 700; }
+  .body { padding: 24px 28px; }
+  .order-id { text-align: center; margin-bottom: 20px; }
+  .order-id .num { font-size: 22px; font-weight: 800; color: #1C3A24; letter-spacing: 2px; }
+  .order-id .lbl { font-size: 11px; color: #9CA3AF; margin-bottom: 4px; }
+  .section { margin-bottom: 18px; }
+  .section-title { font-size: 11px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #F3F4F6; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 13px; }
+  .row .key { color: #6B7280; }
+  .row .val { font-weight: 700; color: #111827; }
+  .total-box { background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+  .total-box .key { font-size: 13px; font-weight: 700; color: #166534; }
+  .total-box .val { font-size: 22px; font-weight: 800; color: #166534; }
+  .footer { background: #F9F7F5; border-top: 1px solid #F3F4F6; padding: 16px 28px; text-align: center; }
+  .footer p { font-size: 12px; color: #9CA3AF; }
+  .footer .brand { font-size: 13px; font-weight: 700; color: #2D6235; margin-top: 4px; }
+  .divider { border: none; border-top: 1px dashed #E5E7EB; margin: 16px 0; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .receipt { box-shadow: none; border-radius: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="receipt">
+  <div class="header">
+    <div class="logo">Farm<span>Flow</span> 🌾</div>
+    <div class="header-sub">إيصال الطلب الرسمي</div>
+    <div class="badge">${status}</div>
+  </div>
+  <div class="body">
+    <div class="order-id">
+      <div class="lbl">رقم الطلب</div>
+      <div class="num">${id}</div>
+      <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">${date}</div>
+    </div>
+    <hr class="divider"/>
+    <div class="section">
+      <div class="section-title">🐄 الحيوان</div>
+      <div class="row"><span class="key">النوع</span><span class="val">${animal}</span></div>
+      <div class="row"><span class="key">السعر</span><span class="val">${fmt(l.price ?? order.totalAmount)} ج.م</span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">👤 البائع</div>
+      <div class="row"><span class="key">الاسم</span><span class="val">${sl.name || 'غير محدد'}</span></div>
+      <div class="row"><span class="key">الهاتف</span><span class="val">${sl.phone || 'غير محدد'}</span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">💳 الدفع</div>
+      <div class="row"><span class="key">الطريقة</span><span class="val">${payMethod}</span></div>
+      ${order.paymentType === 'deposit' ? `
+      <div class="row"><span class="key">المقدم</span><span class="val">${fmt(order.depositAmount)} ج.م</span></div>
+      <div class="row"><span class="key">الباقي</span><span class="val">${fmt(order.totalAmount - order.depositAmount)} ج.م</span></div>
+      ` : ''}
+      ${order.deliveryCost > 0 ? `<div class="row"><span class="key">التوصيل</span><span class="val">${fmt(order.deliveryCost)} ج.م</span></div>` : ''}
+    </div>
+    <div class="total-box">
+      <span class="key">الإجمالي</span>
+      <span class="val">${fmt(order.totalAmount)} ج.م</span>
+    </div>
+  </div>
+  <div class="footer">
+    <p>شكرًا لاستخدامك</p>
+    <div class="brand">FarmFlow — بوابة المواشي 🌾</div>
+  </div>
+</div>
+<script>window.onload = () => { window.print(); }</script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=520,height=720');
+  if (win) { win.document.write(html); win.document.close(); }
 };
 
 // ─── ProgressTracker ──────────────────────────────────────────────────────────

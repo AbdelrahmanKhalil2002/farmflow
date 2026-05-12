@@ -28,8 +28,20 @@ import '../../features/seller/listings/edit_listing_screen.dart';
 import '../../shared/models/listing_model.dart';
 import '../../features/seller/dairy/seller_dairy_screen.dart';
 import '../../features/seller/supplies/seller_supplies_screen.dart';
+import '../../features/seller/marketplace/seller_marketplace_screen.dart';
 import '../../features/seller/finance/statements_screen.dart';
+import '../../features/seller/analytics/seller_analytics_screen.dart';
+import '../../features/seller/finance/seller_budget_screen.dart';
+import '../../features/seller/orders/seller_orders_screen.dart';
+import '../../features/seller/listings/seller_drafts_screen.dart';
+import '../../features/seller/farms/seller_farms_screen.dart';
 import '../../features/seller/profile/seller_profile_screen.dart';
+import '../../features/buyer/cart/buyer_cart_screen.dart';
+import '../../features/shared/messages/messages_screen.dart';
+import '../../features/auth/forgot_password_screen.dart';
+import '../../features/auth/reset_password_screen.dart';
+import '../../features/auth/verify_email_screen.dart';
+import '../../features/shared/settings/settings_screen.dart';
 import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/admin/admin_listings_screen.dart';
 import '../../features/admin/admin_users_screen.dart';
@@ -38,6 +50,7 @@ import '../../features/admin/admin_orders_screen.dart';
 import '../../features/admin/admin_reviews_screen.dart';
 import '../../features/admin/admin_eid_screen.dart';
 import '../../features/admin/admin_supplies_screen.dart';
+import '../../features/admin/admin_analytics_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 
 class _AuthNotifier extends ChangeNotifier {
@@ -61,7 +74,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       final user       = authState.valueOrNull;
       final isSplash   = state.matchedLocation == '/splash';
       final isAuth     = state.matchedLocation.startsWith('/login') ||
-                         state.matchedLocation.startsWith('/register');
+                         state.matchedLocation.startsWith('/register') ||
+                         state.matchedLocation.startsWith('/forgot-password') ||
+                         state.matchedLocation.startsWith('/reset-password') ||
+                         state.matchedLocation.startsWith('/verify-email');
 
       if (isLoading) return (isSplash || isAuth) ? null : '/splash';
       if (user == null && !isAuth) return '/login';
@@ -78,8 +94,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash',   builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login',    builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterRoleScreen()),
-      GoRoute(path: '/register/buyer',  builder: (_, __) => const BuyerRegisterScreen()),
-      GoRoute(path: '/register/seller', builder: (_, __) => const SellerRegisterScreen()),
+      GoRoute(path: '/register/buyer',    builder: (_, __) => const BuyerRegisterScreen()),
+      GoRoute(path: '/register/seller',   builder: (_, __) => const SellerRegisterScreen()),
+      GoRoute(path: '/forgot-password',   builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(path: '/reset-password',    builder: (_, __) => const ResetPasswordScreen()),
+      GoRoute(path: '/verify-email',      builder: (_, __) => const VerifyEmailScreen()),
 
       // ── Buyer shell ────────────────────────────────────────────────────────
       ShellRoute(
@@ -120,6 +139,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/buyer/supply/:id',
             builder: (_, state) =>
                 SupplyDetailScreen(supplyId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/buyer/cart',
+            builder: (_, __) => const BuyerCartScreen(),
+          ),
+          GoRoute(
+            path: '/buyer/messages',
+            builder: (_, state) => MessagesScreen(
+              userId: state.uri.queryParameters['userId'],
+            ),
+          ),
+          GoRoute(
+            path: '/buyer/settings',
+            builder: (_, __) => const SettingsScreen(),
           ),
         ],
       ),
@@ -185,12 +218,53 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const SellerProfileScreen(),
           ),
           GoRoute(
+            path: '/seller/orders',
+            builder: (_, __) => const SellerOrdersScreen(),
+          ),
+          GoRoute(
             path: '/seller/notifications',
             builder: (_, __) => const NotificationsScreen(),
           ),
           GoRoute(
             path: '/seller/vet-records',
             builder: (_, __) => const VetRecordsScreen(),
+          ),
+          GoRoute(
+            path: '/seller/drafts',
+            builder: (_, __) => const SellerDraftsScreen(),
+          ),
+          GoRoute(
+            path: '/seller/analytics',
+            builder: (_, __) => const SellerAnalyticsScreen(),
+          ),
+          GoRoute(
+            path: '/seller/budget',
+            builder: (_, __) => const SellerBudgetScreen(),
+          ),
+          GoRoute(
+            path: '/seller/farms',
+            builder: (_, __) => const SellerFarmsScreen(),
+          ),
+          GoRoute(
+            path: '/seller/messages',
+            builder: (_, state) => MessagesScreen(
+              userId: state.uri.queryParameters['userId'],
+            ),
+          ),
+          GoRoute(
+            path: '/seller/marketplace',
+            builder: (_, __) => const SellerMarketplaceScreen(),
+          ),
+          GoRoute(
+            path: '/seller/marketplace/:sellerId',
+            builder: (_, state) => SellerMarketplaceScreen(
+              // For now renders the same screen; a dedicated farm-supplies
+              // detail screen can be wired here once built.
+            ),
+          ),
+          GoRoute(
+            path: '/seller/settings',
+            builder: (_, __) => const SettingsScreen(),
           ),
         ],
       ),
@@ -231,6 +305,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/supplies',
             builder: (_, __) => const AdminSuppliesScreen(),
+          ),
+          GoRoute(
+            path: '/admin/analytics',
+            builder: (_, __) => const AdminAnalyticsScreen(),
           ),
         ],
       ),

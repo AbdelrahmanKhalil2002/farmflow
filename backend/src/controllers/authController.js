@@ -182,42 +182,7 @@ const login = async (req, res) => {
       return res.status(403).json({ message: 'الحساب موقوف، تواصل مع الإدارة' });
     }
 
-    // ── Admin 2FA: send email OTP ────────────────────────────────────────────
-    if (user.role === 'admin' && user.email) {
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const userFor2FA = await User.findById(user._id);
-      userFor2FA.twoFactorCode   = crypto.createHash('sha256').update(code).digest('hex');
-      userFor2FA.twoFactorExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-      await userFor2FA.save();
-
-      sendEmail({
-        to: user.email,
-        subject: 'Admin Verification Code — FarmFlow',
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-            <h2 style="color:#22C55E;margin-top:0">FarmFlow Admin — Two-Factor Authentication</h2>
-            <p>Hello ${user.name},</p>
-            <p>Your one-time verification code is:</p>
-            <div style="font-size:40px;font-weight:800;letter-spacing:12px;color:#22C55E;text-align:center;padding:20px;background:#F0FFF4;border-radius:12px;margin:20px 0;border:1px solid #BBF7D0">
-              ${code}
-            </div>
-            <p style="color:#666;font-size:13px">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
-          </div>
-        `,
-      }).catch(() => {});
-
-      const tempToken = jwt.sign(
-        { id: user._id, role: user.role, twoFactor: true },
-        process.env.JWT_SECRET,
-        { expiresIn: '10m' }
-      );
-
-      return res.json({
-        requires2FA: true,
-        tempToken,
-        user: { _id: user._id, name: user.name, role: user.role, email: user.email },
-      });
-    }
+    // 2FA disabled for development
 
     const token = generateToken(user._id, user.role);
     User.findByIdAndUpdate(user._id, { lastLogin: new Date() }).catch(() => {});

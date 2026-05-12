@@ -98,7 +98,7 @@ const BuyerLayout = () => {
 
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            <span style={{ fontSize: '22px', lineHeight: 1 }}>🌾</span>
+            <img src="/logo.png" alt="FarmFlow" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
             <span style={{ fontSize: '16px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>
               FarmFlow
             </span>
@@ -320,7 +320,7 @@ const BuyerLayout = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>
+            <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
             <span style={{ fontSize: '15px', fontWeight: '800', color: S.text }}>FarmFlow</span>
           </div>
           <button
@@ -432,7 +432,7 @@ const BuyerLayout = () => {
       <footer style={{ background: S.navBg, borderTop: `1px solid ${S.border}` }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <span aria-hidden="true" style={{ fontSize: '16px' }}>🌾</span>
+            <img src="/logo.png" alt="FarmFlow" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
             <span style={{ fontSize: '13px', fontWeight: '800', color: S.text }}>FarmFlow</span>
             <span aria-hidden="true" style={{ color: S.border }}>·</span>
             <span style={{ fontSize: '12px', color: S.dimColor }}>🛡 {t('footer.protected')}</span>

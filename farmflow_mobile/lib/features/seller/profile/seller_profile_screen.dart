@@ -94,6 +94,11 @@ class SellerProfileScreen extends ConsumerWidget {
                     label: 'إعدادات السلالات',
                     onTap: () => context.push('/seller/breed-settings'),
                   ),
+                  _MenuItem(
+                    icon: Icons.settings_outlined,
+                    label: 'الإعدادات',
+                    onTap: () => context.push('/seller/settings'),
+                  ),
                   const SizedBox(height: 8),
                   _LogoutButton(),
                   const SizedBox(height: 24),

@@ -244,7 +244,7 @@ const SellerLayout = () => {
           {!collapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>
+                <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
                 <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -253,7 +253,7 @@ const SellerLayout = () => {
               </div>
             </div>
           )}
-          {collapsed && <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>}
+          {collapsed && <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />}
           <button type="button" onClick={() => setCollapsed(p => !p)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
@@ -316,7 +316,7 @@ const SellerLayout = () => {
           <span aria-hidden="true">☰</span>
         </button>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', lineHeight: 1 }}>🌾</span>
+          <img src="/logo.png" alt="FarmFlow" style={{ width: '26px', height: '26px', borderRadius: '50%', objectFit: 'cover' }} />
           <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
           <span style={{ fontSize: '9px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px', background: S.activeBg, padding: '2px 7px', borderRadius: '4px', border: `1px solid ${S.border}` }}>{t('seller.badge')}</span>
         </div>
@@ -347,7 +347,7 @@ const SellerLayout = () => {
         <div style={{ padding: '20px 18px 14px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>
+              <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
               <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -403,7 +403,7 @@ const SellerLayout = () => {
         <footer style={{ background: S.sidebarBg, borderTop: `1px solid ${S.border}` }}>
           <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', textAlign: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <span aria-hidden="true" style={{ fontSize: '15px' }}>🌾</span>
+              <img src="/logo.png" alt="FarmFlow" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
               <span style={{ fontSize: '12px', fontWeight: '800', color: S.text }}>FarmFlow {t('seller.portal')}</span>
               <span aria-hidden="true" style={{ color: S.border }}>·</span>
               <span style={{ fontSize: '12px', color: S.dimColor }}>🛡 {t('footer.protected')}</span>

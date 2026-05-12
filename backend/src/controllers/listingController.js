@@ -1,7 +1,10 @@
 const { validationResult } = require('express-validator');
 const Listing = require('../models/Listing');
+const Animal  = require('../models/Animal');
 const User    = require('../models/User');
 const { createNotification } = require('../utils/notify');
+
+const LISTING_OVER_HERD_LIMIT = 100;
 
 // POST /api/listings
 const createListing = async (req, res) => {
@@ -15,6 +18,17 @@ const createListing = async (req, res) => {
 
     // Destructure only safe fields — prevents status/seller injection
     const { type, breed, age, weight, price, pricePerKg, description, location, deliveryType, deliveryCost, eidAvailable, slaughterService, slaughterCost, qurbaniShares, depositRequired, depositPercentage, animal, purpose, farmId } = req.body;
+
+    // Guard: active listings must not exceed herd size + 100
+    const [activeListings, herdCount] = await Promise.all([
+      Listing.countDocuments({ seller: req.user.id, status: { $in: ['pending', 'approved', 'draft'] } }),
+      Animal.countDocuments({ seller: req.user.id }),
+    ]);
+    if (activeListings >= herdCount + LISTING_OVER_HERD_LIMIT) {
+      return res.status(400).json({
+        message: `لا يمكن إضافة إعلانات أكثر من حجم القطيع بـ ${LISTING_OVER_HERD_LIMIT} إعلان. عدد الحيوانات: ${herdCount}، الإعلانات النشطة: ${activeListings}.`,
+      });
+    }
 
     // Guard: one active listing per animal
     if (animal) {

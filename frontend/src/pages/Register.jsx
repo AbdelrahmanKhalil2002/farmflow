@@ -561,7 +561,7 @@ const Register = () => {
             <LangToggle />
           </div>
           <div>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🌾</div>
+            <img src="/logo.png" alt="FarmFlow" style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', marginBottom: '12px' }} />
             <h1 style={{ fontSize: isMobile ? '28px' : '36px', fontWeight: '800', margin: '0 0 8px', letterSpacing: '-0.5px' }}>{t('reg.title')}</h1>
             <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.7)', margin: '0 0 4px' }}>FarmFlow</p>
             <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.55)', margin: 0, maxWidth: '400px', marginInline: 'auto', lineHeight: 1.6 }}>
@@ -717,7 +717,7 @@ const Register = () => {
                 <LangToggle dark={false} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '22px' }}>🌾</span>
+                <img src="/logo.png" alt="FarmFlow" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover' }} />
                 <span style={{ fontSize: '18px', fontWeight: '800', color: C.text }}>FarmFlow</span>
               </div>
             </div>

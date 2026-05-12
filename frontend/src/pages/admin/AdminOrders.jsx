@@ -181,7 +181,7 @@ const DetailModal = ({ order: o, onClose, onStatusUpdate, onDeliveryUpdate, admi
   return (
     <>
       <div className="ao-modal-overlay" onClick={onClose} aria-hidden="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-      <div role="dialog" aria-modal="true" aria-label={`Order ${shortId(order._id)}`} className="ao-modal-card" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(820px, 96vw)', maxHeight: '92vh', background: C.header, border: `1px solid ${C.border}`, borderRadius: '18px', zIndex: 101, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div role="dialog" aria-modal="true" aria-label={`Order ${shortId(o._id)}`} className="ao-modal-card" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(820px, 96vw)', maxHeight: '92vh', background: C.header, border: `1px solid ${C.border}`, borderRadius: '18px', zIndex: 101, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* ── Modal header ── */}
         <div style={{ padding: '16px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

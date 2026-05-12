@@ -17,11 +17,28 @@
       user-select: none;
       overflow: hidden;
     }
-    .logo { font-size: 72px; margin-bottom: 20px; animation: pop 0.4s ease-out; }
-    .name { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
-    .tagline { font-size: 13px; opacity: 0.75; margin-top: 8px; font-weight: 500; }
+    .logo-img {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      object-fit: cover;
+      animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    }
+    .name {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-top: 20px;
+    }
+    .tagline {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-top: 6px;
+      font-weight: 500;
+    }
     .track {
-      margin-top: 36px;
+      margin-top: 32px;
       width: 56px; height: 4px;
       background: rgba(255,255,255,0.25);
       border-radius: 2px;
@@ -34,7 +51,7 @@
       animation: slide 1.4s ease-in-out infinite;
     }
     @keyframes pop {
-      0%   { transform: scale(0.6); opacity: 0; }
+      0%   { transform: scale(0.5); opacity: 0; }
       100% { transform: scale(1);   opacity: 1; }
     }
     @keyframes slide {
@@ -45,7 +62,7 @@
   </style>
 </head>
 <body>
-  <div class="logo">🌾</div>
+  <img class="logo-img" src="icon.png" alt="FarmFlow" />
   <div class="name">FarmFlow</div>
   <div class="tagline">سوق المواشي المصري</div>
   <div class="track"><div class="bar"></div></div>

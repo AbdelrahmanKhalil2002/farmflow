@@ -1,5 +1,5 @@
 const {
-  app, BrowserWindow, shell, protocol, net, Menu,
+  app, BrowserWindow, shell, protocol, net, Menu, nativeImage,
 } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
@@ -183,6 +183,12 @@ function handleDeepLink(url) {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  // ── macOS dock icon ───────────────────────────────────────────────────────
+  if (process.platform === 'darwin' && app.dock) {
+    const dockIcon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'));
+    app.dock.setIcon(dockIcon);
+  }
+
   // ── Production protocol handler ──────────────────────────────────────────
   // Serves the React SPA and proxies /api/* + /uploads/* to the cloud backend.
   // This means zero changes to the React app: relative /api/ paths just work.

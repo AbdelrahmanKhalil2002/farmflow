@@ -225,4 +225,18 @@ All 7 items implemented in `main.js` + React layouts:
 **To ship v1.0.0:**
 1. Obtain Apple Developer ID cert → set `MAC_CERT_BASE64` + `MAC_CERT_PASSWORD` + `APPLE_*` secrets in GitHub repo settings
 2. Obtain Windows EV cert → set `WIN_CERT_BASE64` + `WIN_CERT_PASSWORD` secrets
+
+---
+
+## Phase 7 — Roadmap Features (v2)
+
+> Not started. Desktop-specific additions that complement the v2 backend features in PLAN.md §38. Since the desktop app wraps the React frontend, most of these are purely frontend additions with no extra Electron work needed.
+
+| # | Task | Status |
+|---|------|--------|
+| D7.1 | **Promoted listings display** — update `BuyerListings` and search results to visually distinguish promoted listings (gold star badge, sorted to top); seller dashboard shows active promotions panel with `promotedUntil` countdown (depends on PLAN.md 38.8) | [ ] |
+| D7.2 | **Auction live viewing** — `AuctionPage` React component with Socket.io countdown and real-time bid feed; IPC bridge: `notify('auction:outbid', ...)` triggers native OS notification when user is outbid while app is minimised to tray (depends on PLAN.md 38.6) | [ ] |
+| D7.3 | **Escrow payment status** — order detail page shows escrow timeline (payment held → delivery confirmed → funds released); `ipcMain` handler for `'confirm-delivery'` to allow confirming delivery from native menu action in Seller menu (depends on PLAN.md 38.9) | [ ] |
+| D7.4 | **Delivery tracking panel** — order detail shows shipment status timeline; OS notification via `notify()` IPC when shipment status changes (e.g. "تم الشحن", "وصل للمنطقة"); click notification deep-links to order detail (depends on PLAN.md 38.7) | [ ] |
+| D7.5 | **Video playback in listings** — `<video>` element already works in Electron's Chromium; ensure `Content-Security-Policy` in `main.js` allows `media-src` from Cloudinary; add PiP (picture-in-picture) button via `document.pictureInPictureEnabled` IPC message for listing detail video (depends on PLAN.md 38.11) | [ ] |
 3. `git tag v1.0.0 && git push origin v1.0.0` — GitHub Actions builds + uploads DMG + NSIS to Releases

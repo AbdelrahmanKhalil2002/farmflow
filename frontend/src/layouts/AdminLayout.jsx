@@ -109,7 +109,7 @@ const AdminLayout = () => {
           {!collapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>
+                <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
                 <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -118,7 +118,7 @@ const AdminLayout = () => {
               </div>
             </div>
           )}
-          {collapsed && <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>}
+          {collapsed && <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />}
           <button type="button" onClick={() => setCollapsed(p => !p)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
@@ -178,7 +178,7 @@ const AdminLayout = () => {
           <span aria-hidden="true">☰</span>
         </button>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', lineHeight: 1 }}>🌾</span>
+          <img src="/logo.png" alt="FarmFlow" style={{ width: '26px', height: '26px', borderRadius: '50%', objectFit: 'cover' }} />
           <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
           <span style={{ fontSize: '9px', fontWeight: '700', color: S.dimColor, textTransform: 'uppercase', letterSpacing: '0.7px', background: 'rgba(34,197,94,0.08)', padding: '2px 7px', borderRadius: '4px', border: `1px solid ${S.border}` }}>إدارة</span>
         </div>
@@ -209,7 +209,7 @@ const AdminLayout = () => {
         <div style={{ padding: '20px 18px 14px', borderBottom: `1px solid ${S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '20px', lineHeight: 1 }}>🌾</span>
+              <img src="/logo.png" alt="FarmFlow" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
               <span style={{ fontSize: '15px', fontWeight: '800', color: S.text, letterSpacing: '-0.3px' }}>FarmFlow</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>

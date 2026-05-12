@@ -6,7 +6,7 @@ import { useLang } from '../../context/LangContext';
 import { getSummary, getIncome, getExpenses } from '../../services/financeService';
 import { getMyListings } from '../../services/listingService';
 import { getMyOrders } from '../../services/orderService';
-import { getAnimals, getWeighingDue, getFollowUpsDue } from '../../services/animalService';
+import { getAnimals, getAnimalSummary, getWeighingDue, getFollowUpsDue } from '../../services/animalService';
 import { getSellerReviews, replyToReview } from '../../services/reviewService';
 import { fmt } from '../../utils/format';
 import { C as _C } from '../../tokens';
@@ -164,37 +164,50 @@ const LineChart = ({ incomeData, expenseData }) => {
   );
 };
 
-// ─── Bar chart (livestock by type) ───────────────────────────────────────────
+// ─── Grouped bar chart: herd vs active listings per type ─────────────────────
 const BarChart = ({ data }) => {
   if (!data.length) return null;
-  const W = 340, H = 140, PAD_T = 20, PAD_L = 10, PAD_B = 36, BAR_GAP = 8;
-  const max  = Math.max(...data.map(d => d.value), 1);
-  const bw   = Math.max(10, Math.floor((W - PAD_L * 2 - BAR_GAP * (data.length - 1)) / data.length));
-  const totalW = data.length * bw + (data.length - 1) * BAR_GAP;
-  const startX = (W - totalW) / 2;
-  const innerH = H - PAD_B - PAD_T;
+  const W = 360, H = 160, PAD_T = 24, PAD_L = 8, PAD_B = 38, GROUP_GAP = 10, BAR_GAP = 2;
+  const max     = Math.max(...data.flatMap(d => [d.herdValue, d.listingValue]), 1);
+  const groupW  = Math.max(20, Math.floor((W - PAD_L * 2 - GROUP_GAP * (data.length - 1)) / data.length));
+  const bw      = Math.floor((groupW - BAR_GAP) / 2);
+  const totalW  = data.length * groupW + (data.length - 1) * GROUP_GAP;
+  const startX  = (W - totalW) / 2;
+  const innerH  = H - PAD_B - PAD_T;
+  const HERD_COLOR    = '#16a34a';
+  const LISTING_COLOR = '#d97706';
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-      {/* Baseline */}
-      <line x1={0} x2={W} y1={H - PAD_B} y2={H - PAD_B} stroke={C.border} strokeWidth="1" />
-
-      {data.map((d, i) => {
-        const bh  = Math.max(2, (d.value / max) * innerH);
-        const x   = startX + i * (bw + BAR_GAP);
-        const y   = H - PAD_B - bh;
-        return (
-          <g key={d.label}>
-            <rect x={x} y={y} width={bw} height={bh} rx="4" fill={d.color} opacity="0.85" />
-            {/* Value above bar */}
-            <text x={x + bw / 2} y={y - 4} fontSize="10" fill={d.color} fontWeight="800" textAnchor="middle">{d.value}</text>
-            {/* Emoji + text label below baseline */}
-            <text x={x + bw / 2} y={H - PAD_B + 13} fontSize="12" fill={C.muted} textAnchor="middle">{d.emoji}</text>
-            <text x={x + bw / 2} y={H - PAD_B + 26} fontSize="8" fill={C.muted} textAnchor="middle">{d.ar}</text>
-          </g>
-        );
-      })}
-    </svg>
+    <div>
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', fontSize: '11px', color: C.muted, justifyContent: 'flex-end' }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: HERD_COLOR, marginLeft: 4 }} />القطيع</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: LISTING_COLOR, marginLeft: 4 }} />معروض للبيع</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        <line x1={0} x2={W} y1={H - PAD_B} y2={H - PAD_B} stroke={C.border} strokeWidth="1" />
+        {data.map((d, i) => {
+          const gx      = startX + i * (groupW + GROUP_GAP);
+          const herdBH  = Math.max(2, (d.herdValue    / max) * innerH);
+          const listBH  = Math.max(2, (d.listingValue / max) * innerH);
+          const herdX   = gx;
+          const listX   = gx + bw + BAR_GAP;
+          return (
+            <g key={d.label}>
+              {/* Herd bar */}
+              <rect x={herdX} y={H - PAD_B - herdBH} width={bw} height={herdBH} rx="3" fill={HERD_COLOR} opacity="0.85" />
+              <text x={herdX + bw / 2} y={H - PAD_B - herdBH - 3} fontSize="9" fill={HERD_COLOR} fontWeight="800" textAnchor="middle">{d.herdValue}</text>
+              {/* Listing bar */}
+              <rect x={listX} y={H - PAD_B - listBH} width={bw} height={listBH} rx="3" fill={LISTING_COLOR} opacity="0.85" />
+              <text x={listX + bw / 2} y={H - PAD_B - listBH - 3} fontSize="9" fill={LISTING_COLOR} fontWeight="800" textAnchor="middle">{d.listingValue}</text>
+              {/* Label below */}
+              <text x={gx + groupW / 2} y={H - PAD_B + 13} fontSize="12" fill={C.muted} textAnchor="middle">{d.emoji}</text>
+              <text x={gx + groupW / 2} y={H - PAD_B + 26} fontSize="8"  fill={C.muted} textAnchor="middle">{d.ar}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 };
 
@@ -301,6 +314,8 @@ const SellerDashboard = () => {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+  const [animals,         setAnimals]         = useState([]);
+  const [herdByType,      setHerdByType]      = useState({});
   const [dueVaccinations, setDueVaccinations] = useState([]);
   const [dueWeighings,    setDueWeighings]    = useState([]);
   const [dueFollowUps,    setDueFollowUps]    = useState([]);
@@ -310,9 +325,18 @@ const SellerDashboard = () => {
 
   useEffect(() => {
     const farmParams = activeFarm?._id ? { farmId: activeFarm._id } : {};
-    getAnimals(farmParams).then(r => {
+
+    // Summary for accurate herd-by-type counts (doesn't load all animals)
+    getAnimalSummary(farmParams).then(r => {
+      setHerdByType(r.data.byType || {});
+    }).catch(() => {});
+
+    // Load first page for vaccination follow-up alerts only
+    getAnimals({ ...farmParams, limit: 200 }).then(r => {
+      const animalList = Array.isArray(r.data) ? r.data : (r.data.items || []);
+      setAnimals(animalList);
       const soon = [];
-      r.data.forEach(a => {
+      animalList.forEach(a => {
         (a.vaccinationLog || []).forEach(v => {
           if (!v.nextDueDate) return;
           const days = Math.ceil((new Date(v.nextDueDate) - Date.now()) / (24 * 3600 * 1000));
@@ -373,12 +397,13 @@ const SellerDashboard = () => {
   const newLastMonth   = listings.filter(l => { const d = new Date(l.createdAt); return d >= soLastMonth && d < soMonth; }).length;
   const listingTrend   = newThisMonth - newLastMonth;
 
-  const byStatus = listings.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
-  const byType   = listings.reduce((a, l) => { const k = l.type || 'other'; a[k] = (a[k] || 0) + 1; return a; }, {});
+  const byStatus      = listings.reduce((a, l) => { a[l.status] = (a[l.status] || 0) + 1; return a; }, {});
+  const listingByType = listings.reduce((a, l) => { const k = l.type || 'other'; a[k] = (a[k] || 0) + 1; return a; }, {});
 
-  const barData = Object.entries(byType).map(([type, value]) => {
+  const allTypes = [...new Set([...Object.keys(listingByType), ...Object.keys(herdByType)])];
+  const barData  = allTypes.map(type => {
     const m = TYPE_META[type] || TYPE_META.other;
-    return { label: type, value, color: m.color, emoji: m.emoji, ar: t(m.typeKey) };
+    return { label: type, herdValue: herdByType[type] || 0, listingValue: listingByType[type] || 0, color: m.color, emoji: m.emoji, ar: t(m.typeKey) };
   });
 
   const profit       = summary?.netProfit     ?? 0;
@@ -584,7 +609,7 @@ const SellerDashboard = () => {
           <div style={{ background: C.card, borderRadius: '18px', padding: '20px', boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
             <div style={{ marginBottom: '14px' }}>
               <div style={{ fontSize: '14px', fontWeight: '700', color: C.text }}>{t('dashboard.livestockByCategory')}</div>
-              <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{t('dashboard.listingDistribution')}</div>
+              <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>القطيع مقارنةً بالمعروض للبيع</div>
             </div>
             {loading
               ? <Skeleton h={110} r={8} />
@@ -699,11 +724,12 @@ const SellerDashboard = () => {
                 <div style={{ fontSize: '11px', fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
                   {t('dashboard.livestockByType')}
                 </div>
-                {barData.map(({ label, value, emoji, ar, color }) => (
+                {barData.map(({ label, herdValue, listingValue, emoji, ar }) => (
                   <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: '15px' }}>{emoji}</span>
                     <span style={{ flex: 1, fontSize: '12px', color: C.text }}>{ar}</span>
-                    <span style={{ fontSize: '13px', fontWeight: '800', color }}>{value}</span>
+                    <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '700', marginLeft: '6px' }}>🐄 {herdValue}</span>
+                    <span style={{ fontSize: '11px', color: '#d97706', fontWeight: '700' }}>🏷️ {listingValue}</span>
                   </div>
                 ))}
               </div>

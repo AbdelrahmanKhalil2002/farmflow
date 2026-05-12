@@ -102,4 +102,34 @@ abstract class ApiEndpoints {
 
   // ── Orders — delivery ────────────────────────────────────────────────────
   static String orderDelivery(String id)      => '/orders/$id/delivery';
+
+  // ── Auth — forgot / reset / verify ───────────────────────────────────────
+  static const String forgotPassword          = '/auth/forgot-password';
+  static const String resetPassword           = '/auth/reset-password';
+  static const String verifyEmail             = '/auth/verify-email';
+  static const String notifPrefs              = '/auth/notif-prefs';
+
+  // ── Finance — analytics ──────────────────────────────────────────────────
+  static const String financeAnalytics        = '/finance/analytics';
+
+  // ── Listings — drafts ────────────────────────────────────────────────────
+  static const String myDraftListings         = '/listings/my?status=draft';
+  static String publishListing(String id)     => '/listings/$id/publish';
+
+  // ── Messages ─────────────────────────────────────────────────────────────
+  static const String conversations           = '/messages/conversations';
+  static String conversationMessages(String id) => '/messages/conversations/$id';
+  static const String sendMessageUrl          = '/messages/send';
+  static String getOrCreateConversation(String userId) => '/messages/get-or-create/$userId';
+
+  // ── Farms ────────────────────────────────────────────────────────────────
+  static const String farms                   = '/farms';
+  static String farmById(String id)           => '/farms/$id';
+
+  // ── Admin — analytics ────────────────────────────────────────────────────
+  static const String adminAnalytics          = '/admin/analytics';
+
+  // ── Marketplace (supplies from other sellers) ─────────────────────────────
+  static const String marketplaceSupplies     = '/supplies/marketplace';
+  static String marketplaceFarmSupplies(String sellerId) => '/supplies/marketplace/$sellerId';
 }

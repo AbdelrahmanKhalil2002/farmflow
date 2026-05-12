@@ -14,11 +14,13 @@ const {
 
 const LISTING_TYPES = ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'other'];
 
+const isDraft = body('status').equals('draft');
+
 const listingValidation = [
-  body('type').isIn(LISTING_TYPES).withMessage('Invalid livestock type'),
-  body('age').isFloat({ min: 0 }).withMessage('Age must be a positive number (months)'),
-  body('weight').isFloat({ min: 0 }).withMessage('Weight must be a positive number (kg)'),
-  body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+  body('type').if(isDraft.not()).isIn(LISTING_TYPES).withMessage('Invalid livestock type'),
+  body('age').if(isDraft.not()).isFloat({ min: 0 }).withMessage('Age must be a positive number (months)'),
+  body('weight').if(isDraft.not()).isFloat({ min: 0 }).withMessage('Weight must be a positive number (kg)'),
+  body('price').if(isDraft.not()).isFloat({ min: 0 }).withMessage('Price must be a positive number'),
   body('pricePerKg').optional().isFloat({ min: 0 }).withMessage('pricePerKg must be a positive number'),
   body('deliveryType').optional().isIn(['none', 'farm', 'admin']).withMessage('Invalid deliveryType'),
   body('deliveryCost').optional().isFloat({ min: 0 }).withMessage('deliveryCost must be positive'),

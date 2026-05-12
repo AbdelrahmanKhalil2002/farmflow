@@ -94,6 +94,11 @@ class BuyerProfileScreen extends ConsumerWidget {
                     label: context.l10n.changePassword,
                     onTap: () => _showChangePassword(context, ref),
                   ),
+                  _MenuItem(
+                    icon: Icons.settings_outlined,
+                    label: 'الإعدادات',
+                    onTap: () => context.push('/buyer/settings'),
+                  ),
                   const SizedBox(height: 8),
                   _LogoutButton(),
                   const SizedBox(height: 24),

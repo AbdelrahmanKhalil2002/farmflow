@@ -54,6 +54,29 @@ final weighingDueProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asy
   }
 });
 
+// Returns {byType: {cattle:10,...}, listingsByType: {cattle:3,...}}
+final herdTypeChartProvider = FutureProvider<Map<String, Map<String, int>>>((ref) async {
+  final dio = ref.watch(dioProvider);
+  try {
+    final results = await Future.wait([
+      dio.get(ApiEndpoints.animalSummary),
+      dio.get(ApiEndpoints.myListings, queryParameters: {'status': 'approved,pending', 'limit': 200}),
+    ]);
+    final summary = results[0].data as Map<String, dynamic>? ?? {};
+    final byType = (summary['byType'] as Map<String, dynamic>? ?? {})
+        .map((k, v) => MapEntry(k, (v as num).toInt()));
+    final listings = results[1].data as List? ?? [];
+    final listingsByType = <String, int>{};
+    for (final l in listings) {
+      final t = (l as Map<String, dynamic>)['type'] as String? ?? 'other';
+      listingsByType[t] = (listingsByType[t] ?? 0) + 1;
+    }
+    return {'herd': byType, 'listings': listingsByType};
+  } catch (_) {
+    return {'herd': {}, 'listings': {}};
+  }
+});
+
 final dashboardStatsProvider = FutureProvider<Map<String, int>>((ref) async {
   final dio = ref.watch(dioProvider);
   try {
@@ -90,6 +113,7 @@ class SellerDashboardScreen extends ConsumerWidget {
       ref.invalidate(followUpsDueProvider);
       ref.invalidate(weighingDueProvider);
       ref.invalidate(dashboardStatsProvider);
+      ref.invalidate(herdTypeChartProvider);
     }
 
     void quickAdd() {
@@ -208,6 +232,8 @@ class SellerDashboardScreen extends ConsumerWidget {
             _MiniStatsRow(),
             SizedBox(height: 14),
             _TrendChart(),
+            SizedBox(height: 14),
+            _HerdTypeChart(),
             SizedBox(height: 14),
             _QuickAccessRow(),
             SizedBox(height: 14),
@@ -568,6 +594,152 @@ class _PendingOrdersAlert extends ConsumerWidget {
       orElse: () => const SizedBox.shrink(),
     );
   }
+}
+
+// ── Herd vs listings grouped bar chart ───────────────────────────────────────
+
+const _kTypeEmoji = {
+  'cattle': '🐄', 'buffalo': '🐃', 'sheep': '🐑', 'goat': '🐐',
+  'camel': '🐪', 'horse': '🐎', 'poultry': '🐔', 'rabbit': '🐇', 'other': '🐾',
+};
+
+class _HerdTypeChart extends ConsumerWidget {
+  const _HerdTypeChart();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncData = ref.watch(herdTypeChartProvider);
+    return asyncData.when(
+      loading: () => const ShimmerCard(height: 180),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (data) {
+        final herd     = data['herd']     ?? {};
+        final listings = data['listings'] ?? {};
+        // union of types from both maps, sorted by herd count descending
+        final types = {...herd.keys, ...listings.keys}.toList()
+          ..sort((a, b) => (herd[b] ?? 0).compareTo(herd[a] ?? 0));
+        if (types.isEmpty) return const SizedBox.shrink();
+
+        final maxVal = types.fold<int>(
+          1, (m, t) => [m, herd[t] ?? 0, listings[t] ?? 0].reduce((a, b) => a > b ? a : b),
+        );
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 8, offset: Offset(0, 2))],
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Header + legend
+            Row(children: [
+              const Icon(Icons.pets, size: 16, color: AppColors.green),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text('القطيع مقابل المعروض للبيع',
+                    style: TextStyle(fontFamily: 'Cairo', fontSize: 14,
+                        fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+              ),
+              _LegendDot(color: AppColors.green, label: 'القطيع'),
+              const SizedBox(width: 10),
+              _LegendDot(color: const Color(0xFFD97706), label: 'معروض'),
+            ]),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 140,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxVal.toDouble() * 1.25,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIdx, rod, rodIdx) {
+                        final type = types[groupIdx];
+                        final emoji = _kTypeEmoji[type] ?? '🐾';
+                        final lbl = rodIdx == 0 ? 'قطيع' : 'معروض';
+                        return BarTooltipItem(
+                          '$emoji $lbl: ${rod.toY.toInt()}',
+                          const TextStyle(fontFamily: 'Cairo', color: Colors.white,
+                              fontSize: 11, fontWeight: FontWeight.w700),
+                        );
+                      },
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (val, _) {
+                          final idx = val.toInt();
+                          if (idx < 0 || idx >= types.length) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _kTypeEmoji[types[idx]] ?? '🐾',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          );
+                        },
+                        reservedSize: 28,
+                      ),
+                    ),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles:  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (_) => FlLine(
+                      color: const Color(0xFFE5E7EB),
+                      strokeWidth: 0.5,
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: List.generate(types.length, (i) {
+                    final t = types[i];
+                    return BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: (herd[t] ?? 0).toDouble(),
+                          color: AppColors.green,
+                          width: 10,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                        BarChartRodData(
+                          toY: (listings[t] ?? 0).toDouble(),
+                          color: const Color(0xFFD97706),
+                          width: 10,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ],
+                      barsSpace: 3,
+                    );
+                  }),
+                ),
+              ),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Container(width: 10, height: 10,
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+    const SizedBox(width: 4),
+    Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Color(0xFF6B7280))),
+  ]);
 }
 
 // ── Quick-access row ──────────────────────────────────────────────────────────

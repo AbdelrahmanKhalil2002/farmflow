@@ -104,7 +104,7 @@ const LivestockCard = ({ listing: l, tFn }) => {
           </div>
         </div>
       </div>
-      {orderOpen && <OrderModal listing={l} onClose={() => setOrderOpen(false)} />}
+      {orderOpen && <OrderModal listing={l} onClose={() => setOrderOpen(false)} onSuccess={() => setOrderOpen(false)} />}
     </>
   );
 };

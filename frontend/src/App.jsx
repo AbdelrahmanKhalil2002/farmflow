@@ -6,6 +6,7 @@ import { MsgUnreadProvider } from './context/MsgUnreadContext';
 import { ToastProvider }     from './components/Toast';
 import { CartProvider }      from './context/CartContext';
 import { ThemeProvider }     from './context/ThemeContext';
+import { LangProvider }      from './context/LangContext';
 
 // Guards & layouts load eagerly (tiny, needed immediately)
 import ProtectedRoute  from './components/ProtectedRoute';
@@ -98,6 +99,7 @@ const PageLoader = () => (
 // ── App ───────────────────────────────────────────────────────────────────────
 const App = () => (
   <ThemeProvider>
+  <LangProvider>
   <BrowserRouter>
     <ToastProvider>
     <CartProvider>
@@ -220,6 +222,7 @@ const App = () => (
     </CartProvider>
     </ToastProvider>
   </BrowserRouter>
+  </LangProvider>
   </ThemeProvider>
 );
 

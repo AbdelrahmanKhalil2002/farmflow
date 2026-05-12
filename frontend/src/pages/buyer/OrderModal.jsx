@@ -26,10 +26,12 @@ const tomorrow = () => {
 };
 
 const parseError = (err) => {
-  const data = err.response?.data;
-  if (!data) return null; // caller will use t() fallback
+  if (!err.response) return `خطأ في الاتصال بالسيرفر (${err.message || 'network error'})`;
+  const data = err.response.data;
+  const status = err.response.status;
+  if (!data) return `خطأ ${status}`;
   if (data.errors?.length) return data.errors[0].msg;
-  return data.message || null;
+  return data.message || `خطأ ${status}`;
 };
 
 // ─── Shared input style helper ────────────────────────────────────────────────
@@ -173,7 +175,7 @@ const OrderModal = ({ listing, onClose, onSuccess }) => {
         notes:            noteParts.join(' | ') || undefined,
         deliveryLocation: deliveryLocation?.lat != null ? deliveryLocation : undefined,
       });
-      onSuccess();
+      if (typeof onSuccess === 'function') onSuccess();
     } catch (err) {
       const msg = parseError(err);
       setStepError(msg || t('modal.err.submitFailed'));

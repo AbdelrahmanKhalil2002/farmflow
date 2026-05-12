@@ -101,11 +101,11 @@ class _SellerShell extends StatelessWidget {
   final Widget child;
 
   static const _routes = [
-    ('/seller',            Icons.dashboard_outlined,  Icons.dashboard),
-    ('/seller/herd',       Icons.pets_outlined,       Icons.pets),
-    ('/seller/listings',   Icons.sell_outlined,       Icons.sell),
-    ('/seller/statements', Icons.bar_chart_outlined,  Icons.bar_chart),
-    ('/seller/profile',    Icons.person_outline,      Icons.person),
+    ('/seller',          Icons.dashboard_outlined,     Icons.dashboard),
+    ('/seller/herd',     Icons.pets_outlined,          Icons.pets),
+    ('/seller/listings', Icons.sell_outlined,          Icons.sell),
+    ('/seller/orders',   Icons.receipt_long_outlined,  Icons.receipt_long),
+    ('/seller/profile',  Icons.person_outline,         Icons.person),
   ];
 
   @override
@@ -113,7 +113,7 @@ class _SellerShell extends StatelessWidget {
     final l10n = context.l10n;
     final labels = [
       l10n.navDashboard, l10n.navHerd, l10n.navListings,
-      l10n.navStatements, l10n.navProfile,
+      l10n.navOrders, l10n.navProfile,
     ];
     final location = GoRouterState.of(context).matchedLocation;
     final idx = _routes.indexWhere((t) => location.startsWith(t.$1));

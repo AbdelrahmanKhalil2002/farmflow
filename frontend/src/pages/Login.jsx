@@ -188,7 +188,7 @@ const Login = () => {
           {/* Logo */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-              <span style={{ fontSize: '30px' }}>🌾</span>
+              <img src="/logo.png" alt="FarmFlow" style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover' }} />
               <span style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>FarmFlow</span>
             </div>
             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', lineHeight: 1.6, margin: 0, maxWidth: '280px', textAlign: align }}>
@@ -253,7 +253,7 @@ const Login = () => {
         {/* Mobile logo */}
         {isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '28px' }}>
-            <span style={{ fontSize: '26px' }}>🌾</span>
+            <img src="/logo.png" alt="FarmFlow" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
             <span style={{ fontSize: '20px', fontWeight: '800', color: C.text }}>FarmFlow</span>
           </div>
         )}

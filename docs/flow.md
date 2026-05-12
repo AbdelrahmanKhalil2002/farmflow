@@ -674,4 +674,25 @@ Backend and frontend deployed to DigitalOcean Droplet (Ubuntu 24.04, AMS3, $12/m
 * `POST /api/farms/migrate/self` — converts existing profile-level farm fields (farmName, farmPhone, etc.) to a Farm document for legacy sellers
 * Registration: sellers can include a `farms[]` array to create Farm documents on sign-up; `typicalPrices[]` per farm stored at registration time
 * `Listing.farm`, `DairyProduct.farm`, `Supply.farm` — optional Farm ObjectId ref on all marketplace items for per-farm filtering and analytics
+
+---
+
+## Phase 3 — v2 Roadmap Features
+
+> Planned for the next major release. None implemented yet. Full task breakdown in `docs/PLAN.md §38`, `docs/FLUTTER_PLAN.md Sprint 19`, and `docs/DESKTOP_PLAN.md Phase 7`.
+
+| Feature | Summary | Depends on |
+|---------|---------|------------|
+| **Cloudinary CDN** | Migrate all image storage from local disk to Cloudinary for CDN delivery and scalability | Cloudinary account |
+| **Paymob gateway** | Live card / Fawry / mobile-wallet payments replacing placeholder InstaPay | Paymob merchant account |
+| **SMS OTP** | Phone verification on registration and password reset via Twilio or Vonage | SMS provider account |
+| **Referral system** | Unique codes per user, shareable links, reward tracking for inviting new users | — |
+| **WebSocket chat** | Replace 30-second polling with Socket.io persistent connections for instant messaging | — |
+| **Auction system** | Live bidding on listings with countdown timer; Socket.io `auction:bid` broadcast | WebSocket (above) |
+| **Delivery tracking** | Bosta / Aramex courier API integration; real-time shipment status on order detail | Bosta/Aramex account |
+| **Promoted listings** | Sellers pay to boost listings to top of search; `promotedUntil` field + Paymob payment | Paymob (above) |
+| **Escrow payments** | Buyer payment held until delivery confirmed; Paymob capture-on-confirm flow | Paymob (above) |
+| **Health certificate QR** | QR code per animal linking to a public signed-URL health summary page | — |
+| **Video listings** | Short video (≤60s) upload alongside listing photos via Cloudinary | Cloudinary (above) |
+| **Vet consultation** | In-app vet directory, booking calendar, text/video consultation chat | WebSocket (above) |
 * **Remaining:** Web frontend multi-farm UI — farm switcher in SellerLayout, per-farm listing/dairy/supply creation, per-farm analytics; currently all items default to the first/only farm

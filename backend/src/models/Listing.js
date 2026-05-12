@@ -21,7 +21,7 @@ const listingSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ['cattle', 'buffalo', 'sheep', 'goat', 'camel', 'horse', 'poultry', 'rabbit', 'ostrich', 'gazelle', 'oryx', 'deer', 'llama', 'alpaca', 'donkey', 'mule', 'other'],
-      required: true,
+      required: function () { return this.status !== 'draft'; },
     },
     breed: {
       type: String,
@@ -29,15 +29,15 @@ const listingSchema = new mongoose.Schema(
     },
     age: {
       type: Number, // in months
-      required: true,
+      required: function () { return this.status !== 'draft'; },
     },
     weight: {
       type: Number, // in kg
-      required: true,
+      required: function () { return this.status !== 'draft'; },
     },
     price: {
       type: Number,
-      required: true,
+      required: function () { return this.status !== 'draft'; },
     },
     description: {
       type: String,
