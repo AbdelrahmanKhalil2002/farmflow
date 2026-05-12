@@ -17,7 +17,7 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Account no longer exists' });
     }
 
-    req.user = { id: user._id, role: user.role };
+    req.user = { id: user._id.toString(), role: user.role };
     next();
   } catch {
     res.status(401).json({ message: 'Not authorized, invalid token' });
